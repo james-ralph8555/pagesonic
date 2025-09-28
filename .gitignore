@@ -1,0 +1,27 @@
+# General
+.DS_Store
+node_modules/
+dist/
+build/
+.env
+.env.*
+*.log
+coverage/
+tmp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Rust
+target/
+
+# Go
+bin/
+
+# Editor
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,39 @@
+{
+  "name": "pagesonic",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/james-ralph8555/pagesonic.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/james-ralph8555/pagesonic/issues"
+  },
+  "homepage": "https://github.com/james-ralph8555/pagesonic#readme",
+  "description": "",
+  "dependencies": {
+    "@types/node": "^24.5.2",
+    "idb": "^8.0.3",
+    "onnxruntime-web": "^1.23.0",
+    "pdfjs-dist": "^5.4.149",
+    "solid-js": "^1.9.9",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.7",
+    "vite-plugin-pwa": "^1.0.3",
+    "vite-plugin-solid": "^2.11.8",
+    "workbox-window": "^7.3.0"
+  },
+  "devDependencies": {
+    "@types/pdfjs-dist": "^2.10.377"
+  }
+}
