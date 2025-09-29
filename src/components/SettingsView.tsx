@@ -30,8 +30,26 @@ export const SettingsView: Component = () => {
   }
   
   return (
-    <div class="settings-view">
-      <h2>Settings</h2>
+    <div class="settings-view-wrap">
+      <div class="settings-top-rail">
+        <select
+          class="rail-select"
+          aria-label="Switch tab"
+          value="settings"
+          onChange={(e) => {
+            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
+            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
+          }}
+        >
+          <option value="pdf">PDF Viewer</option>
+          <option value="settings">Settings</option>
+        </select>
+        <div class="rail-meta">App Settings</div>
+      </div>
+
+      <div class="settings-scroll">
+        <div class="settings-view">
+          <h2>Settings</h2>
       
       <div class="settings-section">
         <h3>TTS Model Selection</h3>
@@ -126,6 +144,8 @@ export const SettingsView: Component = () => {
             <li>No data sent to external servers</li>
             <li>Works offline</li>
           </ul>
+        </div>
+      </div>
         </div>
       </div>
     </div>

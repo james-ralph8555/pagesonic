@@ -668,6 +668,49 @@ button.loaded:hover {
 .app--pdf .app-main {
   gap: 0;
 }
+
+/* Immersive Settings mode: reuse viewer chrome style */
+.app--settings {
+  max-width: 100%;
+  padding: 0;
+}
+
+.app--settings .app-header { display: none; }
+.app--settings .app-main { gap: 0; }
+
+/* Settings top rail (always visible) */
+.settings-top-rail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  z-index: 50;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Full-height scroll area for settings with frosted dark background */
+.settings-scroll {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: radial-gradient(1200px 600px at 50% -200px, rgba(255, 255, 255, 0.12), rgba(0,0,0,0) 60%),
+              linear-gradient(180deg, rgba(10, 10, 14, 0.85), rgba(10, 10, 14, 0.85));
+}
+
+/* Account for rail height and center content */
+.settings-view {
+  padding-top: 72px; /* top padding accounts for rail */
+  max-width: 1000px;
+  margin: 0 auto;
+}
 :root {
   /* Import PDF.js viewer CSS for text layer defaults */
 }

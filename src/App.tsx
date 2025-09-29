@@ -18,7 +18,7 @@ export const App: Component = () => {
   })
   
   return (
-    <div class={"app " + (currentMode() === 'pdf' ? 'app--pdf' : '')}>
+    <div class={"app " + (currentMode() === 'pdf' ? 'app--pdf' : 'app--settings')}>
       <header class="app-header">
         <h1>PageSonic</h1>
         <p>PDF Reader with Text-to-Speech</p>
