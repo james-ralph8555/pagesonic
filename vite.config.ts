@@ -26,6 +26,9 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: ['solid-js'],
+    include: ['solid-js', 'pdfjs-dist'],
+  },
+  define: {
+    global: 'globalThis',
   },
 })

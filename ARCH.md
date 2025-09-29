@@ -27,6 +27,11 @@ pageNumber , scale and numPages . The <PDFSlickViewer> component renders pages w
 minimal UI; developers can build custom controls by reading the store . PDFSlick wraps PDF.js so
 that reactive frameworks like SolidJS can subscribe to state changes, addressing integration
 difficulties of vanilla PDF.js .
+
+Implementation note (current code): The initial implementation uses plain PDF.js with SolidJS
+signals (see src/stores/pdf.ts and src/components/PDFPage.tsx) rather than PDFSlick. This keeps
+the dependency surface small and performs well, but we can swap to PDFSlick later if we want its
+built-in store and utilities.
 Text extraction – PDF.js exposes getTextContent() for each page. A typical extraction function
 loops through all pages and concatenates item.str from text.items[] to build the page text
 •
@@ -117,6 +122,8 @@ Use virtualization or lazy loading so only visible pages render. Provide skeleto
 during page rendering.
 Accessibility – ensure buttons have appropriate aria-labels and can be operated via keyboard.
 Provide high‑contrast mode and variable text size.
+
+See `src/components/pdf-viewer.md` for detailed implementation notes, usage, shortcuts, testing, and troubleshooting for the PDF Viewer tab.
 3.2 Reader view
 Text extraction – when the user switches to reader mode, asynchronously extract text and MathML
 from each page via pdf.getPage().getTextContent() ; parse out item.str values and build

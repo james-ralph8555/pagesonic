@@ -1,14 +1,17 @@
-import { Component } from 'solid-js'
+import { Component, createSignal } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
 
 export const ReaderView: Component = () => {
-  const { state: pdfState } = usePDF()
-  const { state: ttsState, speak, stop } = useTTS()
+  const { state: pdfState, getAllExtractedText } = usePDF()
+  const { state: ttsState, speak, stop, setVoice, setRate, setPitch, loadModel } = useTTS()
+  const [fontSize, setFontSize] = createSignal(16)
+  const [lineHeight] = createSignal(1.6)
   
   const handlePlay = () => {
-    if (pdfState().document) {
-      speak("Sample text from PDF will be spoken here")
+    const text = getAllExtractedText()
+    if (text && text.trim()) {
+      speak(text)
     }
   }
   
@@ -16,20 +19,70 @@ export const ReaderView: Component = () => {
     stop()
   }
   
+  const handleVoiceChange = (event: Event) => {
+    const target = event.target as HTMLSelectElement
+    setVoice(target.value)
+  }
+  
+  const handleRateChange = (event: Event) => {
+    const target = event.target as HTMLInputElement
+    setRate(parseFloat(target.value))
+  }
+  
+  const handlePitchChange = (event: Event) => {
+    const target = event.target as HTMLInputElement
+    setPitch(parseFloat(target.value))
+  }
+  
+  const handleFontSizeChange = (event: Event) => {
+    const target = event.target as HTMLInputElement
+    setFontSize(parseInt(target.value))
+  }
+  
+  const handleLoadModel = async (modelName: string) => {
+    try {
+      await loadModel(modelName)
+    } catch (error) {
+      console.error('Failed to load model:', error)
+    }
+  }
+  
+  const extractedText = () => getAllExtractedText()
+  
   return (
     <div class="reader-view">
       <div class="reader-controls">
         <h3>Reader Mode</h3>
-        <button onClick={handlePlay} disabled={ttsState().isPlaying}>
-          Play
-        </button>
-        <button onClick={handleStop} disabled={!ttsState().isPlaying}>
-          Stop
-        </button>
+        
+        <div class="tts-controls">
+          <button onClick={handlePlay} disabled={!pdfState().document || ttsState().isPlaying}>
+            Play
+          </button>
+          <button onClick={handleStop} disabled={!ttsState().isPlaying}>
+            Stop
+          </button>
+        </div>
+        
+        <div class="model-controls">
+          <label>TTS Model:</label>
+          <select 
+            onChange={(e) => handleLoadModel(e.target.value)}
+            disabled={ttsState().isModelLoading}
+          >
+            <option value="">Select a model...</option>
+            <option value="Kokoro TTS">Kokoro TTS (82MB)</option>
+            <option value="Kitten TTS">Kitten TTS (15MB)</option>
+          </select>
+          {ttsState().isModelLoading && <span class="loading-model">Loading model...</span>}
+        </div>
         
         <div class="voice-controls">
           <label>Voice:</label>
-          <select>
+          <select 
+            value={ttsState().voice}
+            onChange={handleVoiceChange}
+            disabled={!ttsState().model}
+          >
             {(ttsState().model?.voices || []).map(voice => (
               <option value={voice}>{voice}</option>
             ))}
@@ -42,7 +95,9 @@ export const ReaderView: Component = () => {
             max="2" 
             step="0.1" 
             value={ttsState().rate}
+            onChange={handleRateChange}
           />
+          <span>{ttsState().rate.toFixed(1)}x</span>
           
           <label>Pitch:</label>
           <input 
@@ -51,7 +106,22 @@ export const ReaderView: Component = () => {
             max="2" 
             step="0.1" 
             value={ttsState().pitch}
+            onChange={handlePitchChange}
           />
+          <span>{ttsState().pitch.toFixed(1)}</span>
+        </div>
+        
+        <div class="text-controls">
+          <label>Font Size:</label>
+          <input 
+            type="range" 
+            min="12" 
+            max="24" 
+            step="1" 
+            value={fontSize()}
+            onChange={handleFontSizeChange}
+          />
+          <span>{fontSize()}px</span>
         </div>
       </div>
       
@@ -59,10 +129,17 @@ export const ReaderView: Component = () => {
         {pdfState().document ? (
           <div class="extracted-text">
             <h2>{(pdfState().document?.title) || 'Untitled Document'}</h2>
-            <div class="text-content">
-              {/* Extracted text will appear here */}
-              <p>This is where the extracted text from the PDF will be displayed.</p>
-              <p>Text extraction will be implemented using PDF.js getTextContent().</p>
+            <div class="text-content" style={{
+              'font-size': `${fontSize()}px`,
+              'line-height': lineHeight()
+            }}>
+              {extractedText() ? (
+                extractedText().split('\n\n').map((paragraph, index) => (
+                  <p data-index={index}>{paragraph}</p>
+                ))
+              ) : (
+                <p class="no-text">No text content found in this PDF.</p>
+              )}
             </div>
           </div>
         ) : (

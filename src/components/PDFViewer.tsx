@@ -1,12 +1,20 @@
-import { Component, createSignal } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup, For, createEffect } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
+import { PDFPage } from './PDFPage'
 
 export const PDFViewer: Component = () => {
-  const { state: pdfState, loadPDF, setCurrentPage, setScale } = usePDF()
-  const { } = useTTS()
+  const { state: pdfState, loadPDF } = usePDF()
+  const {} = useTTS()
+
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
-  
+  const [viewportH, setViewportH] = createSignal<number>(window.innerHeight)
+  const [showRail, setShowRail] = createSignal<boolean>(true)
+  let hideTimer: number | undefined
+
+  const RAIL_HEIGHT = 56 // px
+  const V_PADDING = 24 // px padding around pages
+
   const handleFileSelect = (event: Event) => {
     const target = event.target as HTMLInputElement
     const file = target.files?.[0]
@@ -14,26 +22,60 @@ export const PDFViewer: Component = () => {
       loadPDF(file)
     }
   }
-  
-  const handlePrevPage = () => {
-    setCurrentPage(pdfState().currentPage - 1)
+
+  const scaleForPage = (pageIndex: number) => {
+    const page = pdfState().pages[pageIndex]
+    if (!page) return 1
+    const availableH = viewportH() - RAIL_HEIGHT - V_PADDING * 2
+    const scale = Math.max(0.1, availableH / page.height)
+    return scale
   }
-  
-  const handleNextPage = () => {
-    setCurrentPage(pdfState().currentPage + 1)
+
+  const onResize = () => setViewportH(window.innerHeight)
+
+  const pokeUI = () => {
+    setShowRail(true)
+    if (hideTimer) window.clearTimeout(hideTimer)
+    hideTimer = window.setTimeout(() => setShowRail(false), 2000)
   }
-  
-  const handleZoomIn = () => {
-    setScale(pdfState().scale + 0.1)
-  }
-  
-  const handleZoomOut = () => {
-    setScale(pdfState().scale - 0.1)
-  }
-  
+
+  onMount(() => {
+    window.addEventListener('resize', onResize)
+    document.addEventListener('mousemove', pokeUI)
+    document.addEventListener('scroll', pokeUI, { passive: true })
+    // Start hidden after a moment for immersion
+    hideTimer = window.setTimeout(() => setShowRail(false), 1500)
+  })
+
+  onCleanup(() => {
+    window.removeEventListener('resize', onResize)
+    document.removeEventListener('mousemove', pokeUI)
+    document.removeEventListener('scroll', pokeUI)
+    if (hideTimer) window.clearTimeout(hideTimer)
+  })
+
+  createEffect(() => {
+    // Recompute when pages change (new document)
+    pdfState().pages.length
+    pokeUI()
+  })
+
   return (
     <div class="pdf-viewer">
-      <div class="pdf-controls">
+      <div class={"pdf-top-rail" + (showRail() ? '' : ' hidden')}>
+        <select
+          class="rail-select"
+          aria-label="Switch tab"
+          value="pdf"
+          onChange={(e) => {
+            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'reader' | 'settings'
+            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
+          }}
+        >
+          <option value="pdf">PDF Viewer</option>
+          <option value="reader">Reader Mode</option>
+          <option value="settings">Settings</option>
+        </select>
         <input
           ref={setFileInput}
           type="file"
@@ -41,51 +83,41 @@ export const PDFViewer: Component = () => {
           onChange={handleFileSelect}
           style={{ display: 'none' }}
         />
-        <button onClick={() => fileInput()?.click()}>Open PDF</button>
-        
-        {pdfState().document && (
-          <>
-            <button onClick={handlePrevPage} disabled={pdfState().currentPage <= 1}>
-              Previous
-            </button>
-            <span>
-              Page {pdfState().currentPage} of {pdfState().pages.length}
-            </span>
-            <button 
-              onClick={handleNextPage} 
-              disabled={pdfState().currentPage >= pdfState().pages.length}
-            >
-              Next
-            </button>
-            <button onClick={handleZoomOut}>Zoom Out</button>
-            <span>{Math.round(pdfState().scale * 100)}%</span>
-            <button onClick={handleZoomIn}>Zoom In</button>
-          </>
-        )}
+        <button class="rail-btn" onClick={() => fileInput()?.click()}>Open</button>
+        <div class="rail-meta">
+          {pdfState().document
+            ? <span>{pdfState().document?.title || 'Untitled Document'} · {pdfState().pages.length} pages</span>
+            : <span>No PDF loaded</span>
+          }
+        </div>
       </div>
-      
-      {pdfState().isLoading && (
-        <div class="loading">Loading PDF...</div>
-      )}
-      
-      {pdfState().error && (
-        <div class="error">{pdfState().error}</div>
-      )}
-      
-      <div class="pdf-content">
-        {pdfState().document && (
-          <div class="pdf-info">
-            <h3>{pdfState().document?.title || 'Untitled Document'}</h3>
-            <p>Author: {pdfState().document?.author || 'Unknown'}</p>
-          </div>
+
+      <div class="pdf-scroll">
+        {pdfState().isLoading && (
+          <div class="loading">Loading PDF...</div>
         )}
-        
+
+        {pdfState().error && (
+          <div class="error">{pdfState().error}</div>
+        )}
+
         <div class="pdf-pages">
-          {/* PDF pages will be rendered here using PDF.js */}
-          <div class="placeholder-page">
-            <p>PDF content will appear here</p>
-            <p>Scale: {pdfState().scale.toFixed(1)}x</p>
-          </div>
+          {pdfState().document ? (
+            <For each={pdfState().pages}>
+              {(p, i) => (
+                <PDFPage
+                  pageNumber={p.pageNumber}
+                  scale={scaleForPage(i())}
+                  isVisible={true}
+                />
+              )}
+            </For>
+          ) : (
+            <div class="placeholder-page">
+              <p>No PDF loaded</p>
+              <p>Click "Open" to select a file</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

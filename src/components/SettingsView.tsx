@@ -4,10 +4,29 @@ import { useTTS } from '@/stores/tts'
 export const SettingsView: Component = () => {
   const { state: ttsState, models, loadModel } = useTTS()
   
-  const handleModelLoad = (modelName: string) => {
-    loadModel(modelName).catch(error => {
+  const handleModelLoad = async (modelName: string) => {
+    try {
+      await loadModel(modelName)
+    } catch (error) {
       console.error('Failed to load model:', error)
-    })
+    }
+  }
+  
+  const isModelCompatible = (model: any) => {
+    if (model.requiresWebGPU && !ttsState().isWebGPUSupported) {
+      return false
+    }
+    return true
+  }
+  
+  const getModelStatus = (model: any) => {
+    if (!isModelCompatible(model)) {
+      return { status: 'incompatible', message: 'WebGPU required but not supported' }
+    }
+    if (ttsState().model?.name === model.name) {
+      return { status: 'loaded', message: 'Currently loaded' }
+    }
+    return { status: 'available', message: 'Available to load' }
   }
   
   return (
@@ -17,35 +36,65 @@ export const SettingsView: Component = () => {
       <div class="settings-section">
         <h3>TTS Model Selection</h3>
         <div class="model-list">
-          {models.map((model) => (
-            <div class="model-item">
-              <div class="model-info">
-                <h4>{model.name}</h4>
-                <p>Size: {model.size}MB</p>
-                <p>Voices: {model.voices.join(', ')}</p>
-                <p>WebGPU Required: {model.requiresWebGPU ? 'Yes' : 'No'}</p>
-                <p>WebGPU Supported: {ttsState().isWebGPUSupported ? 'Yes' : 'No'}</p>
+          {models.map((model) => {
+            const modelStatus = getModelStatus(model)
+            const isLoaded = ttsState().model?.name === model.name
+            
+            return (
+              <div class="model-item">
+                <div class="model-info">
+                  <h4>{model.name}</h4>
+                  <p>Size: {model.size}MB</p>
+                  <p>Voices: {model.voices.join(', ')}</p>
+                  <p>WebGPU Required: {model.requiresWebGPU ? 'Yes' : 'No'}</p>
+                  <p class={`status ${modelStatus.status}`}>
+                    {modelStatus.message}
+                  </p>
+                </div>
+                <button
+                  onClick={() => handleModelLoad(model.name)}
+                  disabled={
+                    ttsState().isModelLoading || 
+                    !isModelCompatible(model) ||
+                    isLoaded
+                  }
+                  class={isLoaded ? 'loaded' : ''}
+                >
+                  {ttsState().isModelLoading ? 'Loading...' : 
+                   isLoaded ? 'Loaded' : 'Load Model'}
+                </button>
               </div>
-              <button
-                onClick={() => handleModelLoad(model.name)}
-                disabled={ttsState().isModelLoading}
-              >
-                {ttsState().isModelLoading ? 'Loading...' : 'Load Model'}
-              </button>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
       
       <div class="settings-section">
-        <h3>WebGPU Status</h3>
-        <p>WebGPU is {ttsState().isWebGPUSupported ? 'supported' : 'not supported'} on this device</p>
+        <h3>System Information</h3>
+        <div class="system-info">
+          <p><strong>WebGPU Status:</strong> {ttsState().isWebGPUSupported ? 'Supported' : 'Not Supported'}</p>
+          {ttsState().model && (
+            <p><strong>Loaded Model:</strong> {ttsState().model!.name}</p>
+          )}
+          <p><strong>Current Voice:</strong> {ttsState().voice}</p>
+          <p><strong>Speech Rate:</strong> {ttsState().rate.toFixed(1)}x</p>
+          <p><strong>Speech Pitch:</strong> {ttsState().pitch.toFixed(1)}</p>
+        </div>
       </div>
       
       <div class="settings-section">
         <h3>About</h3>
-        <p>PageSonic - Privacy-preserving PDF viewer with text-to-speech</p>
-        <p>Running entirely in your browser for maximum privacy</p>
+        <div class="about-info">
+          <p><strong>PageSonic</strong> - Privacy-preserving PDF viewer with text-to-speech</p>
+          <p>Running entirely in your browser for maximum privacy</p>
+          <p>Features:</p>
+          <ul>
+            <li>Local PDF viewing with text extraction</li>
+            <li>Browser-based text-to-speech</li>
+            <li>No data sent to external servers</li>
+            <li>Works offline</li>
+          </ul>
+        </div>
       </div>
     </div>
   )

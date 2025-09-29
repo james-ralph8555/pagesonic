@@ -1,4 +1,4 @@
-import { Component, createSignal } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup } from 'solid-js'
 import { PDFViewer } from './components/PDFViewer'
 import { ReaderView } from './components/ReaderView'
 import { SettingsView } from './components/SettingsView'
@@ -7,8 +7,19 @@ import { AppMode } from './types'
 export const App: Component = () => {
   const [currentMode, setCurrentMode] = createSignal<AppMode>('pdf')
   
+  onMount(() => {
+    const handler = (e: Event) => {
+      const mode = (e as CustomEvent<AppMode>).detail
+      if (mode === 'pdf' || mode === 'reader' || mode === 'settings') {
+        setCurrentMode(mode)
+      }
+    }
+    window.addEventListener('app:set-mode', handler as EventListener)
+    onCleanup(() => window.removeEventListener('app:set-mode', handler as EventListener))
+  })
+  
   return (
-    <div class="app">
+    <div class={"app " + (currentMode() === 'pdf' ? 'app--pdf' : '')}>
       <header class="app-header">
         <h1>PageSonic</h1>
         <p>PDF Reader with Text-to-Speech</p>
