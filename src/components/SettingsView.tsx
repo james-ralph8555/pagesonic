@@ -35,6 +35,16 @@ export const SettingsView: Component = () => {
       
       <div class="settings-section">
         <h3>TTS Model Selection</h3>
+        {!ttsState().isWebGPUSupported && (
+          <p class="error" style={{ padding: '0.5rem 0.75rem', margin: '0 0 0.75rem 0' }}>
+            WebGPU not supported. Kokoro requires WebGPU; Kitten can run on CPU.
+          </p>
+        )}
+        {ttsState().lastError && (
+          <p class="error" style={{ padding: '0.5rem 0.75rem', margin: '0 0 0.75rem 0' }}>
+            {ttsState().lastError}
+          </p>
+        )}
         <div class="model-list">
           {models.map((model) => {
             const modelStatus = getModelStatus(model)

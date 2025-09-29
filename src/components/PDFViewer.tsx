@@ -6,7 +6,8 @@ import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
-  const { state: ttsState, speak, stop } = useTTS()
+  const { state: ttsState, speak, stop, models, loadModel } = useTTS()
+  const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
@@ -123,6 +124,34 @@ export const PDFViewer: Component = () => {
           style={{ display: 'none' }}
         />
         <button class="rail-btn" onClick={() => fileInput()?.click()}>Open</button>
+        <div style="display: inline-flex; gap: 6px; align-items: center;">
+          <select
+            class="rail-select"
+            aria-label="Select TTS model"
+            value={selectedModel()}
+            onChange={(e) => setSelectedModel((e.target as HTMLSelectElement).value)}
+          >
+            {models.map(m => (
+              <option value={m.name}>
+                {m.name}{m.requiresWebGPU ? ' (WebGPU)' : ''}
+              </option>
+            ))}
+          </select>
+          <button
+            class="rail-btn"
+            disabled={ttsState().isModelLoading || ttsState().model?.name === selectedModel() || (models.find(m => m.name === selectedModel())?.requiresWebGPU && !ttsState().isWebGPUSupported)}
+            title={!ttsState().isWebGPUSupported && models.find(m => m.name === selectedModel())?.requiresWebGPU ? 'WebGPU required' : 'Load TTS model'}
+            onClick={async () => {
+              try { await loadModel(selectedModel()) } catch (e) { /* handled in store */ }
+            }}
+          >{ttsState().isModelLoading
+              ? 'Loading…'
+              : (ttsState().model?.name === selectedModel() ? 'Loaded' : 'Load')}
+          </button>
+          <span class="rail-meta" title={`WebGPU ${ttsState().isWebGPUSupported ? 'supported' : 'not supported'}`}>
+            {ttsState().isWebGPUSupported ? 'WebGPU ✓' : 'WebGPU ×'}
+          </span>
+        </div>
         <div class="rail-meta">
           {pdfState().document
             ? <span>{pdfState().document?.title || 'Untitled Document'} · {pdfState().pages.length} pages</span>

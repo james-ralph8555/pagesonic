@@ -35,6 +35,9 @@ export interface TTSState {
   model: TTSModel | null
   isModelLoading: boolean
   isWebGPUSupported: boolean
+  lastError?: string | null
+  // Opaque handle to the loaded ONNX session (if any)
+  session?: unknown
 }
 
 export interface ReaderState {

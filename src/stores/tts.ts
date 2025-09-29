@@ -11,7 +11,9 @@ const [state, setState] = createSignal<TTSState>({
   pitch: 1.0,
   model: null,
   isModelLoading: false,
-  isWebGPUSupported: false
+  isWebGPUSupported: false,
+  lastError: null,
+  session: undefined
 })
 
 // Available TTS models based on architecture
@@ -27,6 +29,7 @@ const MODELS: TTSModel[] = [
     name: 'Kitten TTS',
     size: 15, // 15MB
     voices: ['af_sarah', 'af_nicole', 'am_michael'],
+    // Kitten can run on CPU (WASM) and optionally WebGPU if available
     requiresWebGPU: false,
     url: '/models/kitten-15m.onnx'
   }
@@ -50,7 +53,7 @@ export const useTTS = () => {
   checkWebGPU()
   
   const loadModel = async (modelName: string) => {
-    setState(prev => ({ ...prev, isModelLoading: true }))
+    setState(prev => ({ ...prev, isModelLoading: true, lastError: null }))
     
     try {
       const model = MODELS.find(m => m.name === modelName)
@@ -62,24 +65,44 @@ export const useTTS = () => {
       if (model.requiresWebGPU && !state().isWebGPUSupported) {
         throw new Error('WebGPU required but not supported')
       }
-      
-      // Load ONNX model (to be implemented)
-      const ort = await import('onnxruntime-web/webgpu')
-      // Note: session will be used for actual TTS implementation
+
+      // Verify the model asset exists before attempting to load
+      try {
+        const head = await fetch(model.url, { method: 'HEAD' })
+        if (!head.ok) {
+          throw new Error(`Model file not found at ${model.url}`)
+        }
+      } catch (e) {
+        throw new Error(`Model asset missing. Place file at ${model.url}`)
+      }
+
+      // Load ORT build for WASM
+      const ort = await import('onnxruntime-web') as any
+      // Configure WASM paths explicitly for ORT - use CDN
+      if (ort?.env?.wasm) {
+        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/'
+        ort.env.wasm.numThreads = 1
+        ort.env.wasm.proxy = false
+      }
+      // Force CPU/WASM for Kitten; require WebGPU for Kokoro
+      const eps: ("webgpu" | "wasm")[] = model.requiresWebGPU ? ['webgpu'] : ['wasm']
+
       const session = await ort.InferenceSession.create(model.url, {
-        executionProviders: model.requiresWebGPU ? ['webgpu'] : ['wasm']
+        executionProviders: eps as any,
       })
-      void session // Prevent unused variable warning
-      
+
       setState(prev => ({
         ...prev,
         model,
-        isModelLoading: false
+        isModelLoading: false,
+        lastError: null,
+        session
       }))
     } catch (error) {
       setState(prev => ({
         ...prev,
-        isModelLoading: false
+        isModelLoading: false,
+        lastError: (error as Error)?.message || 'Failed to load TTS model'
       }))
       throw error
     }
@@ -108,7 +131,7 @@ export const useTTS = () => {
         speechSynthesis.speak(utterance)
       }
     } catch (error) {
-      setState(prev => ({ ...prev, isPlaying: false }))
+      setState(prev => ({ ...prev, isPlaying: false, lastError: (error as Error)?.message || 'TTS error' }))
       throw error
     }
   }
