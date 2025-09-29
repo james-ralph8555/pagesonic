@@ -11,9 +11,12 @@ interface PDFPageProps {
 export const PDFPage: Component<PDFPageProps> = (props) => {
   const { getCurrentPage } = usePDF()
   const [canvasRef, setCanvasRef] = createSignal<HTMLCanvasElement | null>(null)
+  const [textLayerRef, setTextLayerRef] = createSignal<HTMLDivElement | null>(null)
   const [isLoading, setIsLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   let renderTask: any = null
+  let textLayerTask: any = null
+  let textLayerBuilder: any = null
 
 
   const renderPage = async () => {
@@ -46,6 +49,14 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         renderTask.cancel()
         renderTask = null
       }
+      if (textLayerTask && typeof textLayerTask.cancel === 'function') {
+        try { textLayerTask.cancel() } catch {}
+        textLayerTask = null
+      }
+      if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
+        try { textLayerBuilder.cancel() } catch {}
+        textLayerBuilder = null
+      }
 
       const renderContext = {
         canvasContext: context,
@@ -56,6 +67,22 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
       renderTask = page.render(renderContext)
       await renderTask.promise
+
+      // Render selectable text layer on top of the canvas using TextLayerBuilder
+      const container = textLayerRef()
+      if (container) {
+        container.innerHTML = ''
+
+        const viewerMod: any = await import('pdfjs-dist/web/pdf_viewer')
+        const { TextLayerBuilder } = viewerMod
+        textLayerBuilder = new TextLayerBuilder({
+          pdfPage: page,
+          onAppend: (div: HTMLDivElement) => {
+            container.appendChild(div)
+          }
+        })
+        await textLayerBuilder.render({ viewport })
+      }
     } catch (err) {
       const error = err as any
       if (error.name !== 'RenderingCancelledException' && error.name !== 'RenderingCancelled') {
@@ -67,6 +94,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       if (renderTask) {
         renderTask = null
       }
+      // Do not null textLayerTask here to preserve selection; it is re-created on next render
     }
   }
 
@@ -95,6 +123,12 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     if (renderTask) {
       renderTask.cancel()
     }
+    if (textLayerTask && typeof textLayerTask.cancel === 'function') {
+      try { textLayerTask.cancel() } catch {}
+    }
+    if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
+      try { textLayerBuilder.cancel() } catch {}
+    }
   })
 
   return (
@@ -118,6 +152,13 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
           display: isLoading() || error() ? 'none' : 'block',
           'max-width': props.fitWidth ? '100%' : 'none',
           height: 'auto'
+        }}
+      />
+      <div
+        ref={setTextLayerRef}
+        class="pdf-text-layer"
+        style={{
+          display: isLoading() || error() ? 'none' : 'block'
         }}
       />
     </div>

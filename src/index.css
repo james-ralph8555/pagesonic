@@ -190,8 +190,41 @@ body {
   display: block;
   max-width: 100%;
   height: auto;
+  position: relative;
+  z-index: 0;
   border-radius: 8px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Text layer container overlay */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  z-index: 1; /* above canvas */
+}
+
+/* PDF.js text layer (selectable text overlay) */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  transform-origin: 0 0;
+  z-index: 1;
+}
+
+.textLayer span,
+.textLayer br {
+  color: transparent; /* keep visual look from canvas, but selectable */
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.25);
 }
 
 /* Floating Zoom Controls */

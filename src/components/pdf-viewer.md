@@ -20,7 +20,8 @@ This document describes the implementation of the PDF Viewer tab, colocated with
     - `isVisible?: boolean` — Defaults to `true`; used for conditional rendering/virtualization.
   - Behavior:
     - On mount and whenever `pageNumber`, `scale`, or `isVisible` change, fetches the specified page via `getCurrentPage(pageNumber)` and renders it to a `<canvas>` using a viewport derived from `scale`.
-    - Cancels any in-flight `renderTask` before starting a new render to avoid race conditions and artifacts.
+    - Renders a selectable text layer over the canvas using `TextLayerBuilder` from `pdfjs-dist/web/pdf_viewer`, so text is selectable/copyable where it appears on the page.
+    - Cancels any in-flight `renderTask` and text-layer task before starting a new render to avoid race conditions and artifacts.
     - Clears the canvas prior to each render.
   - Notes:
     - WebGL is disabled by default in the render context. Consider enabling if performance profiling warrants it.
@@ -54,6 +55,7 @@ This document describes the implementation of the PDF Viewer tab, colocated with
 
 - `public/pdf.worker.min.js` (and unminified `pdf.worker.js`) must exist.
 - The store sets `pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.js'` before loading a document.
+- Minimal `.textLayer` styles are included in `src/index.css` to enable alignment and selection.
 
 ## Keyboard Shortcuts
 
