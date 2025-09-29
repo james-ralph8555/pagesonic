@@ -212,6 +212,9 @@ body {
   line-height: 1;
   transform-origin: 0 0;
   z-index: 1;
+  /* Default to 1 so calc(var(--total-scale-factor) * X) stays valid
+     even before the JS sets it per page/zoom. */
+  --total-scale-factor: 1;
 }
 
 .textLayer span,
@@ -617,4 +620,7 @@ button.loaded:hover {
 
 .app--pdf .app-main {
   gap: 0;
+}
+:root {
+  /* Import PDF.js viewer CSS for text layer defaults */
 }

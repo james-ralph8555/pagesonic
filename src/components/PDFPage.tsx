@@ -15,7 +15,6 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   const [isLoading, setIsLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
   let renderTask: any = null
-  let textLayerTask: any = null
   let textLayerBuilder: any = null
 
 
@@ -49,10 +48,6 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         renderTask.cancel()
         renderTask = null
       }
-      if (textLayerTask && typeof textLayerTask.cancel === 'function') {
-        try { textLayerTask.cancel() } catch {}
-        textLayerTask = null
-      }
       if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
         try { textLayerBuilder.cancel() } catch {}
         textLayerBuilder = null
@@ -78,9 +73,14 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         textLayerBuilder = new TextLayerBuilder({
           pdfPage: page,
           onAppend: (div: HTMLDivElement) => {
+            // Important: PDF.js text layer relies on CSS var --total-scale-factor
+            // to position/size its absolutely positioned text nodes. Keep it
+            // in sync with the viewport scale so it aligns with the canvas.
+            div.style.setProperty('--total-scale-factor', String(props.scale))
             container.appendChild(div)
           }
         })
+        // Use the same viewport as the canvas to keep perfect alignment
         await textLayerBuilder.render({ viewport })
       }
     } catch (err) {
@@ -94,7 +94,6 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       if (renderTask) {
         renderTask = null
       }
-      // Do not null textLayerTask here to preserve selection; it is re-created on next render
     }
   }
 
@@ -122,9 +121,6 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   onCleanup(() => {
     if (renderTask) {
       renderTask.cancel()
-    }
-    if (textLayerTask && typeof textLayerTask.cancel === 'function') {
-      try { textLayerTask.cancel() } catch {}
     }
     if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
       try { textLayerBuilder.cancel() } catch {}
