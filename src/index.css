@@ -4,7 +4,12 @@
   font-weight: 400;
   color-scheme: light dark;
   color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  /* Base tones for frosted glass theme */
+  --glass-bg: rgba(255, 255, 255, 0.08);
+  --glass-bg-strong: rgba(255, 255, 255, 0.12);
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-hover: rgba(255, 255, 255, 0.16);
+  --brand: #6366f1;
 }
 
 * {
@@ -27,6 +32,12 @@ body {
   justify-content: center;
   min-width: 320px;
   min-height: 100vh;
+  /* App-wide frosted ambiance background */
+  background:
+    radial-gradient(1200px 600px at 50% -200px, rgba(255,255,255,0.12), rgba(0,0,0,0) 60%),
+    radial-gradient(800px 400px at 10% 10%, rgba(99,102,241,0.15), rgba(0,0,0,0) 60%),
+    radial-gradient(900px 450px at 90% 15%, rgba(236,72,153,0.12), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, rgba(10,10,14,0.9), rgba(10,10,14,0.9));
 }
 
 #root { width: 100%; }
@@ -41,6 +52,13 @@ body {
 
 .app-header {
   margin-bottom: 2rem;
+  padding: 1rem 1.25rem;
+  border-radius: 12px;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
 }
 
 .app-header h1 {
@@ -58,20 +76,22 @@ body {
 
 .app-nav button {
   padding: 0.5rem 1rem;
-  border: none;
-  border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: #fff;
   cursor: pointer;
-  transition: background-color 0.2s;
+  transition: background-color 0.2s, transform 0.08s ease;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 .app-nav button:hover {
-  background-color: rgba(255, 255, 255, 0.2);
+  background-color: var(--glass-hover);
 }
 
 .app-nav button.active {
-  background-color: #6366f1;
+  background-color: var(--brand);
 }
 
 .app-main {
@@ -113,16 +133,16 @@ body {
 
 .rail-btn {
   padding: 0.4rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--glass-border);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--glass-bg);
   color: #fff;
   cursor: pointer;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
-.rail-btn:hover {
-  background: rgba(255, 255, 255, 0.14);
-}
+.rail-btn:hover { background: var(--glass-hover); }
 
 .rail-meta {
   opacity: 0.9;
@@ -132,9 +152,11 @@ body {
   height: 34px;
   padding: 0 0.6rem;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
   color: #fff;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 /* Full-height scroll area with frosted ambiance */
@@ -235,8 +257,12 @@ body {
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: 12px;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
 }
 
 .tts-controls {
@@ -244,6 +270,23 @@ body {
   gap: 0.5rem;
   justify-content: center;
 }
+
+/* Buttons inside reader/settings adopt glass style */
+.reader-controls button,
+.settings-section button {
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.08s ease;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+}
+
+.reader-controls button:hover,
+.settings-section button:hover { background: var(--glass-hover); }
 
 .model-controls,
 .voice-controls,
@@ -267,18 +310,36 @@ body {
 .voice-controls select,
 .voice-controls input {
   padding: 0.25rem 0.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 4px;
-  background-color: rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: var(--glass-bg);
   color: white;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+}
+
+/* Style selects in model controls similarly */
+.model-controls select,
+.text-controls input[type="range"] {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  background: var(--glass-bg);
+  color: white;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 .reader-content {
   padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
   min-height: 400px;
   text-align: left;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
 }
 
 .extracted-text h2 {
@@ -302,8 +363,12 @@ body {
 
 .settings-section {
   padding: 1.5rem;
-  background-color: rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: 12px;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
 }
 
 .settings-section h3 {
@@ -322,8 +387,11 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 1rem;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 4px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 .model-info {
@@ -403,18 +471,25 @@ button.loaded:hover {
 }
 
 .loading {
-  background-color: rgba(99, 102, 241, 0.1);
-  color: #6366f1;
+  background-color: rgba(99, 102, 241, 0.15);
+  color: var(--brand);
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 .error {
-  background-color: rgba(239, 68, 68, 0.1);
+  background-color: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 .no-document {
-  background-color: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.8);
+  background-color: var(--glass-bg);
+  color: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
 }
 
 /* Responsive Design */
