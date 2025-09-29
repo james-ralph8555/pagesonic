@@ -78,9 +78,9 @@ export const useTTS = () => {
 
       // Load ORT build for WASM
       const ort = await import('onnxruntime-web') as any
-      // Configure WASM paths explicitly for ORT - use CDN
+      // Configure WASM paths explicitly for ORT
       if (ort?.env?.wasm) {
-        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/'
+        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
         ort.env.wasm.numThreads = 1
         ort.env.wasm.proxy = false
       }
@@ -109,26 +109,33 @@ export const useTTS = () => {
   }
   
   const speak = async (text: string) => {
-    if (!state().model) {
-      throw new Error('No model loaded')
-    }
-    
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
-    
     try {
-      // This will be implemented with actual TTS generation
-      console.log('Speaking:', text)
-      
-      // For now, use browser's SpeechSynthesis as fallback
+      // If a local model is loaded, future: synthesize via ONNX session
+      if (state().model && state().session) {
+        console.log('Speaking with model:', state().model.name)
+        // TODO: Generate audio via ONNX and play via AudioContext
+        // Temporary: fall through to SpeechSynthesis until model pipeline is implemented
+      }
+
+      // Fallback: use browser SpeechSynthesis if available
       if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text)
         utterance.rate = state().rate
         utterance.pitch = state().pitch
-        utterance.voice = speechSynthesis.getVoices().find(v => v.name.includes(state().voice)) || null
+        // Try to match voice by substring; otherwise let system default
+        const voice = speechSynthesis.getVoices().find(v => v.name.toLowerCase().includes(state().voice.toLowerCase())) || null
+        utterance.voice = voice
         utterance.onend = () => {
           setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
         }
         speechSynthesis.speak(utterance)
+        return
+      }
+
+      // If no model pipeline yet and no speechSynthesis, error out
+      if (!state().model) {
+        throw new Error('No TTS available (load a model or enable SpeechSynthesis)')
       }
     } catch (error) {
       setState(prev => ({ ...prev, isPlaying: false, lastError: (error as Error)?.message || 'TTS error' }))

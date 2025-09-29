@@ -128,7 +128,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   })
 
   return (
-    <div class="pdf-page-container">
+    <div class="pdf-page-container" data-page={props.pageNumber}>
       {isLoading() && (
         <div class="page-loading">
           <div class="loading-spinner">Loading...</div>
