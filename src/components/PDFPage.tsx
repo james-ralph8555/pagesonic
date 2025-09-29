@@ -5,6 +5,7 @@ interface PDFPageProps {
   pageNumber: number
   scale: number
   isVisible?: boolean
+  fitWidth?: boolean
 }
 
 export const PDFPage: Component<PDFPageProps> = (props) => {
@@ -79,8 +80,9 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   // Reactive updates when relevant props/signals change
   createEffect(() => {
     // Explicitly read reactive sources to track dependencies
-    const _pn = props.pageNumber
-    const _sc = props.scale
+    // Touch reactive props to establish dependencies without unused locals
+    void props.pageNumber
+    void props.scale
     const _vis = props.isVisible
     const _canvas = canvasRef()
 
@@ -114,7 +116,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         class="pdf-page-canvas"
         style={{
           display: isLoading() || error() ? 'none' : 'block',
-          'max-width': '100%',
+          'max-width': props.fitWidth ? '100%' : 'none',
           height: 'auto'
         }}
       />

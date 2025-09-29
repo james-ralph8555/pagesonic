@@ -163,6 +163,7 @@ body {
 .pdf-scroll {
   height: 100vh;
   overflow-y: auto;
+  overflow-x: auto;
   background: radial-gradient(1200px 600px at 50% -200px, rgba(255, 255, 255, 0.12), rgba(0,0,0,0) 60%),
               linear-gradient(180deg, rgba(10, 10, 14, 0.85), rgba(10, 10, 14, 0.85));
 }
@@ -191,6 +192,56 @@ body {
   height: auto;
   border-radius: 8px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* Floating Zoom Controls */
+.pdf-zoom-controls {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 60;
+}
+
+.pdf-zoom-controls .zoom-btn,
+.pdf-zoom-controls .zoom-toggle {
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.pdf-zoom-controls .zoom-btn:hover,
+.pdf-zoom-controls .zoom-toggle:hover {
+  background: var(--glass-hover);
+}
+
+.pdf-zoom-controls .zoom-toggle.active {
+  background: var(--brand);
+  border-color: transparent;
+}
+
+.pdf-zoom-controls .zoom-display {
+  min-width: 56px;
+  text-align: center;
+  padding: 0.4rem 0.6rem;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  user-select: none;
+  cursor: pointer;
 }
 
 .page-loading {

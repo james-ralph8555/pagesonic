@@ -8,12 +8,15 @@ export const PDFViewer: Component = () => {
   const {} = useTTS()
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
-  const [viewportH, setViewportH] = createSignal<number>(window.innerHeight)
+  const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
   const [showRail, setShowRail] = createSignal<boolean>(true)
   let hideTimer: number | undefined
 
-  const RAIL_HEIGHT = 56 // px
-  const V_PADDING = 24 // px padding around pages
+  // Zoom controls
+  const [zoom, setZoom] = createSignal<number>(1.0) // 1.0 = 100%
+  const [fitWidth, setFitWidth] = createSignal<boolean>(false)
+
+  const H_PADDING = 16 * 2 // matches .pdf-pages horizontal padding
 
   const handleFileSelect = (event: Event) => {
     const target = event.target as HTMLInputElement
@@ -26,12 +29,20 @@ export const PDFViewer: Component = () => {
   const scaleForPage = (pageIndex: number) => {
     const page = pdfState().pages[pageIndex]
     if (!page) return 1
-    const availableH = viewportH() - RAIL_HEIGHT - V_PADDING * 2
-    const scale = Math.max(0.1, availableH / page.height)
-    return scale
+    if (fitWidth()) {
+      const availableW = Math.max(100, viewportW() - H_PADDING)
+      // In fit-width mode, compute absolute scale from container width only
+      // Do not multiply by current zoom to avoid double-scaling and CSS clamping artifacts
+      const base = Math.max(0.1, availableW / page.width)
+      return base
+    }
+    // Actual size baseline, zoom multiplies
+    return 1 * zoom()
   }
 
-  const onResize = () => setViewportH(window.innerHeight)
+  const onResize = () => {
+    setViewportW(window.innerWidth)
+  }
 
   const pokeUI = () => {
     setShowRail(true)
@@ -45,6 +56,32 @@ export const PDFViewer: Component = () => {
     document.addEventListener('scroll', pokeUI, { passive: true })
     // Start hidden after a moment for immersion
     hideTimer = window.setTimeout(() => setShowRail(false), 1500)
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const isTyping = target && (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        (target as HTMLElement).isContentEditable
+      )
+      if (isTyping) return
+
+      const step = 0.1
+      if (e.key === '+' || e.key === '=' ) {
+        e.preventDefault()
+        setZoom(z => Math.min(4, +(z + step).toFixed(2)))
+      } else if (e.key === '-' || e.key === '_' ) {
+        e.preventDefault()
+        setZoom(z => Math.max(0.25, +(z - step).toFixed(2)))
+      } else if (e.key === '0') {
+        e.preventDefault()
+        setZoom(1.0)
+      } else if (e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setFitWidth(v => !v)
+      }
+    }
+    document.addEventListener('keydown', onKeyDown)
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown))
   })
 
   onCleanup(() => {
@@ -109,6 +146,7 @@ export const PDFViewer: Component = () => {
                   pageNumber={p.pageNumber}
                   scale={scaleForPage(i())}
                   isVisible={true}
+                  fitWidth={fitWidth()}
                 />
               )}
             </For>
@@ -118,6 +156,37 @@ export const PDFViewer: Component = () => {
               <p>Click "Open" to select a file</p>
             </div>
           )}
+        </div>
+        <div class="pdf-zoom-controls">
+          <button
+            class="zoom-btn"
+            aria-label="Zoom out"
+            title="Zoom out (-)"
+            onClick={() => setZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
+          >−</button>
+          <div class="zoom-display" title="Reset to 100%" onClick={() => setZoom(1.0)}>
+            {(() => {
+              if (fitWidth() && pdfState().pages.length > 0) {
+                const first = pdfState().pages[0]
+                const availableW = Math.max(100, viewportW() - H_PADDING)
+                const base = Math.max(0.1, availableW / first.width)
+                return `${(base * 100).toFixed(0)}%`
+              }
+              return `${(zoom() * 100).toFixed(0)}%`
+            })()}
+          </div>
+          <button
+            class="zoom-btn"
+            aria-label="Zoom in"
+            title="Zoom in (+)"
+            onClick={() => setZoom(z => Math.min(4, +(z + 0.1).toFixed(2)))}
+          >+</button>
+          <button
+            class={"zoom-toggle" + (fitWidth() ? ' active' : '')}
+            aria-pressed={fitWidth()}
+            title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
+            onClick={() => setFitWidth(v => !v)}
+          >{fitWidth() ? 'Fit Width ✓' : 'Fit Width'}</button>
         </div>
       </div>
     </div>
