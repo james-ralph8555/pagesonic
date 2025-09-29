@@ -85,7 +85,6 @@ export const SelectionToolbar: Component = () => {
     setVisible(true)
   }
 
-  const hideOnInput = () => setVisible(false)
 
   onMount(() => {
     document.addEventListener('selectionchange', updateFromSelection)

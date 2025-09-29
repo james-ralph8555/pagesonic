@@ -25,3 +25,10 @@ bin/
 .vscode/
 *.swp
 *.swo
+
+# Model files
+public/models/
+public/ort/
+*.onnx
+*.wasm
+*.mjs

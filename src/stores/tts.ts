@@ -112,8 +112,9 @@ export const useTTS = () => {
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     try {
       // If a local model is loaded, future: synthesize via ONNX session
-      if (state().model && state().session) {
-        console.log('Speaking with model:', state().model.name)
+      const current = state()
+      if (current.model && current.session) {
+        console.log('Speaking with model:', current.model.name)
         // TODO: Generate audio via ONNX and play via AudioContext
         // Temporary: fall through to SpeechSynthesis until model pipeline is implemented
       }
