@@ -2,6 +2,7 @@ import { Component, createSignal, onMount, onCleanup, For, createEffect } from '
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
 import { PDFPage } from './PDFPage'
+import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF } = usePDF()
@@ -76,6 +77,8 @@ export const PDFViewer: Component = () => {
         e.preventDefault()
         setZoom(1.0)
       } else if (e.key.toLowerCase() === 'f') {
+        // Do not hijack browser find (Ctrl/Cmd+F) or other modified combos
+        if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return
         e.preventDefault()
         setFitWidth(v => !v)
       }
@@ -157,6 +160,7 @@ export const PDFViewer: Component = () => {
             </div>
           )}
         </div>
+        <SelectionToolbar />
         <div class="pdf-zoom-controls">
           <button
             class="zoom-btn"
