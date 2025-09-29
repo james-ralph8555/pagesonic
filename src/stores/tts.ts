@@ -3,6 +3,7 @@ import { TTSState, TTSModel } from '@/types'
 
 const [state, setState] = createSignal<TTSState>({
   isPlaying: false,
+  isPaused: false,
   currentSentence: 0,
   totalSentences: 0,
   voice: 'af_sarah',
@@ -89,7 +90,7 @@ export const useTTS = () => {
       throw new Error('No model loaded')
     }
     
-    setState(prev => ({ ...prev, isPlaying: true }))
+    setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     
     try {
       // This will be implemented with actual TTS generation
@@ -101,6 +102,9 @@ export const useTTS = () => {
         utterance.rate = state().rate
         utterance.pitch = state().pitch
         utterance.voice = speechSynthesis.getVoices().find(v => v.name.includes(state().voice)) || null
+        utterance.onend = () => {
+          setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+        }
         speechSynthesis.speak(utterance)
       }
     } catch (error) {
@@ -110,9 +114,23 @@ export const useTTS = () => {
   }
   
   const stop = () => {
-    setState(prev => ({ ...prev, isPlaying: false }))
+    setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
     if ('speechSynthesis' in window) {
       speechSynthesis.cancel()
+    }
+  }
+
+  const pause = () => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.pause()
+      setState(prev => ({ ...prev, isPaused: true }))
+    }
+  }
+
+  const resume = () => {
+    if ('speechSynthesis' in window) {
+      speechSynthesis.resume()
+      setState(prev => ({ ...prev, isPaused: false }))
     }
   }
   
@@ -134,6 +152,8 @@ export const useTTS = () => {
     loadModel,
     speak,
     stop,
+    pause,
+    resume,
     setVoice,
     setRate,
     setPitch

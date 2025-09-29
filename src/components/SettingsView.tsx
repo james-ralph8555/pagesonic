@@ -2,7 +2,7 @@ import { Component } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
-  const { state: ttsState, models, loadModel } = useTTS()
+  const { state: ttsState, models, loadModel, setVoice } = useTTS()
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -66,6 +66,28 @@ export const SettingsView: Component = () => {
               </div>
             )
           })}
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>Voice Settings</h3>
+        <div class="voice-controls">
+          <label>Voice:</label>
+          <select
+            value={ttsState().voice}
+            onChange={(e) => {
+              const target = e.target as HTMLSelectElement
+              // Only allow change when a model is loaded
+              if (ttsState().model) {
+                setVoice(target.value)
+              }
+            }}
+            disabled={!ttsState().model}
+          >
+            {(ttsState().model?.voices || []).map(voice => (
+              <option value={voice}>{voice}</option>
+            ))}
+          </select>
         </div>
       </div>
       

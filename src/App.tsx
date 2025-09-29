@@ -1,6 +1,5 @@
 import { Component, createSignal, onMount, onCleanup } from 'solid-js'
 import { PDFViewer } from './components/PDFViewer'
-import { ReaderView } from './components/ReaderView'
 import { SettingsView } from './components/SettingsView'
 import { AppMode } from './types'
 
@@ -10,7 +9,7 @@ export const App: Component = () => {
   onMount(() => {
     const handler = (e: Event) => {
       const mode = (e as CustomEvent<AppMode>).detail
-      if (mode === 'pdf' || mode === 'reader' || mode === 'settings') {
+      if (mode === 'pdf' || mode === 'settings') {
         setCurrentMode(mode)
       }
     }
@@ -31,12 +30,6 @@ export const App: Component = () => {
             PDF Viewer
           </button>
           <button
-            class={currentMode() === 'reader' ? 'active' : ''}
-            onClick={() => setCurrentMode('reader')}
-          >
-            Reader Mode
-          </button>
-          <button
             class={currentMode() === 'settings' ? 'active' : ''}
             onClick={() => setCurrentMode('settings')}
           >
@@ -47,7 +40,6 @@ export const App: Component = () => {
       
       <main class="app-main">
         {currentMode() === 'pdf' && <PDFViewer />}
-        {currentMode() === 'reader' && <ReaderView />}
         {currentMode() === 'settings' && <SettingsView />}
       </main>
     </div>

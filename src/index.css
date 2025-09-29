@@ -335,7 +335,6 @@ body {
 /* Selection toolbar (appears on text selection) */
 .selection-toolbar {
   position: fixed;
-  transform: translate(-50%, -120%);
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -348,6 +347,14 @@ body {
   box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   z-index: 70;
   transition: opacity 120ms ease;
+}
+
+.selection-toolbar.above {
+  transform: translate(-50%, -120%);
+}
+
+.selection-toolbar.below {
+  transform: translate(-50%, 20%);
 }
 
 .selection-toolbar.hidden {

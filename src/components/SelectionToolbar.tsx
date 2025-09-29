@@ -20,6 +20,8 @@ function isInTextLayer(node: Node | null): boolean {
 export const SelectionToolbar: Component = () => {
   const [visible, setVisible] = createSignal(false)
   const [pos, setPos] = createSignal<{ top: number; left: number }>({ top: 0, left: 0 })
+  const [placement, setPlacement] = createSignal<'above' | 'below'>('above')
+  let scrollEl: HTMLElement | null = null
 
   const updateFromSelection = () => {
     const sel = window.getSelection()
@@ -49,14 +51,32 @@ export const SelectionToolbar: Component = () => {
       return
     }
 
-    // Position just above the selection, centered
+    // Decide placement: prefer above, but if near top rail or screen top, place below
     const padding = 8
-    const top = Math.max(8, rect.top - padding)
+    const rail = document.querySelector('.pdf-top-rail') as HTMLElement | null
+    const railH = rail?.offsetHeight ?? 56
+    const spaceAbove = rect.top
+    const spaceBelow = window.innerHeight - rect.bottom
+    let where: 'above' | 'below' = 'above'
+    if (spaceAbove < railH + 16 && spaceBelow > 40) {
+      where = 'below'
+    } else if (spaceBelow < 16 && spaceAbove > spaceBelow) {
+      where = 'above'
+    }
+
     const left = Math.min(
       window.innerWidth - 8,
       Math.max(8, rect.left + rect.width / 2)
     )
 
+    let top: number
+    if (where === 'above') {
+      top = Math.max(railH + 8, rect.top - padding)
+    } else {
+      top = Math.min(window.innerHeight - 8, rect.bottom + padding)
+    }
+
+    setPlacement(where)
     setPos({ top, left })
     setVisible(true)
   }
@@ -66,14 +86,25 @@ export const SelectionToolbar: Component = () => {
   onMount(() => {
     document.addEventListener('selectionchange', updateFromSelection)
     window.addEventListener('resize', updateFromSelection)
-    // Hide on scroll to avoid stale positioning; will re-show on next selection
-    document.addEventListener('scroll', hideOnInput, { passive: true })
+    // Reposition on scroll (including the nested PDF scroll container)
+    document.addEventListener('scroll', updateFromSelection, { passive: true })
+    scrollEl = document.querySelector('.pdf-scroll') as HTMLElement | null
+    if (scrollEl) scrollEl.addEventListener('scroll', updateFromSelection, { passive: true })
+    // Also update once after mouseup to catch end-of-drag selection
+    const onMouseUp = () => setTimeout(updateFromSelection, 0)
+    document.addEventListener('mouseup', onMouseUp)
+    
+    // Cleanup for mouseup
+    onCleanup(() => {
+      document.removeEventListener('mouseup', onMouseUp)
+    })
   })
 
   onCleanup(() => {
     document.removeEventListener('selectionchange', updateFromSelection)
     window.removeEventListener('resize', updateFromSelection)
-    document.removeEventListener('scroll', hideOnInput)
+    document.removeEventListener('scroll', updateFromSelection)
+    if (scrollEl) scrollEl.removeEventListener('scroll', updateFromSelection)
   })
 
   const noop = (label: string) => (e: MouseEvent) => {
@@ -85,7 +116,7 @@ export const SelectionToolbar: Component = () => {
 
   return (
     <div
-      class={"selection-toolbar" + (visible() ? '' : ' hidden')}
+      class={"selection-toolbar" + (visible() ? '' : ' hidden') + ` ${placement()}`}
       style={{
         top: `${pos().top}px`,
         left: `${pos().left}px`,
@@ -119,4 +150,3 @@ export const SelectionToolbar: Component = () => {
     </div>
   )
 }
-

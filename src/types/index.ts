@@ -26,6 +26,7 @@ export interface TTSModel {
 
 export interface TTSState {
   isPlaying: boolean
+  isPaused?: boolean
   currentSentence: number
   totalSentences: number
   voice: string
@@ -47,4 +48,4 @@ export interface ReaderState {
   fontFamily: string
 }
 
-export type AppMode = 'pdf' | 'reader' | 'settings'
+export type AppMode = 'pdf' | 'settings'

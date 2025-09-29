@@ -5,8 +5,8 @@ import { PDFPage } from './PDFPage'
 import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
-  const { state: pdfState, loadPDF } = usePDF()
-  const {} = useTTS()
+  const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
+  const { state: ttsState, speak, stop } = useTTS()
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
@@ -108,12 +108,11 @@ export const PDFViewer: Component = () => {
           aria-label="Switch tab"
           value="pdf"
           onChange={(e) => {
-            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'reader' | 'settings'
+            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
             window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
           }}
         >
           <option value="pdf">PDF Viewer</option>
-          <option value="reader">Reader Mode</option>
           <option value="settings">Settings</option>
         </select>
         <input
@@ -191,6 +190,42 @@ export const PDFViewer: Component = () => {
             title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
             onClick={() => setFitWidth(v => !v)}
           >{fitWidth() ? 'Fit Width ✓' : 'Fit Width'}</button>
+          <button
+            class="zoom-btn"
+            aria-label={ttsState().isPlaying ? 'Pause' : 'Play'}
+            title={ttsState().isPlaying ? 'Pause reading' : 'Play reading'}
+            disabled={!pdfState().document || (!ttsState().model && !('speechSynthesis' in window))}
+            onClick={() => {
+              try {
+                if (ttsState().isPlaying) {
+                  // Toggle pause via SpeechSynthesis if available, otherwise stop
+                  if ('speechSynthesis' in window) {
+                    if ((window.speechSynthesis as any).paused) {
+                      // resume
+                      window.speechSynthesis.resume()
+                    } else {
+                      window.speechSynthesis.pause()
+                    }
+                  } else {
+                    stop()
+                  }
+                } else {
+                  const text = getAllExtractedText()
+                  if (text && text.trim()) {
+                    void speak(text)
+                  }
+                }
+              } catch (err) {
+                console.error('TTS error:', err)
+              }
+            }}
+          >{(() => {
+            if (ttsState().isPlaying) {
+              if ('speechSynthesis' in window && (window.speechSynthesis as any).paused) return 'Resume'
+              return 'Pause'
+            }
+            return 'Play'
+          })()}</button>
         </div>
       </div>
     </div>
