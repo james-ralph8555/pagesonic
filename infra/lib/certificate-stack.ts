@@ -1,48 +1,29 @@
-import { CfnOutput, Stack, StackProps } from 'aws-cdk-lib'
-import { DnsValidatedCertificate } from 'aws-cdk-lib/aws-certificatemanager'
-import { HostedZone } from 'aws-cdk-lib/aws-route53'
-import { Construct } from 'constructs'
+import { Stack, StackProps, CfnOutput } from 'aws-cdk-lib';
+import { Construct } from 'constructs';
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 
 export interface PagesonicCertificateStackProps extends StackProps {
-  readonly domainName?: string
-  readonly hostedZoneId?: string
-  readonly hostedZoneName?: string
-  readonly alternativeNames?: string[]
+  domainName: string;
 }
 
 export class PagesonicCertificateStack extends Stack {
-  readonly certificateArn?: string
+  public readonly certificate: acm.Certificate;
 
-  constructor(scope: Construct, id: string, props: PagesonicCertificateStackProps = {}) {
-    super(scope, id, props)
+  constructor(scope: Construct, id: string, props: PagesonicCertificateStackProps) {
+    super(scope, id, props);
 
-    const { domainName, hostedZoneId, hostedZoneName, alternativeNames } = props
+    const { domainName } = props;
 
-    if (!domainName || !hostedZoneId || !hostedZoneName) {
-      new CfnOutput(this, 'CertificateSetupInstructions', {
-        value:
-          'Provide context values for certificateDomain, certificateHostedZoneId, and certificateHostedZoneName to create the ACM certificate.',
-      })
-      return
-    }
-
-    const hostedZone = HostedZone.fromHostedZoneAttributes(this, 'ImportedHostedZone', {
-      hostedZoneId,
-      zoneName: hostedZoneName,
-    })
-
-    const certificate = new DnsValidatedCertificate(this, 'SiteCertificate', {
+    this.certificate = new acm.Certificate(this, 'SiteCertificate', {
       domainName,
-      subjectAlternativeNames: alternativeNames,
-      hostedZone,
-      region: 'us-east-1',
-    })
-
-    this.certificateArn = certificate.certificateArn
+      subjectAlternativeNames: [`www.${domainName}`],
+      validation: acm.CertificateValidation.fromDns(),
+    });
 
     new CfnOutput(this, 'CertificateArn', {
-      value: certificate.certificateArn,
-      exportName: `${this.stackName}-CertificateArn`,
-    })
+      value: this.certificate.certificateArn,
+      description: 'ARN of the ACM certificate (us-east-1)',
+      exportName: 'PagesonicCertificateArn',
+    });
   }
 }

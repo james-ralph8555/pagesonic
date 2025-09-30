@@ -98,16 +98,13 @@ The deployment command uploads the local `dist/` directory to a private, version
 Pass `-c distPath=/absolute/path/to/dist` if the build artifacts live somewhere other than the default `../dist` relative to the `infra/` directory.
 
 ### Managing the certificate
-- The CDK app also includes a separate stack (`PagesonicCertificateStack`) that can mint an ACM certificate in `us-east-1` via DNS validation when provided with hosted zone details:
+- Deploy the optional `PagesonicCertificateStack` to request an ACM certificate. The CDK CLI prompts for the primary domain, optional alternative names, and validation method:
   ```bash
-  npm run deploy -- PagesonicCertificateStack \
-    -c certificateDomain=app.example.com \
-    -c certificateHostedZoneId=Z123456789ABCDEFG \
-    -c certificateHostedZoneName=example.com \
-    -c certificateAlternativeNames=www.example.com
+  npm run deploy -- PagesonicCertificateStack
   ```
-- Skip the stack or leave the context values empty if you prefer to create the certificate manually in the AWS Console; doing so keeps the infrastructure split across two CloudFormation stacks, as requested.
-- The CloudFront distribution uses the default AWS certificate by design. After you provision your own certificate, attach it (and any custom domains) to the distribution from the console or by updating the stack parameters.
+- Provide the parameter values when prompted (or pass them explicitly with `--parameters CertificateDomainName=app.example.com --parameters CertificateAlternativeNames=www.example.com`). Supply multiple alternative names as a comma-separated list. DNS validation remains the default; switch to email validation by entering `EMAIL` at the prompt or using `--parameters CertificateValidationMethod=EMAIL`.
+- Override the deployment environment for the certificate stack with `CERTIFICATE_ACCOUNT` and `CERTIFICATE_REGION` environment variables if you need to target a different account or `us-east-1` for CloudFront.
+- Skip the stack entirely if you intend to manage the certificate in the AWS console; the CloudFront distribution keeps the default AWS certificate until you attach a custom one.
 
 ### Usage
 

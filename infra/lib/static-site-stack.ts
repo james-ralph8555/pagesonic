@@ -30,15 +30,11 @@ import {
 } from 'aws-cdk-lib/aws-cloudfront'
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins'
 
-export interface PagesonicSiteStackProps extends StackProps {
-  readonly distPath?: string
-}
-
 export class PagesonicSiteStack extends Stack {
-  constructor(scope: Construct, id: string, props: PagesonicSiteStackProps = {}) {
+  constructor(scope: Construct, id: string, props: StackProps = {}) {
     super(scope, id, props)
 
-    const distPath = props.distPath ? props.distPath : '../dist'
+    const distPath = '../dist'
 
     const siteBucket = new Bucket(this, 'SiteBucket', {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
