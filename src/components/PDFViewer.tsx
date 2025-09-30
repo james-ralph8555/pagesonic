@@ -258,7 +258,7 @@ export const PDFViewer: Component = () => {
           class="rail-btn"
           align="start"
           icon={(
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7" rx="1"/>
               <rect x="14" y="3" width="7" height="7" rx="1"/>
               <rect x="3" y="14" width="7" height="7" rx="1"/>
@@ -288,7 +288,7 @@ export const PDFViewer: Component = () => {
             class="rail-btn"
             align="start"
             icon={(
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="4" y="4" width="16" height="16" rx="2"/>
                 <path d="M8 8h8v8H8z"/>
               </svg>
@@ -379,64 +379,132 @@ export const PDFViewer: Component = () => {
           )}
         </div>
         <SelectionToolbar />
-        <div class="pdf-zoom-controls">
-          <button
-            class="zoom-btn"
-            aria-label="Zoom out"
-            title="Zoom out (-)"
-            onClick={() => setZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
-          >−</button>
-          <div class="zoom-display" title="Reset to 100%" onClick={() => setZoom(1.0)}>
-            {(() => {
-              if (fitWidth() && pdfState().pages.length > 0) {
-                const first = pdfState().pages[0]
-                const availableW = Math.max(100, viewportW() - H_PADDING)
-                const base = Math.max(0.1, availableW / first.width)
-                return `${(base * 100).toFixed(0)}%`
-              }
-              return `${(zoom() * 100).toFixed(0)}%`
-            })()}
-          </div>
-          <button
-            class="zoom-btn"
-            aria-label="Zoom in"
-            title="Zoom in (+)"
-            onClick={() => setZoom(z => Math.min(4, +(z + 0.1).toFixed(2)))}
-          >+</button>
-          <button
-            class={"zoom-toggle" + (fitWidth() ? ' active' : '')}
-            aria-pressed={fitWidth()}
-            title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
-            onClick={() => setFitWidth(v => !v)}
-          >{fitWidth() ? 'Fit Width ✓' : 'Fit Width'}</button>
-          <button
-            class="zoom-btn"
-            aria-label={ttsState().isPlaying ? (ttsState().isPaused ? 'Resume' : 'Pause') : 'Play'}
-            title={ttsState().isPlaying ? (ttsState().isPaused ? 'Resume reading' : 'Pause reading') : 'Play reading'}
-            disabled={!pdfState().document || (!ttsState().model && !('speechSynthesis' in window))}
-            onClick={() => {
-              try {
-                if (ttsState().isPlaying) {
-                  if (ttsState().isPaused) {
-                    resume()
-                  } else {
-                    pause()
-                  }
-                } else {
-                  const text = getAllExtractedText()
-                  if (text && text.trim()) {
-                    void speak(text)
-                  }
-                }
-              } catch (err) {
-                console.error('TTS error:', err)
-              }
-            }}
-          >{(() => {
-            if (ttsState().isPlaying) return (ttsState().isPaused ? 'Resume' : 'Pause')
-            return 'Play'
-          })()}</button>
-        </div>
+        {/* Bottom-right FAB menu */}
+        {(() => {
+          const [open, setOpen] = createSignal(false)
+          let rootEl: HTMLDivElement | undefined
+          const close = () => setOpen(false)
+          const toggle = () => setOpen(v => !v)
+          const onDocClick = (e: MouseEvent) => {
+            if (!rootEl) return
+            const t = e.target as Node
+            if (!rootEl.contains(t)) close()
+          }
+          const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+          onMount(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onKey) })
+          onCleanup(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onKey) })
+
+          const zoomLabel = () => {
+            if (fitWidth() && pdfState().pages.length > 0) {
+              const first = pdfState().pages[0]
+              const availableW = Math.max(100, viewportW() - H_PADDING)
+              const base = Math.max(0.1, availableW / first.width)
+              return `${(base * 100).toFixed(0)}%`
+            }
+            return `${(zoom() * 100).toFixed(0)}%`
+          }
+
+          const canTTS = () => !!pdfState().document && (!!ttsState().model || ('speechSynthesis' in window))
+          const isPlaying = () => ttsState().isPlaying
+          const isPaused = () => ttsState().isPaused
+
+          return (
+            <div ref={el => (rootEl = el!)} class="pdf-fab">
+              <button
+                type="button"
+                class="rail-btn fab-trigger"
+                aria-haspopup="menu"
+                aria-expanded={open()}
+                aria-label="Viewer menu"
+                title="Viewer menu"
+                onClick={toggle}
+              >
+                {/* Hamburger icon */}
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </button>
+              {open() && (
+                <div class="fab-panel" role="menu">
+                  {/* Row 1: Zoom controls */}
+                  <div class="fab-row">
+                    <button
+                      class="icon-btn"
+                      aria-label="Zoom out"
+                      title="Zoom out (-)"
+                      onClick={() => setZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
+                    >
+                      −
+                    </button>
+                    <div class="zoom-chip" title="Reset to 100%" onClick={() => setZoom(1.0)}>
+                      {zoomLabel()}
+                    </div>
+                    <button
+                      class="icon-btn"
+                      aria-label="Zoom in"
+                      title="Zoom in (+)"
+                      onClick={() => setZoom(z => Math.min(4, +(z + 0.1).toFixed(2)))}
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Row 2: Fit width toggle */}
+                  <button
+                    class={"fab-item" + (fitWidth() ? ' active' : '')}
+                    aria-pressed={fitWidth()}
+                    onClick={() => setFitWidth(v => !v)}
+                    title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
+                  >
+                    {fitWidth() ? 'Fit Width ✓' : 'Fit Width'}
+                  </button>
+
+                  {/* Row 3: Play/Pause separate icons */}
+                  <div class="fab-row">
+                    <button
+                      class={"icon-btn" + ((isPlaying() && !isPaused()) ? ' active' : '')}
+                      aria-label="Pause"
+                      title="Pause reading"
+                      disabled={!canTTS() || !isPlaying() || isPaused()}
+                      onClick={() => { try { if (isPlaying() && !isPaused()) pause() } catch {} }}
+                    >
+                      {/* Pause icon */}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <rect x="6" y="5" width="4" height="14" rx="1"/>
+                        <rect x="14" y="5" width="4" height="14" rx="1"/>
+                      </svg>
+                    </button>
+                    <button
+                      class={"icon-btn" + ((isPlaying() && isPaused()) ? ' active' : (!isPlaying() ? ' active' : ''))}
+                      aria-label={isPlaying() ? 'Resume' : 'Play'}
+                      title={isPlaying() ? 'Resume reading' : 'Play reading'}
+                      disabled={!canTTS()}
+                      onClick={() => {
+                        try {
+                          if (isPlaying()) {
+                            if (isPaused()) {
+                              resume()
+                            }
+                          } else {
+                            const text = getAllExtractedText()
+                            if (text && text.trim()) void speak(text)
+                          }
+                        } catch (err) { console.error('TTS error:', err) }
+                      }}
+                    >
+                      {/* Play icon */}
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <polygon points="6 4 20 12 6 20 6 4"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })()}
       </div>
     </div>
   )
