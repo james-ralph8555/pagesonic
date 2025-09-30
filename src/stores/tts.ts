@@ -2,6 +2,7 @@ import { createSignal } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
 import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
 import { cleanForTTS } from '@/tts/textCleaner'
+import { getPref, setPref } from '@/utils/idb'
 // Note: Piper streaming provides its own chunking; avoid double chunking here
 
 // Shared, app-wide TTS state
@@ -62,6 +63,7 @@ export const useTTS = () => {
   ;(globalThis as any).__piper_pauseFn ||= null as (() => void) | null
   ;(globalThis as any).__piper_resumeFn ||= null as (() => void) | null
   ;(globalThis as any).__piper_isPaused ||= false as boolean
+  ;(globalThis as any).__tts_autoload_done ||= false as boolean
 
   const getAudioCtx = () => (globalThis as any).__tts_audioCtx as AudioContext | null
   const setAudioCtx = (ctx: AudioContext | null) => { (globalThis as any).__tts_audioCtx = ctx }
@@ -314,6 +316,8 @@ export const useTTS = () => {
           lastError: null,
           voice: selectedVoice
         }))
+        // Persist successful selection
+        try { await setPref('tts.selected', { engine: 'local', model: model.name }) } catch {}
         return
       }
 
@@ -346,6 +350,8 @@ export const useTTS = () => {
         lastError: null,
         session
       }))
+      // Persist successful selection
+      try { await setPref('tts.selected', { engine: 'local', model: model.name }) } catch {}
     } catch (error) {
       setState(prev => ({
         ...prev,
@@ -555,12 +561,33 @@ export const useTTS = () => {
         lastError: null,
         voice: names.includes(prev.voice) ? prev.voice : names[0]
       }))
+      // Persist successful selection
+      try { await setPref('tts.selected', { engine: 'browser', model: 'browser' }) } catch {}
       return true
     } catch (e) {
       setState(prev => ({ ...prev, lastError: (e as Error)?.message || 'Failed to enable Browser TTS' }))
       return false
     }
   }
+
+  // Attempt to auto-load previously selected engine/model on first use
+  ;(async () => {
+    try {
+      const done = (globalThis as any).__tts_autoload_done as boolean
+      if (done) return
+      ;(globalThis as any).__tts_autoload_done = true
+      const pref = await getPref<any>('tts.selected')
+      if (!pref) return
+      if (pref.engine === 'browser') {
+        await ensureBrowserEngine()
+      } else if (pref.engine === 'local' && typeof pref.model === 'string' && pref.model) {
+        // Only auto-load if compatible; loadModel will validate
+        await loadModel(pref.model)
+      }
+    } catch {
+      // ignore auto-load failures; user can select manually
+    }
+  })()
 
   const speakWithPiperTTS = async (text: string) => {
     const piperWorker = getPiperWorker()
