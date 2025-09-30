@@ -108,7 +108,12 @@ export const useTTS = () => {
       const ort = await import('onnxruntime-web') as any
       // Configure ORT asset paths and features; enable threads/SIMD only when COI is granted
       if (ort?.env?.wasm) {
-        ort.env.wasm.wasmPaths = '/ort/'
+        // IMPORTANT: Avoid pointing to /public assets in Vite dev.
+        // Vite forbids importing ESM from /public during dev; only set external paths in production builds.
+        const isProd = (typeof import.meta !== 'undefined') && (import.meta as any)?.env?.PROD
+        if (isProd) {
+          ort.env.wasm.wasmPaths = '/ort/'
+        }
         const coi = (globalThis as any).crossOriginIsolated === true
         ort.env.wasm.numThreads = coi ? (navigator.hardwareConcurrency || 4) : 1
         ort.env.wasm.simd = !!coi
