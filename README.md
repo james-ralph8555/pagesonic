@@ -22,7 +22,7 @@ PageSonic is a browser-based application that:
 ### Text-to-Speech
 - **Dual TTS Engines**: 
   - Browser SpeechSynthesis (built-in system voices)
-  - Local ONNX models (Kokoro 82MB, Kitten 15MB)
+  - Local ONNX models (Piper TTS, Kokoro)
 - **Voice Selection**: Choose from available voices based on loaded model
 - **Speech Controls**: Play, pause, resume, and stop functionality
 - **Chunking System**: Intelligent text chunking for optimal TTS performance
@@ -94,25 +94,29 @@ npm run preview
 - **Voices**: System-dependent voices
 - **Requirements**: Browser with SpeechSynthesis support
 
-#### Kokoro TTS (82MB)
+#### Piper TTS
+- **Source**: ONNX model from [OHF-Voice/piper1-gpl](https://github.com/OHF-Voice/piper1-gpl)
+- **Voices**: af_sarah, af_nicole, am_michael, bm_daniel, bm_lewis, jm_kumi
+- **Requirements**: CPU (WASM) or WebGPU if available
+- **Performance**: Good quality, faster loading
+- **Language**: Currently supports English (multi-language support planned)
+
+#### Kokoro TTS (82MB) - WIP
 - **Source**: ONNX model from onnx-community
 - **Size**: 82MB model file
 - **Voices**: af_sarah, af_nicole, am_michael, bf_emma, bf_isabella
 - **Requirements**: WebGPU support required
 - **Performance**: High quality with WebGPU acceleration
-
-#### Kitten TTS (15MB)
-- **Source**: Lightweight ONNX model
-- **Size**: 15MB model file
-- **Voices**: af_sarah, af_nicole, am_michael
-- **Requirements**: CPU (WASM) or WebGPU if available
-- **Performance**: Good quality, faster loading
+- **Status**: Work in progress
 
 ### Model Setup
-1. Download model files and place them in `public/models/`
+1. Download model files and place them in folders in `public`
 2. Expected filenames:
-   - `kokoro-82m.onnx` (Kokoro TTS model)
-   - `kitten-15m.onnx` (Kitten TTS model)
+   - `tts-model/` (Piper TTS model)
+   - `tts-model/en_US-libritts_r-medium.onnx`
+   - `tts-model/en_US-libritts_r-medium.onnx.json`
+   - `tts-model/voices.json`
+   - `models/kokoro-82m.onnx` (Kokoro TTS model)
 3. Models are loaded on-demand when selected in settings
 
 ## Development
@@ -174,6 +178,8 @@ The development server is configured with:
 
 ### TTS System
 - **Model Loading**: ONNX models loaded on-demand with WebGPU/CPU fallback
+- **Primary Model**: Piper TTS provides fast, reliable English text-to-speech
+- **WIP Model**: Kokoro TTS with high quality voices (WebGPU required)
 - **Text Chunking**: Intelligent splitting of text for optimal TTS performance
 - **Browser Fallback**: Graceful fallback to SpeechSynthesis when models unavailable
 
@@ -205,8 +211,8 @@ PageSonic is designed with privacy as a core principle:
 
 ### Feature Support
 - **WebGPU**: Required for Kokoro TTS model (Chrome/Edge only)
-- **SpeechSynthesis**: Available in most modern browsers
-- **WASM**: Required for CPU-based TTS models
+- **SpeechSynthesis**: Available in most modern browsers (fallback option)
+- **WASM**: Required for CPU-based TTS models (Piper)
 - **PDF.js**: Supported in all modern browsers
 
 ## Troubleshooting
@@ -229,9 +235,10 @@ PageSonic is designed with privacy as a core principle:
 - Verify system voices are available
 
 ### Performance Tips
-- Use Kitten model for faster loading on slower connections
+- Use Piper model for fast, reliable TTS performance
 - Adjust chunk size based on your device performance
 - Enable text chunking for better TTS performance
+- Use browser SpeechSynthesis as fallback when models aren't available
 
 ---
 

@@ -17,6 +17,10 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   const [hasRendered, setHasRendered] = createSignal(false)
   let renderTask: any = null
   let textLayerBuilder: any = null
+  let lastRenderedScale = 0
+  let lastRequestedScale = -1
+  let lastVisible = false
+  let requestVersion = 0
 
   // Simple global concurrency limiter across page renders to reduce jank
   // and avoid large bursts that can snap scroll position.
@@ -37,6 +41,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
 
   const renderPage = async () => {
+    const myVersion = ++requestVersion
     if (!canvasRef() || !props.isVisible) {
       if (!props.isVisible) {
         console.log('[PDFPage] skip render page', props.pageNumber, 'visible=false')
@@ -46,9 +51,15 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
     console.info('[PDFPage] queue render page', props.pageNumber, 'scale', props.scale)
     setError(null)
+    lastRequestedScale = props.scale
 
     try {
       await acquire()
+      // Re-check visibility and staleness after acquiring a slot
+      if (myVersion !== requestVersion || !props.isVisible) {
+        console.log('[PDFPage] abort before start', props.pageNumber, '(invisible or superseded)')
+        return
+      }
       console.info('[PDFPage] start render page', props.pageNumber)
       const page = await getCurrentPage(props.pageNumber)
       if (!page) {
@@ -89,6 +100,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       renderTask = page.render(renderContext)
       await renderTask.promise
       setHasRendered(true)
+      lastRenderedScale = props.scale
       console.info('[PDFPage] finished render page', props.pageNumber)
 
       // Render selectable text layer on top of the canvas using TextLayerBuilder
@@ -152,9 +164,34 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     void props.scale
     const _vis = props.isVisible
     const _canvas = canvasRef()
+    const becameInvisible = lastVisible && !_vis
+    lastVisible = !!_vis
+
+    // If we became invisible, cancel any in-flight work to free the lane
+    if (becameInvisible) {
+      // Invalidate pending work
+      requestVersion++
+      if (renderTask) {
+        try { renderTask.cancel() } catch {}
+        renderTask = null
+      }
+      if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
+        try { textLayerBuilder.cancel() } catch {}
+      }
+      return
+    }
 
     if (_vis && _canvas) {
-      void renderPage()
+      const EPS = 1e-3
+      const needsFirst = !hasRendered()
+      const scaleChanged = Math.abs((props.scale || 0) - (lastRenderedScale || 0)) > EPS
+      const sameRequest = Math.abs((props.scale || 0) - (lastRequestedScale || 0)) <= EPS
+      // Avoid duplicate queueing when nothing relevant changed
+      if (needsFirst || scaleChanged) {
+        void renderPage()
+      } else if (!renderTask && !sameRequest) {
+        void renderPage()
+      }
     }
   })
 

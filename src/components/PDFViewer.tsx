@@ -20,6 +20,27 @@ export const PDFViewer: Component = () => {
   let io: IntersectionObserver | null = null
   let lastSeedCenter = 0
   let scrollListenerAttached = false
+  // Track IO-visible pages and a scroll-seeded window; recompute union for visibility
+  const ioVisible = new Set<number>()
+  let seedFirst = 1
+  let seedLast = 1
+
+  const recomputeVisiblePages = () => {
+    setVisiblePages(prev => {
+      const next = new Set<number>()
+      for (let p = seedFirst; p <= seedLast; p++) next.add(p)
+      ioVisible.forEach(p => next.add(p))
+      if (next.size === 0 && pdfState().pages.length > 0) next.add(1)
+      // If equal, return prev to avoid triggering downstream effects
+      if (prev.size === next.size) {
+        let equal = true
+        for (const p of prev) { if (!next.has(p)) { equal = false; break } }
+        if (equal) return prev
+      }
+      console.info('[PDFViewer] visiblePages size ->', next.size, 'pages:', Array.from(next).slice(0, 10), next.size > 10 ? '…' : '')
+      return next
+    })
+  }
 
   // Zoom controls
   const [zoom, setZoom] = createSignal<number>(1.0) // 1.0 = 100%
@@ -77,26 +98,20 @@ export const PDFViewer: Component = () => {
       }
       console.info('[PDFViewer] Setting up IntersectionObserver')
       io = new IntersectionObserver((entries) => {
-        setVisiblePages(prev => {
-          const next = new Set(prev)
-          for (const entry of entries) {
-            const pnAttr = entry.target.getAttribute('data-page')
-            const pn = pnAttr ? parseInt(pnAttr, 10) : NaN
-            if (!Number.isFinite(pn)) continue
-            if (entry.isIntersecting) {
-              next.add(pn)
-              console.log('[PDFViewer] IO intersect add page', pn)
-            } else {
-              // Do not remove on exit to avoid thrash/cancellation storms
-              // Optionally prune later via distance/window heuristics
-            }
+        for (const entry of entries) {
+          const pnAttr = entry.target.getAttribute('data-page')
+          const pn = pnAttr ? parseInt(pnAttr, 10) : NaN
+          if (!Number.isFinite(pn)) continue
+          if (entry.isIntersecting) {
+            ioVisible.add(pn)
+            console.log('[PDFViewer] IO intersect add page', pn)
+          } else {
+            ioVisible.delete(pn)
+            // Keep pruned offscreen pages out of the render set
+            console.log('[PDFViewer] IO intersect remove page', pn)
           }
-          if (next.size === 0 && pdfState().pages.length > 0) next.add(1)
-          if (next.size !== prev.size) {
-            console.info('[PDFViewer] visiblePages size ->', next.size, 'pages:', Array.from(next).slice(0, 10), next.size > 10 ? '…' : '')
-          }
-          return next
-        })
+        }
+        recomputeVisiblePages()
       }, {
         root: scrollRoot,
         rootMargin: '300px 0px',
@@ -173,7 +188,9 @@ export const PDFViewer: Component = () => {
         // Fallback to first page if nothing intersects (e.g., empty container)
         if (pdfState().pages.length > 0) {
           console.info('[PDFViewer] seed: no intersecting pages; fallback to 1')
-          setVisiblePages(new Set([1]))
+          seedFirst = 1
+          seedLast = 1
+          recomputeVisiblePages()
         }
         return
       }
@@ -181,19 +198,10 @@ export const PDFViewer: Component = () => {
       lastSeedCenter = centerPage
       // Include a small window around the center page to start rendering nearby
       const windowSize = 2
-      const first = Math.max(1, centerPage - windowSize)
-      const last = Math.min(pdfState().pages.length, centerPage + windowSize)
-      const seed = new Set<number>()
-      for (let p = first; p <= last; p++) seed.add(p)
-      console.info('[PDFViewer] seed from scroll: center', centerPage, 'window', first, '-', last)
-      setVisiblePages(prev => {
-        const merged = new Set(prev)
-        seed.forEach(p => merged.add(p))
-        if (merged.size !== prev.size) {
-          console.info('[PDFViewer] visiblePages merged size ->', merged.size)
-        }
-        return merged
-      })
+      seedFirst = Math.max(1, centerPage - windowSize)
+      seedLast = Math.min(pdfState().pages.length, centerPage + windowSize)
+      console.info('[PDFViewer] seed from scroll: center', centerPage, 'window', seedFirst, ' - ', seedLast)
+      recomputeVisiblePages()
     } catch {
       // Non-fatal; IO will fill in
     }
@@ -221,6 +229,7 @@ export const PDFViewer: Component = () => {
     // When a new document loads, re-bind IO to new nodes
     if (scrollRoot && io) {
       io.disconnect()
+      ioVisible.clear()
       requestAnimationFrame(() => {
         if (!io || !scrollRoot) return
         const nodes = scrollRoot.querySelectorAll('.pdf-page-container')
