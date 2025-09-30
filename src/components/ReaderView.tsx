@@ -4,7 +4,7 @@ import { useTTS } from '@/stores/tts'
 
 export const ReaderView: Component = () => {
   const { state: pdfState, getAllExtractedText } = usePDF()
-  const { state: ttsState, speak, stop, setVoice, setRate, setPitch, loadModel } = useTTS()
+  const { state: ttsState, speak, stop, setVoice, setRate, setPitch, loadModel, selectBrowserEngine } = useTTS()
   const [fontSize, setFontSize] = createSignal(16)
   const [lineHeight] = createSignal(1.6)
   
@@ -41,7 +41,12 @@ export const ReaderView: Component = () => {
   
   const handleLoadModel = async (modelName: string) => {
     try {
-      await loadModel(modelName)
+      if (!modelName) return
+      if (modelName === 'Browser TTS') {
+        selectBrowserEngine()
+      } else {
+        await loadModel(modelName)
+      }
     } catch (error) {
       console.error('Failed to load model:', error)
     }
@@ -69,7 +74,8 @@ export const ReaderView: Component = () => {
             onChange={(e) => handleLoadModel(e.target.value)}
             disabled={ttsState().isModelLoading}
           >
-            <option value="">Select a model...</option>
+            <option value="">Select engine/model...</option>
+            <option value="Browser TTS">Browser TTS (System)</option>
             <option value="Kokoro TTS">Kokoro TTS (82MB)</option>
             <option value="Kitten TTS">Kitten TTS (15MB)</option>
           </select>
@@ -81,9 +87,12 @@ export const ReaderView: Component = () => {
           <select 
             value={ttsState().voice}
             onChange={handleVoiceChange}
-            disabled={!ttsState().model}
+            disabled={!ttsState().model && ttsState().engine !== 'browser'}
           >
-            {(ttsState().model?.voices || []).map(voice => (
+            {(ttsState().engine === 'browser'
+              ? (ttsState().systemVoices || [])
+              : (ttsState().model?.voices || [])
+            ).map(voice => (
               <option value={voice}>{voice}</option>
             ))}
           </select>

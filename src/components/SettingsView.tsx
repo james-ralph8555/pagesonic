@@ -2,7 +2,7 @@ import { Component } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
-  const { state: ttsState, models, loadModel, setVoice } = useTTS()
+  const { state: ttsState, models, loadModel, setVoice, selectBrowserEngine } = useTTS()
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -52,7 +52,7 @@ export const SettingsView: Component = () => {
           <h2>Settings</h2>
       
       <div class="settings-section">
-        <h3>TTS Model Selection</h3>
+        <h3>TTS Engine / Model</h3>
         {!ttsState().isWebGPUSupported && (
           <p class="error" style={{ padding: '0.5rem 0.75rem', margin: '0 0 0.75rem 0' }}>
             WebGPU not supported. Kokoro requires WebGPU; Kitten can run on CPU.
@@ -64,6 +64,23 @@ export const SettingsView: Component = () => {
           </p>
         )}
         <div class="model-list">
+          <div class="model-item">
+            <div class="model-info">
+              <h4>Browser TTS (System)</h4>
+              <p>Uses built-in SpeechSynthesis voices</p>
+              <p>Voices: {(ttsState().systemVoices || []).length > 0 ? (ttsState().systemVoices || []).join(', ') : 'auto-detected'}</p>
+              <p class={`status ${ttsState().engine === 'browser' ? 'loaded' : 'available'}`}>
+                {ttsState().engine === 'browser' ? 'Currently in use' : ('speechSynthesis' in window ? 'Available' : 'Unavailable')}
+              </p>
+            </div>
+            <button
+              onClick={() => selectBrowserEngine()}
+              disabled={!('speechSynthesis' in window) || ttsState().engine === 'browser'}
+              class={ttsState().engine === 'browser' ? 'loaded' : ''}
+            >
+              {ttsState().engine === 'browser' ? 'Using' : 'Use'}
+            </button>
+          </div>
           {models.map((model) => {
             const modelStatus = getModelStatus(model)
             const isLoaded = ttsState().model?.name === model.name
@@ -105,14 +122,17 @@ export const SettingsView: Component = () => {
             value={ttsState().voice}
             onChange={(e) => {
               const target = e.target as HTMLSelectElement
-              // Only allow change when a model is loaded
-              if (ttsState().model) {
+              // Allow change when a local model is loaded or browser TTS is active
+              if (ttsState().model || ttsState().engine === 'browser') {
                 setVoice(target.value)
               }
             }}
-            disabled={!ttsState().model}
+            disabled={!ttsState().model && ttsState().engine !== 'browser'}
           >
-            {(ttsState().model?.voices || []).map(voice => (
+            {(ttsState().engine === 'browser'
+              ? (ttsState().systemVoices || [])
+              : (ttsState().model?.voices || [])
+            ).map(voice => (
               <option value={voice}>{voice}</option>
             ))}
           </select>

@@ -33,11 +33,15 @@ export interface TTSState {
   rate: number
   pitch: number
   model: TTSModel | null
+  // Which engine is active for TTS
+  engine?: 'local' | 'browser'
   isModelLoading: boolean
   isWebGPUSupported: boolean
   lastError?: string | null
   // Opaque handle to the loaded ONNX session (if any)
   session?: unknown
+  // Available system voices for browser SpeechSynthesis
+  systemVoices?: string[]
 }
 
 export interface ReaderState {

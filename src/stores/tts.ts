@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { createSignal, onCleanup } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
 
 const [state, setState] = createSignal<TTSState>({
@@ -10,10 +10,12 @@ const [state, setState] = createSignal<TTSState>({
   rate: 1.0,
   pitch: 1.0,
   model: null,
+  engine: 'local',
   isModelLoading: false,
   isWebGPUSupported: false,
   lastError: null,
-  session: undefined
+  session: undefined,
+  systemVoices: []
 })
 
 // Available TTS models based on architecture
@@ -51,6 +53,26 @@ export const useTTS = () => {
   }
   
   checkWebGPU()
+
+  // Initialize browser SpeechSynthesis voices if available
+  const refreshSystemVoices = () => {
+    try {
+      if ('speechSynthesis' in window) {
+        const voices = window.speechSynthesis.getVoices()
+        const names = voices.map(v => v.name)
+        setState(prev => ({ ...prev, systemVoices: names }))
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    refreshSystemVoices()
+    const onVoicesChanged = () => refreshSystemVoices()
+    window.speechSynthesis.addEventListener?.('voiceschanged', onVoicesChanged as any)
+    // best-effort cleanup when hook instance is discarded
+    try { onCleanup(() => window.speechSynthesis.removeEventListener?.('voiceschanged', onVoicesChanged as any)) } catch {}
+  }
   
   const loadModel = async (modelName: string) => {
     setState(prev => ({ ...prev, isModelLoading: true, lastError: null }))
@@ -94,6 +116,7 @@ export const useTTS = () => {
       setState(prev => ({
         ...prev,
         model,
+        engine: 'local',
         isModelLoading: false,
         lastError: null,
         session
@@ -108,6 +131,20 @@ export const useTTS = () => {
     }
   }
   
+  const selectBrowserEngine = () => {
+    // Switch to browser SpeechSynthesis engine
+    setState(prev => ({
+      ...prev,
+      engine: 'browser',
+      model: null,
+      session: undefined,
+      isModelLoading: false,
+      lastError: null,
+      // Pick a sensible default system voice if present
+      voice: (prev.systemVoices && prev.systemVoices[0]) ? prev.systemVoices[0] : prev.voice
+    }))
+  }
+
   const speak = async (text: string) => {
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     try {
@@ -181,6 +218,7 @@ export const useTTS = () => {
     state,
     models: MODELS,
     loadModel,
+    selectBrowserEngine,
     speak,
     stop,
     pause,

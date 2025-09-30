@@ -6,7 +6,7 @@ import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
-  const { state: ttsState, speak, stop, models, loadModel } = useTTS()
+  const { state: ttsState, speak, stop, models, loadModel, selectBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
@@ -131,6 +131,7 @@ export const PDFViewer: Component = () => {
             value={selectedModel()}
             onChange={(e) => setSelectedModel((e.target as HTMLSelectElement).value)}
           >
+            <option value="Browser TTS">Browser TTS (System)</option>
             {models.map(m => (
               <option value={m.name}>
                 {m.name}{m.requiresWebGPU ? ' (WebGPU)' : ''}
@@ -139,14 +140,30 @@ export const PDFViewer: Component = () => {
           </select>
           <button
             class="rail-btn"
-            disabled={ttsState().isModelLoading || ttsState().model?.name === selectedModel() || (models.find(m => m.name === selectedModel())?.requiresWebGPU && !ttsState().isWebGPUSupported)}
-            title={!ttsState().isWebGPUSupported && models.find(m => m.name === selectedModel())?.requiresWebGPU ? 'WebGPU required' : 'Load TTS model'}
+            disabled={
+              selectedModel() === 'Browser TTS'
+                ? (!('speechSynthesis' in window) || ttsState().engine === 'browser')
+                : (ttsState().isModelLoading || ttsState().model?.name === selectedModel() || (models.find(m => m.name === selectedModel())?.requiresWebGPU && !ttsState().isWebGPUSupported))
+            }
+            title={
+              selectedModel() === 'Browser TTS'
+                ? (!('speechSynthesis' in window) ? 'SpeechSynthesis unavailable' : (ttsState().engine === 'browser' ? 'Using Browser TTS' : 'Use Browser TTS'))
+                : (!ttsState().isWebGPUSupported && models.find(m => m.name === selectedModel())?.requiresWebGPU ? 'WebGPU required' : 'Load TTS model')
+            }
             onClick={async () => {
-              try { await loadModel(selectedModel()) } catch (e) { /* handled in store */ }
+              try {
+                if (selectedModel() === 'Browser TTS') {
+                  selectBrowserEngine()
+                } else {
+                  await loadModel(selectedModel())
+                }
+              } catch (e) { /* handled in store */ }
             }}
-          >{ttsState().isModelLoading
-              ? 'Loading…'
-              : (ttsState().model?.name === selectedModel() ? 'Loaded' : 'Load')}
+          >{selectedModel() === 'Browser TTS'
+              ? (ttsState().engine === 'browser' ? 'Using' : 'Use')
+              : (ttsState().isModelLoading
+                  ? 'Loading…'
+                  : (ttsState().model?.name === selectedModel() ? 'Loaded' : 'Load'))}
           </button>
           <span class="rail-meta" title={`WebGPU ${ttsState().isWebGPUSupported ? 'supported' : 'not supported'}`}>
             {ttsState().isWebGPUSupported ? 'WebGPU ✓' : 'WebGPU ×'}
