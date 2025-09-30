@@ -1,10 +1,11 @@
-import { Component, createSignal } from 'solid-js'
+import { Component, createSignal, createEffect } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
   const { state: ttsState, models, loadModel, setVoice, ensureBrowserEngine, primeSystemVoices, refreshSystemVoices,
     setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs, setTargetSampleRate } = useTTS()
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
+  const [voiceMetadata, setVoiceMetadata] = createSignal<any>(null)
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -12,6 +13,30 @@ export const SettingsView: Component = () => {
     } catch (error) {
       console.error('Failed to load model:', error)
     }
+  }
+
+  // Load voice metadata when component mounts
+  createEffect(async () => {
+    try {
+      const response = await fetch('/tts-model/voices.json')
+      if (response.ok) {
+        const data = await response.json()
+        setVoiceMetadata(data)
+      }
+    } catch (error) {
+      console.warn('Failed to load voice metadata:', error)
+    }
+  })
+
+  // Get current speaker metadata
+  const getCurrentSpeakerInfo = () => {
+    const currentVoice = ttsState().voice
+    if (!currentVoice || !voiceMetadata()) return null
+
+    const modelData = voiceMetadata()['en_US-libritts_r-medium']
+    if (!modelData || !modelData.speakers) return null
+
+    return modelData.speakers.find((speaker: any) => speaker.speaker_id === currentVoice)
   }
   
   const isModelCompatible = (model: any) => {
@@ -222,6 +247,27 @@ export const SettingsView: Component = () => {
           })()}</p>
           <p><strong>Speech Rate:</strong> {ttsState().rate.toFixed(1)}x</p>
           <p><strong>Speech Pitch:</strong> {ttsState().pitch.toFixed(1)}</p>
+          
+          {/* Voice metadata for LibriTTS speakers */}
+          {ttsState().engine !== 'browser' && getCurrentSpeakerInfo() && (
+            <div class="voice-metadata" style={{ 'margin-top': '1rem', 'padding-top': '1rem', 'border-top': '1px solid #ccc' }}>
+              <h4 style={{ 'margin-bottom': '0.5rem' }}>Voice Details</h4>
+              <p><strong>Display Name:</strong> {getCurrentSpeakerInfo()?.display_name || 'N/A'}</p>
+              <p><strong>Description:</strong> {getCurrentSpeakerInfo()?.description || 'N/A'}</p>
+              <p><strong>Gender:</strong> {getCurrentSpeakerInfo()?.gender || 'N/A'}</p>
+              <p><strong>Accent:</strong> {getCurrentSpeakerInfo()?.accent || 'N/A'}</p>
+              <p><strong>Subset:</strong> {getCurrentSpeakerInfo()?.subset || 'N/A'}</p>
+              {getCurrentSpeakerInfo()?.pitch_mean && (
+                <p><strong>Avg Pitch:</strong> {Math.round(getCurrentSpeakerInfo().pitch_mean)} Hz</p>
+              )}
+              {getCurrentSpeakerInfo()?.speaking_rate && (
+                <p><strong>Speaking Rate:</strong> {Math.round(getCurrentSpeakerInfo().speaking_rate)} wpm</p>
+              )}
+              {getCurrentSpeakerInfo()?.brightness && (
+                <p><strong>Brightness:</strong> {getCurrentSpeakerInfo().brightness.toFixed(2)}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
       
