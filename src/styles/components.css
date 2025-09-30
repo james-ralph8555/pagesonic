@@ -44,7 +44,10 @@
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: rgba(0,0,0,0);
-  padding: 0.55em 1.1em;
+  /* fixed height to align with dropdown triggers */
+  height: 36px;
+  line-height: 1;
+  padding: 0 1.1em;
   border-radius: 999vw;
   --border-width: clamp(1px, 0.09375em, 4px);
   background: linear-gradient(

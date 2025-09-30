@@ -163,8 +163,10 @@ body {
   -webkit-user-select: none;
   -webkit-tap-highlight-color: rgba(0,0,0,0);
 
-  /* sizing */
-  padding: 0.55em 1.1em;
+  /* sizing: fixed height to match selectors */
+  height: 36px;
+  line-height: 1;
+  padding: 0 1.1em;
   border-radius: 999vw;
   --border-width: clamp(1px, 0.09375em, 4px);
 
@@ -314,7 +316,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.55em 1.1em;
+  height: 36px;
+  line-height: 1;
+  padding: 0 1.1em;
   border-radius: 999vw;
   background: rgba(239, 68, 68, 0.18);
   border: 1px solid rgba(239, 68, 68, 0.5);
