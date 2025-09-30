@@ -48,6 +48,12 @@ export interface TTSState {
   sentenceSplit?: boolean
   interChunkPauseMs?: number
   targetSampleRate?: number
+  // iOS-specific audio debugging info
+  audioState?: {
+    contextState?: string
+    audioUnlocked?: boolean
+    lastError?: string
+  }
 }
 
 export interface ReaderState {

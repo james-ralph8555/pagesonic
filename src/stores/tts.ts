@@ -64,6 +64,14 @@ export const useTTS = () => {
   ;(globalThis as any).__piper_resumeFn ||= null as (() => void) | null
   ;(globalThis as any).__piper_isPaused ||= false as boolean
   ;(globalThis as any).__tts_autoload_done ||= false as boolean
+  ;(globalThis as any).__is_ios ||= /iPad|iPhone|iPod/.test(navigator.userAgent) as boolean
+  ;(globalThis as any).__audio_unlocked_ios ||= false as boolean
+  ;(globalThis as any).__audio_context_unlock_attempted_ios ||= false as boolean
+  const isiOS = (globalThis as any).__is_ios as boolean
+  const getAudioUnlocked = () => (globalThis as any).__audio_unlocked_ios as boolean
+  const setAudioUnlocked = (v: boolean) => { (globalThis as any).__audio_unlocked_ios = v }
+  const getUnlockAttempted = () => (globalThis as any).__audio_context_unlock_attempted_ios as boolean
+  const setUnlockAttempted = (v: boolean) => { (globalThis as any).__audio_context_unlock_attempted_ios = v }
 
   const getAudioCtx = () => (globalThis as any).__tts_audioCtx as AudioContext | null
   const setAudioCtx = (ctx: AudioContext | null) => { (globalThis as any).__tts_audioCtx = ctx }
@@ -89,6 +97,11 @@ export const useTTS = () => {
   // Check WebGPU support on mount
   const checkWebGPU = async () => {
     try {
+      // Gate WebGPU off on iOS regardless of adapter availability
+      if (isiOS) {
+        setState(prev => ({ ...prev, isWebGPUSupported: false }))
+        return
+      }
       if ('gpu' in navigator && typeof (navigator as any).gpu !== 'undefined') {
         const adapter = await (navigator as any).gpu.requestAdapter()
         const supported = !!adapter
@@ -101,6 +114,64 @@ export const useTTS = () => {
   }
   
   checkWebGPU()
+  
+  // iOS audio context unlock functions
+  const unlockAudioContextIOS = async () => {
+    if (!isiOS || getAudioUnlocked()) return true
+    
+    let audioCtx = getAudioCtx()
+    if (!audioCtx) {
+      audioCtx = ensureAudioContext(null)
+      setAudioCtx(audioCtx)
+    }
+    
+    try {
+      // Create and play a silent buffer to unlock audio
+      const silentBuffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate)
+      const silentSource = audioCtx.createBufferSource()
+      silentSource.buffer = silentBuffer
+      silentSource.connect(audioCtx.destination)
+      
+      // Resume and play silent sound
+      await audioCtx.resume()
+      silentSource.start(0)
+      
+      setAudioUnlocked(true)
+      console.log('[TTS] iOS audio context unlocked successfully')
+      return true
+    } catch (error) {
+      console.warn('[TTS] Failed to unlock iOS audio context:', error)
+      return false
+    }
+  }
+  
+  const setupIOSAudioUnlock = () => {
+    if (!isiOS || getUnlockAttempted()) return
+    
+    const unlockOnInteraction = async () => {
+      if (getAudioUnlocked()) return
+      
+      await unlockAudioContextIOS()
+      setUnlockAttempted(true)
+      
+      // Remove listeners after successful unlock
+      document.removeEventListener('touchstart', unlockOnInteraction)
+      document.removeEventListener('touchend', unlockOnInteraction)
+      document.removeEventListener('click', unlockOnInteraction)
+    }
+    
+    // Set up listeners for user interactions
+    document.addEventListener('touchstart', unlockOnInteraction, { once: true })
+    document.addEventListener('touchend', unlockOnInteraction, { once: true })
+    document.addEventListener('click', unlockOnInteraction, { once: true })
+    
+    console.log('[TTS] iOS audio unlock listeners configured')
+  }
+  
+  // Initialize iOS audio unlock on mount
+  if (isiOS) {
+    setupIOSAudioUnlock()
+  }
 
   // Initialize browser SpeechSynthesis voices if available
   const refreshSystemVoices = () => {
@@ -590,26 +661,60 @@ export const useTTS = () => {
   })()
 
   const speakWithPiperTTS = async (text: string) => {
+    console.log('[TTS] Starting Piper TTS synthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
     const piperWorker = getPiperWorker()
     if (!piperWorker || !isPiperInitialized()) {
+      console.error('[TTS] Piper TTS not initialized - worker:', !!piperWorker, 'initialized:', isPiperInitialized())
       throw new Error('Piper TTS not initialized')
     }
 
     const cleaned = cleanForTTS(text)
+    console.log('[TTS] Text cleaned, length:', cleaned.length)
+    
+    // Ensure iOS audio context is unlocked before proceeding
+    if (isiOS) {
+      console.log('[TTS] iOS detected, checking audio context unlock...')
+      const unlocked = await unlockAudioContextIOS()
+      console.log('[TTS] iOS audio unlock result:', unlocked)
+      if (!unlocked) {
+        console.warn('[TTS] iOS audio context not unlocked, playback may fail')
+      }
+    }
+    
     // Sequential playback queue to avoid overlapping streamed chunks
     return new Promise<void>((resolve, reject) => {
       if (!piperWorker) return reject(new Error('Piper worker not initialized'))
 
-      const queue: string[] = []
+      // Use WebAudio on iOS to avoid HTMLAudio autoplay quirks
+      const useWebAudio = isiOS === true
+      const queue: { url?: string; f32?: Float32Array; sr?: number }[] = []
       let playing = false
       let done = false
       let currentAudio: HTMLAudioElement | null = null
+      let currentHandle: { stop: () => void } | null = null
+      // Ensure a single AudioContext exists for WebAudio path and is resumed
+      let audioCtx = getAudioCtx()
+      if (useWebAudio) {
+        audioCtx = ensureAudioContext(audioCtx)
+        setAudioCtx(audioCtx)
+        // On iOS, ensure audio context is running before playback
+        if (isiOS && audioCtx.state === 'suspended') {
+          audioCtx.resume().catch(err => {
+            console.warn('[TTS] Failed to resume audio context:', err)
+          })
+        }
+      }
 
       const cleanup = () => {
         try { piperWorker.removeEventListener('message', onMessage as any) } catch {}
         try { if (currentAudio) { currentAudio.onended = null as any; currentAudio.onerror = null as any; currentAudio.pause() } } catch {}
+        try { if (currentHandle) { currentHandle.stop() } } catch {}
         currentAudio = null
-        while (queue.length > 0) { const u = queue.shift()!; try { URL.revokeObjectURL(u) } catch {} }
+        currentHandle = null
+        while (queue.length > 0) {
+          const u = queue.shift()!
+          try { if (u.url) URL.revokeObjectURL(u.url) } catch {}
+        }
         setActiveStop(null)
         setPiperPauseFn(null)
         setPiperResumeFn(null)
@@ -623,72 +728,163 @@ export const useTTS = () => {
         }
       }
 
-      const startNext = () => {
+      const startNext = async () => {
         if (getPiperIsPaused()) return
         if (getStopRequested()) { cleanup(); return resolve() }
         if (playing) return
-        const url = queue.shift()
-        if (!url) return tryResolve()
+        const item = queue.shift()
+        if (!item) return tryResolve()
         playing = true
-        const audio = new Audio(url)
-        currentAudio = audio
-        setActiveStop(() => {
-          try { audio.pause() } catch {}
-          try { audio.currentTime = audio.duration || 0 } catch {}
-          try { URL.revokeObjectURL(url) } catch {}
-        })
-        // Expose pause/resume controls for Piper playback
-        setPiperPauseFn(() => {
-          setPiperIsPaused(true)
-          try { audio.pause() } catch {}
-        })
-        setPiperResumeFn(() => {
-          setPiperIsPaused(false)
+        
+        // iOS: Ensure audio context is in running state before playback
+        if (isiOS && audioCtx && audioCtx.state === 'suspended') {
           try {
-            if (currentAudio) {
-              currentAudio.play().catch(() => {})
-            } else if (!playing) {
+            await audioCtx.resume()
+            console.log('[TTS] iOS audio context resumed for playback')
+          } catch (err) {
+            console.warn('[TTS] Failed to resume iOS audio context:', err)
+          }
+        }
+        
+        if (useWebAudio && item.f32 && item.sr && audioCtx) {
+          // Play via WebAudio buffer
+          const f32 = item.f32
+          const sr = item.sr
+          console.log('[TTS] Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr, 'audioCtx.state:', audioCtx.state)
+          ;(async () => {
+            try {
+              const handle = await playPCM(f32, sr, { audioContext: audioCtx!, playbackRate: Math.max(0.5, Math.min(state().rate || 1.0, 2.0)) })
+              console.log('[TTS] WebAudio handle created successfully')
+              currentHandle = handle
+              setActiveStop(() => { try { handle.stop() } catch {} })
+              // Pause/resume controls via AudioContext
+              setPiperPauseFn(() => { setPiperIsPaused(true); try { audioCtx!.suspend() } catch {} })
+              setPiperResumeFn(() => { setPiperIsPaused(false); try { audioCtx!.resume() } catch {} })
+              // Schedule next after duration
+              const seconds = (f32.length / sr) / (Math.max(0.5, Math.min(state().rate || 1.0, 2.0)))
+              console.log('[TTS] Scheduled next chunk in', seconds, 'seconds')
+              setTimeout(() => {
+                console.log('[TTS] WebAudio chunk finished, scheduling next')
+                playing = false
+                currentHandle = null
+                const pause = Math.max(0, state().interChunkPauseMs || 0)
+                if (pause > 0) setTimeout(() => startNext(), pause)
+                else startNext()
+              }, Math.max(0, seconds * 1000))
+            } catch (err) {
+              console.error('[TTS] WebAudio Piper chunk error:', err)
+              playing = false
+              currentHandle = null
               startNext()
             }
-          } catch {}
-        })
-        audio.onended = () => {
-          try { URL.revokeObjectURL(url) } catch {}
-          playing = false
-          currentAudio = null
-          const pause = Math.max(0, state().interChunkPauseMs || 0)
-          if (pause > 0) setTimeout(() => startNext(), pause)
-          else startNext()
+          })()
+        } else {
+          // Fallback: HTMLAudio with WAV blob URL (enhanced for iOS)
+          const url = item.url!
+          const audio = new Audio(url)
+          
+          // iOS-specific HTMLAudio setup
+          if (isiOS) {
+            audio.preload = 'auto'
+            // Set volume to prevent silent playback issues
+            audio.volume = Math.max(0.1, Math.min(1.0, 1.0))
+          }
+          
+          currentAudio = audio
+          setActiveStop(() => {
+            try { audio.pause() } catch {}
+            try { audio.currentTime = audio.duration || 0 } catch {}
+            try { URL.revokeObjectURL(url) } catch {}
+          })
+          // Expose pause/resume controls for Piper playback
+          setPiperPauseFn(() => {
+            setPiperIsPaused(true)
+            try { audio.pause() } catch {}
+          })
+          setPiperResumeFn(() => {
+            setPiperIsPaused(false)
+            try {
+              if (currentAudio) {
+                currentAudio.play().catch(() => {})
+              } else if (!playing) {
+                startNext()
+              }
+            } catch {}
+          })
+          audio.onended = () => {
+            try { URL.revokeObjectURL(url) } catch {}
+            playing = false
+            currentAudio = null
+            const pause = Math.max(0, state().interChunkPauseMs || 0)
+            if (pause > 0) setTimeout(() => startNext(), pause)
+            else startNext()
+          }
+          audio.onerror = () => {
+            console.warn('[TTS] Piper chunk playback error', audio.error)
+            try { URL.revokeObjectURL(url) } catch {}
+            playing = false
+            currentAudio = null
+            // On iOS, if HTMLAudio fails, try to fallback to WebAudio if available
+            if (isiOS && audioCtx && item.f32 && item.sr) {
+              console.log('[TTS] iOS HTMLAudio failed, attempting WebAudio fallback')
+              queue.unshift({ f32: item.f32, sr: item.sr })
+              setTimeout(() => startNext(), 50)
+            } else {
+              startNext()
+            }
+          }
+          
+          // iOS-specific playback with retry logic
+          const playWithRetry = async (retries = 2) => {
+            try {
+              await audio.play()
+            } catch (err: any) {
+              console.warn(`[TTS] HTMLAudio play failed (attempt ${3 - retries}):`, err)
+              if (retries > 0 && err.name !== 'NotAllowedError') {
+                setTimeout(() => playWithRetry(retries - 1), 100)
+              } else {
+                audio.onerror?.(new Event('error') as any)
+              }
+            }
+          }
+          
+          if (isiOS) {
+            // On iOS, add a small delay before attempting playback
+            setTimeout(() => playWithRetry(), 10)
+          } else {
+            playWithRetry()
+          }
         }
-        audio.onerror = () => {
-          console.warn('[TTS] Piper chunk playback error')
-          try { URL.revokeObjectURL(url) } catch {}
-          playing = false
-          currentAudio = null
-          startNext()
-        }
-        audio.play().catch(err => {
-          console.warn('[TTS] Failed to play Piper chunk:', err)
-          audio.onerror?.(new Event('error') as any)
-        })
       }
 
       const onMessage = (e: MessageEvent<any>) => {
         if (getStopRequested()) { cleanup(); return resolve() }
         const d = e.data
         if (!d || !d.status) return
+        console.log('[TTS] Worker message:', d.status, d.status === 'stream' ? '(chunk received)' : d.status === 'complete' ? '(generation complete)' : d.status === 'error' ? '(error)' : '')
+        
         if (d.status === 'stream') {
           try {
-            const url = URL.createObjectURL(d.chunk.audio)
-            queue.push(url)
+            // Prefer WebAudio path when Float32 is provided
+            if (useWebAudio && d.chunk?.f32 && d.chunk?.sr) {
+              const f32 = new Float32Array(d.chunk.f32)
+              console.log('[TTS] Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
+              queue.push({ f32, sr: d.chunk.sr })
+            } else {
+              const url = URL.createObjectURL(d.chunk.audio)
+              console.log('[TTS] Enqueued HTMLAudio chunk')
+              queue.push({ url })
+            }
             if (!playing) startNext()
           } catch (err) {
-            console.warn('[TTS] Failed to enqueue Piper chunk:', err)
+            console.error('[TTS] Failed to enqueue Piper chunk:', err)
           }
         } else if (d.status === 'complete') {
+          console.log('[TTS] Worker reported generation complete')
           done = true
           tryResolve()
         } else if (d.status === 'error') {
+          console.error('[TTS] Worker reported error:', d.data)
           cleanup()
           reject(new Error(String(d.data || 'Piper TTS error')))
         }
@@ -1083,6 +1279,23 @@ export const useTTS = () => {
     setState(prev => ({ ...prev, targetSampleRate: v }))
   }
   
+  // iOS-specific helpers
+  const getAudioState = () => ({
+    isIOS: isiOS,
+    isAudioUnlocked: isiOS ? getAudioUnlocked() : null,
+    audioContextState: getAudioCtx()?.state || null
+  })
+  
+  const unlockAudioIOS = async () => {
+    if (!isiOS) return true
+    return await unlockAudioContextIOS()
+  }
+  
+  // Expose manual unlock function globally for iOS debugging
+  if (typeof window !== 'undefined') {
+    ;(window as any).triggerAudioUnlock = unlockAudioIOS
+  }
+  
   return {
     state,
     models: MODELS,
@@ -1102,6 +1315,9 @@ export const useTTS = () => {
     setChunkOverlapChars,
     setSentenceSplit,
     setInterChunkPauseMs,
-    setTargetSampleRate
+    setTargetSampleRate,
+    // iOS-specific helpers
+    getAudioState,
+    unlockAudioIOS
   }
 }

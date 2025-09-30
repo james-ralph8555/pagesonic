@@ -78,7 +78,19 @@ export const playPCM = async (
     src.playbackRate.value = opts.playbackRate
   }
   src.connect(ctx.destination)
-  await ctx.resume().catch(() => {})
+  
+  // iOS-specific: Ensure context is resumed before starting playback
+  if (ctx.state === 'suspended') {
+    await ctx.resume().catch(err => {
+      console.warn('[Audio] Failed to resume suspended context:', err)
+    })
+  }
+  
+  // Add a small delay for iOS to ensure context is fully ready
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  
   src.start()
   src.onended = () => {
     try { opts?.onEnded?.() } catch {}

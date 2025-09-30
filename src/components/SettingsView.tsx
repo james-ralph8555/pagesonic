@@ -260,6 +260,53 @@ export const SettingsView: Component = () => {
           <p><strong>Speech Rate:</strong> {ttsState().rate.toFixed(1)}x</p>
           <p><strong>Speech Pitch:</strong> {ttsState().pitch.toFixed(1)}</p>
           
+          {/* iOS Debugging Information */}
+          {(() => {
+            const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            if (isiOS) {
+              const audioState = ttsState().audioState
+              return (
+                <div style={{ 'margin-top': '1rem', 'padding': '0.75rem', 'background': '#f0f4f8', 'border-radius': '4px', 'font-size': '0.9em' }}>
+                  <h4 style={{ 'margin-bottom': '0.5rem', 'color': '#2563eb' }}>📱 iOS Debug Information</h4>
+                  <p><strong>User Agent:</strong> {navigator.userAgent}</p>
+                  <p><strong>Audio Context State:</strong> {audioState?.contextState || 'Unknown'}</p>
+                  <p><strong>Audio Unlocked:</strong> {audioState?.audioUnlocked ? 'Yes ✅' : 'No ❌'}</p>
+                  <p><strong>Current Engine:</strong> {ttsState().engine}</p>
+                  <p><strong>Web Audio Support:</strong> {typeof window !== 'undefined' && 'AudioContext' in window ? 'Yes' : 'No'}</p>
+                  <p><strong>Speech Synthesis Support:</strong> {typeof window !== 'undefined' && 'speechSynthesis' in window ? 'Yes' : 'No'}</p>
+                  {audioState?.lastError && (
+                    <p style={{ 'color': '#dc2626' }}><strong>Last Audio Error:</strong> {audioState.lastError}</p>
+                  )}
+                  {ttsState().lastError && (
+                    <p style={{ 'color': '#dc2626' }}><strong>Last TTS Error:</strong> {ttsState().lastError}</p>
+                  )}
+                  <button 
+                    onClick={() => {
+                      console.log('[iOS Debug] Manual audio unlock triggered')
+                      if (typeof window !== 'undefined' && (window as any).triggerAudioUnlock) {
+                        ;(window as any).triggerAudioUnlock()
+                      }
+                    }}
+                    style={{ 'margin-top': '0.5rem', 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                  >
+                    Manual Audio Unlock
+                  </button>
+                  <button 
+                    onClick={() => {
+                      console.log('[iOS Debug] Audio state check:', audioState)
+                      console.log('[iOS Debug] TTS state:', ttsState())
+                      alert(`Audio Context: ${audioState?.contextState || 'unknown'}\nAudio Unlocked: ${audioState?.audioUnlocked ? 'yes' : 'no'}\nEngine: ${ttsState().engine}`)
+                    }}
+                    style={{ 'margin-top': '0.5rem', 'margin-left': '0.5rem', 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                  >
+                    Check State
+                  </button>
+                </div>
+              )
+            }
+            return null
+          })()}
+          
           {/* Voice metadata for LibriTTS speakers */}
           {ttsState().engine !== 'browser' && getCurrentSpeakerInfo() && (
             <div class="voice-metadata" style={{ 'margin-top': '1rem', 'padding-top': '1rem', 'border-top': '1px solid #ccc' }}>

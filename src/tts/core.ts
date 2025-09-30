@@ -27,6 +27,22 @@ export class PiperLikeTTS {
   private session!: ort.InferenceSession;
 
   static async create(modelURL: string, cfgURL: string) {
+    // Configure ORT WASM for iOS/Safari and set asset paths
+    try {
+      const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      const isProd = (typeof import.meta !== 'undefined') && (import.meta as any)?.env?.PROD
+      if (ort?.env?.wasm) {
+        // Point to external ORT artifacts only for production builds to avoid Vite dev import errors
+        if (isProd) {
+          ort.env.wasm.wasmPaths = '/ort/'
+        }
+        ort.env.wasm.simd = true
+        const coi = (globalThis as any).crossOriginIsolated === true
+        // Avoid threads on iOS or when COI isn’t available
+        ort.env.wasm.numThreads = (isiOS || !coi) ? 1 : (navigator.hardwareConcurrency || 4)
+      }
+    } catch {}
+
     const [modelAB, cfg] = await Promise.all([
       cachedFetchArrayBuffer(modelURL),
       cachedFetchJSON<TTSConfig>(cfgURL)
