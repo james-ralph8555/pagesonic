@@ -764,6 +764,14 @@ body {
   border-color: var(--glass-border);
 }
 
+/* Error variant: make the active selection red when dropdown is flagged */
+.dropdown.error-select .glass-menu-item.active,
+.dropdown.error-select .glass-menu-item:hover.active {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
 .glass-menu-item.disabled,
 .glass-menu-item:disabled {
   opacity: 0.55;

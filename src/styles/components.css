@@ -172,6 +172,14 @@
 .glass-menu-item:hover { background: var(--glass-hover); border-color: var(--glass-border); }
 .glass-menu-item.disabled, .glass-menu-item:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* Error variant: selected item shows red when dropdown flagged */
+.dropdown.error-select .glass-menu-item.active,
+.dropdown.error-select .glass-menu-item:hover.active {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
 /* Settings (subset retained; rest below) */
 .settings-view { display: flex; flex-direction: column; gap: 2rem; padding: 1rem; }
 .settings-section { padding: 1.5rem; border-radius: 12px; background: var(--glass-bg-strong); border: 1px solid var(--glass-border); backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
@@ -221,4 +229,3 @@ button.loaded:hover { background-color: #22c55e; }
 .settings-top-rail { position: fixed; top: 0; left: 0; right: 0; height: 56px; display: flex; align-items: center; gap: 0.75rem; padding: 0 1rem; z-index: 50; backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%); background-color: rgba(17, 17, 24, 0.55); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
 .settings-scroll { height: 100vh; overflow-y: auto; overflow-x: hidden; background: radial-gradient(1200px 600px at 50% -200px, rgba(255, 255, 255, 0.12), rgba(0,0,0,0) 60%), linear-gradient(180deg, rgba(10, 10, 14, 0.85), rgba(10, 10, 14, 0.85)); }
 .settings-view { padding-top: 72px; max-width: 1000px; margin: 0 auto; }
-

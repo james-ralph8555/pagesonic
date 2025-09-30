@@ -18,6 +18,7 @@ export const GlassDropdownButton: Component<{
   align?: Align
   class?: string
   selectedValue?: string
+  containerClass?: string
 }> = (props) => {
   const [open, setOpen] = createSignal(false)
   let rootEl: HTMLDivElement | undefined
@@ -62,7 +63,7 @@ export const GlassDropdownButton: Component<{
   })
 
   return (
-    <div ref={rootEl} class="dropdown">
+    <div ref={rootEl} class={"dropdown" + (props.containerClass ? ` ${props.containerClass}` : '')}>
       <button
         type="button"
         class={(props.class || 'rail-btn') + (props.disabled ? ' disabled' : '')}
