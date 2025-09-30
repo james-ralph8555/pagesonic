@@ -6,7 +6,7 @@ import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
-  const { state: ttsState, speak, stop, models, loadModel, selectBrowserEngine } = useTTS()
+  const { state: ttsState, speak, stop, models, loadModel, ensureBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
@@ -139,7 +139,11 @@ export const PDFViewer: Component = () => {
             ))}
           </select>
           <button
-            class="rail-btn"
+            class={"rail-btn" + (
+              (selectedModel() === 'Browser TTS' && 'speechSynthesis' in window && (ttsState().systemVoices || []).length === 0 && !!ttsState().lastError && ttsState().engine !== 'browser')
+                ? ' error'
+                : ''
+            )}
             disabled={
               selectedModel() === 'Browser TTS'
                 ? (!('speechSynthesis' in window) || ttsState().engine === 'browser')
@@ -147,20 +151,28 @@ export const PDFViewer: Component = () => {
             }
             title={
               selectedModel() === 'Browser TTS'
-                ? (!('speechSynthesis' in window) ? 'SpeechSynthesis unavailable' : (ttsState().engine === 'browser' ? 'Using Browser TTS' : 'Use Browser TTS'))
+                ? (!('speechSynthesis' in window)
+                    ? 'SpeechSynthesis unavailable'
+                    : (ttsState().engine === 'browser'
+                        ? 'Using Browser TTS'
+                        : ((ttsState().systemVoices || []).length === 0 && !!ttsState().lastError
+                            ? 'No system voices found. Install a system speech backend.'
+                            : 'Use Browser TTS')))
                 : (!ttsState().isWebGPUSupported && models.find(m => m.name === selectedModel())?.requiresWebGPU ? 'WebGPU required' : 'Load TTS model')
             }
             onClick={async () => {
               try {
                 if (selectedModel() === 'Browser TTS') {
-                  selectBrowserEngine()
+                  await ensureBrowserEngine()
                 } else {
                   await loadModel(selectedModel())
                 }
               } catch (e) { /* handled in store */ }
             }}
           >{selectedModel() === 'Browser TTS'
-              ? (ttsState().engine === 'browser' ? 'Using' : 'Use')
+              ? (ttsState().engine === 'browser'
+                  ? 'Using'
+                  : ((ttsState().systemVoices || []).length === 0 && !!ttsState().lastError ? 'Error' : 'Use'))
               : (ttsState().isModelLoading
                   ? 'Loading…'
                   : (ttsState().model?.name === selectedModel() ? 'Loaded' : 'Load'))}

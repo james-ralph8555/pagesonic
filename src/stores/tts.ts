@@ -66,18 +66,81 @@ export const useTTS = () => {
       if ('speechSynthesis' in window) {
         const voices = window.speechSynthesis.getVoices()
         const names = voices.map(v => v.name)
-        setState(prev => ({ ...prev, systemVoices: names }))
+        setState(prev => {
+          const next = { ...prev, systemVoices: names }
+          // If using browser engine and current voice is not in list, pick first available
+          if (prev.engine === 'browser' && names.length > 0 && !names.includes(prev.voice)) {
+            next.voice = names[0]
+          }
+          return next
+        })
       }
     } catch {
       // ignore
     }
   }
-  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  // Exposed primer that tries harder: poke synthesis with a silent utterance and wait longer
+  const primeSystemVoices = async (timeoutMs = 5000) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false
+    // If already present, just refresh and return
     refreshSystemVoices()
+    if ((state().systemVoices?.length || 0) > 0) return true
+
+    let resolved = false
+    const onVoices = () => {
+      if (!resolved) {
+        refreshSystemVoices()
+        resolved = (state().systemVoices?.length || 0) > 0
+      }
+    }
+    try { (speechSynthesis as any).onvoiceschanged = onVoices } catch {}
+    try { speechSynthesis.addEventListener?.('voiceschanged', onVoices as any) } catch {}
+    // Kick the engine: speak a near-empty utterance at volume 0
+    try {
+      const u = new SpeechSynthesisUtterance('.')
+      u.volume = 0
+      u.rate = 1
+      u.pitch = 1
+      u.onend = () => { /* noop */ }
+      speechSynthesis.speak(u)
+      // Cancel quickly; goal is initialization
+      setTimeout(() => { try { speechSynthesis.cancel() } catch {} }, 60)
+    } catch {}
+    // Also cancel any existing queue to avoid piling up
+    try { speechSynthesis.cancel() } catch {}
+
+    const start = Date.now()
+    while ((state().systemVoices?.length || 0) === 0 && Date.now() - start < timeoutMs) {
+      await new Promise(res => setTimeout(res, 120))
+      refreshSystemVoices()
+      if ((state().systemVoices?.length || 0) > 0) break
+    }
+    // Cleanup listeners
+    try { (speechSynthesis as any).onvoiceschanged = null } catch {}
+    try { speechSynthesis.removeEventListener?.('voiceschanged', onVoices as any) } catch {}
+
+    return (state().systemVoices?.length || 0) > 0
+  }
+  const ensureSystemVoices = async () => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    // Initial refresh
+    refreshSystemVoices()
+    // Attach both IDL and event listener forms for broad compatibility
     const onVoicesChanged = () => refreshSystemVoices()
-    window.speechSynthesis.addEventListener?.('voiceschanged', onVoicesChanged as any)
-    // best-effort cleanup when hook instance is discarded
-    try { onCleanup(() => window.speechSynthesis.removeEventListener?.('voiceschanged', onVoicesChanged as any)) } catch {}
+    try { (window.speechSynthesis as any).onvoiceschanged = onVoicesChanged } catch {}
+    try { window.speechSynthesis.addEventListener?.('voiceschanged', onVoicesChanged as any) } catch {}
+    // Poll a few times as a fallback to late-loading voices
+    let tries = 0
+    while ((state().systemVoices?.length || 0) === 0 && tries < 25) {
+      await new Promise(res => setTimeout(res, 120))
+      refreshSystemVoices()
+      tries++
+    }
+    // Cleanup IDL handler when this hook instance is torn down
+    try { onCleanup(() => { try { (window.speechSynthesis as any).onvoiceschanged = null } catch {} }) } catch {}
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+    ensureSystemVoices()
   }
   
   const loadModel = async (modelName: string) => {
@@ -192,11 +255,11 @@ export const useTTS = () => {
           }
         }
         pushChunk(slice)
-        if (overlap > 0) {
-          start += (slice.length - Math.min(overlap, slice.length))
-        } else {
-          start += slice.length
-        }
+        // If we've reached the end of the buffer, stop to avoid overlap underflow
+        if (end >= buffer.length) break
+        // Ensure forward progress even when slice.length <= overlap
+        const effectiveOverlap = Math.min(overlap, Math.max(0, slice.length - 1))
+        start += (slice.length - effectiveOverlap)
       }
       buffer = ''
     }
@@ -215,24 +278,71 @@ export const useTTS = () => {
   }
 
   // --- Playback helpers (browser SpeechSynthesis path) ---
+  const waitForSystemVoices = async (timeoutMs = 4000) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const have = speechSynthesis.getVoices()
+    if (have && have.length > 0) return
+    await new Promise<void>((resolve) => {
+      let done = false
+      const onVoices = () => { if (!done) { done = true; resolve() } }
+      try { (speechSynthesis as any).onvoiceschanged = onVoices } catch {}
+      try { speechSynthesis.addEventListener?.('voiceschanged', onVoices as any) } catch {}
+      const t = setTimeout(() => { if (!done) { done = true; resolve() } }, timeoutMs)
+      // Also poke the synthesis queue to encourage voice init in some browsers
+      try { speechSynthesis.cancel() } catch {}
+      // Fallback polling in case event never fires
+      let tries = 0
+      const poll = setInterval(() => {
+        const vs = speechSynthesis.getVoices()
+        if (vs && vs.length > 0) {
+          clearInterval(poll)
+          onVoices()
+        } else if (++tries > Math.ceil(timeoutMs / 120)) {
+          clearInterval(poll)
+        }
+      }, 120)
+      // Cleanup once resolved
+      const cleanup = () => {
+        try { (speechSynthesis as any).onvoiceschanged = null } catch {}
+        try { speechSynthesis.removeEventListener?.('voiceschanged', onVoices as any) } catch {}
+        clearTimeout(t)
+      }
+      // Ensure cleanup after resolve
+      Promise.resolve().then(() => cleanup())
+    })
+  }
+
   const speakChunksWithBrowserTTS = async (chunks: string[]) => {
     const { interChunkPauseMs } = state()
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
+      const voices = speechSynthesis.getVoices()
+      const requested = state().voice?.toLowerCase?.() || ''
+      const selected = voices.find(v => v.name.toLowerCase().includes(requested)) || voices[0] || null
+      let okCount = 0
+      let errCount = 0
       let i = 0
       const next = () => {
         if (i >= chunks.length) {
-          resolve()
+          if (okCount === 0 && errCount > 0) {
+            reject(new Error('Browser TTS failed to synthesize speech'))
+          } else {
+            resolve()
+          }
           return
         }
         const text = chunks[i]
         const utterance = new SpeechSynthesisUtterance(text)
         utterance.rate = state().rate
         utterance.pitch = state().pitch
-        const voice = speechSynthesis.getVoices().find(v => v.name.toLowerCase().includes(state().voice.toLowerCase())) || null
-        utterance.voice = voice
+        utterance.voice = selected
+        if (!utterance.lang && selected?.lang) utterance.lang = selected.lang
         const chunkIdx = i
         console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) rate=${utterance.rate} pitch=${utterance.pitch}`)
+        utterance.onstart = () => {
+          // Consider this chunk successful once speech starts
+        }
         utterance.onend = () => {
+          okCount += 1
           i += 1
           if (interChunkPauseMs && interChunkPauseMs > 0) {
             setTimeout(next, interChunkPauseMs)
@@ -242,6 +352,7 @@ export const useTTS = () => {
         }
         utterance.onerror = (ev) => {
           console.warn('[TTS] chunk error', ev.error)
+          errCount += 1
           i += 1
           next()
         }
@@ -252,7 +363,7 @@ export const useTTS = () => {
   }
 
   const selectBrowserEngine = () => {
-    // Switch to browser SpeechSynthesis engine
+    // Switch to browser SpeechSynthesis engine (unsafe: does not validate voices)
     setState(prev => ({
       ...prev,
       engine: 'browser',
@@ -265,7 +376,46 @@ export const useTTS = () => {
     }))
   }
 
+  // Validates that browser SpeechSynthesis has voices before enabling
+  const ensureBrowserEngine = async (): Promise<boolean> => {
+    try {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        setState(prev => ({ ...prev, lastError: 'SpeechSynthesis unavailable in this browser' }))
+        return false
+      }
+      // Try to load/prime voices
+      await primeSystemVoices(6000)
+      refreshSystemVoices()
+      const names = state().systemVoices || []
+      if (!names || names.length === 0) {
+        setState(prev => ({
+          ...prev,
+          lastError: 'No SpeechSynthesis voices available. Install a system speech backend.'
+        }))
+        return false
+      }
+      // Enable browser engine with a valid default voice
+      setState(prev => ({
+        ...prev,
+        engine: 'browser',
+        model: null,
+        session: undefined,
+        isModelLoading: false,
+        lastError: null,
+        voice: names.includes(prev.voice) ? prev.voice : names[0]
+      }))
+      return true
+    } catch (e) {
+      setState(prev => ({ ...prev, lastError: (e as Error)?.message || 'Failed to enable Browser TTS' }))
+      return false
+    }
+  }
+
   const speak = async (text: string) => {
+    // Clear any queued/busy utterances to prevent piling up
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try { speechSynthesis.cancel() } catch {}
+    }
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     try {
       const current = state()
@@ -284,6 +434,13 @@ export const useTTS = () => {
 
       // Path 2: Browser TTS (chunked) if available
       if ('speechSynthesis' in window) {
+        // Ensure voices are initialized before selecting; prime if needed
+        await primeSystemVoices().catch(() => {})
+        await waitForSystemVoices()
+        const vs = speechSynthesis.getVoices()
+        if (!vs || vs.length === 0) {
+          throw new Error('No SpeechSynthesis voices available on this platform')
+        }
         await speakChunksWithBrowserTTS(chunks)
         const t1 = performance.now()
         console.log(`[TTS] all chunks spoken in ${(t1 - t0).toFixed(0)}ms`)
@@ -355,6 +512,9 @@ export const useTTS = () => {
     models: MODELS,
     loadModel,
     selectBrowserEngine,
+    ensureBrowserEngine,
+    primeSystemVoices,
+    refreshSystemVoices,
     speak,
     stop,
     pause,

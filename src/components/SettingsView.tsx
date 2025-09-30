@@ -1,9 +1,10 @@
-import { Component } from 'solid-js'
+import { Component, createSignal } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
-  const { state: ttsState, models, loadModel, setVoice, selectBrowserEngine,
+  const { state: ttsState, models, loadModel, setVoice, ensureBrowserEngine, primeSystemVoices, refreshSystemVoices,
     setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs } = useTTS()
+  const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -69,18 +70,35 @@ export const SettingsView: Component = () => {
             <div class="model-info">
               <h4>Browser TTS (System)</h4>
               <p>Uses built-in SpeechSynthesis voices</p>
-              <p>Voices: {(ttsState().systemVoices || []).length > 0 ? (ttsState().systemVoices || []).join(', ') : 'auto-detected'}</p>
-              <p class={`status ${ttsState().engine === 'browser' ? 'loaded' : 'available'}`}>
-                {ttsState().engine === 'browser' ? 'Currently in use' : ('speechSynthesis' in window ? 'Available' : 'Unavailable')}
+              <p>Voices: {(ttsState().systemVoices || []).length > 0 ? (ttsState().systemVoices || []).join(', ') : 'none detected'}</p>
+              <p class={`status ${ttsState().engine === 'browser' ? 'loaded' : ((ttsState().systemVoices || []).length > 0 ? 'available' : 'incompatible')}`}>
+                {ttsState().engine === 'browser' ? 'Currently in use' : (
+                  (ttsState().systemVoices || []).length > 0 ? 'Available' : 'Unavailable (no voices). A system speech backend must be installed.'
+                )}
               </p>
             </div>
-            <button
-              onClick={() => selectBrowserEngine()}
-              disabled={!('speechSynthesis' in window) || ttsState().engine === 'browser'}
-              class={ttsState().engine === 'browser' ? 'loaded' : ''}
-            >
-              {ttsState().engine === 'browser' ? 'Using' : 'Use'}
-            </button>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <button
+                onClick={async () => { await ensureBrowserEngine() }}
+                disabled={ttsState().engine === 'browser' || (ttsState().systemVoices || []).length === 0}
+                class={ttsState().engine === 'browser' ? 'loaded' : ''}
+              >
+                {ttsState().engine === 'browser' ? 'Using' : 'Use'}
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    setRefreshingVoices(true)
+                    await primeSystemVoices(6000)
+                    refreshSystemVoices()
+                  } finally {
+                    setRefreshingVoices(false)
+                  }
+                }}
+                disabled={refreshingVoices()}
+                title="Force browser to load system voices"
+              >{refreshingVoices() ? 'Refreshing…' : 'Refresh voices'}</button>
+            </div>
           </div>
           {models.map((model) => {
             const modelStatus = getModelStatus(model)
@@ -128,7 +146,7 @@ export const SettingsView: Component = () => {
                 setVoice(target.value)
               }
             }}
-            disabled={!ttsState().model && ttsState().engine !== 'browser'}
+            disabled={(!ttsState().model && ttsState().engine !== 'browser') || (ttsState().engine === 'browser' && (ttsState().systemVoices || []).length === 0)}
           >
             {(ttsState().engine === 'browser'
               ? (ttsState().systemVoices || [])

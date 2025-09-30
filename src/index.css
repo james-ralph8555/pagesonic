@@ -144,6 +144,17 @@ body {
 
 .rail-btn:hover { background: var(--glass-hover); }
 
+/* Error state for rail buttons */
+.rail-btn.error {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.rail-btn.error:hover {
+  background: rgba(239, 68, 68, 0.28);
+}
+
 .rail-meta {
   opacity: 0.9;
 }
