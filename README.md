@@ -1,14 +1,13 @@
 # PageSonic
 
-A privacy-preserving PDF reader with text-to-speech capabilities that runs entirely in your browser. PageSonic processes documents locally without sending any data to external servers, ensuring your reading materials remain private.
+An in-browser PDF reader with speech/audiobook generation capabilities. PageSonic processes documents locally without sending any data to external servers, ensuring your reading materials remain private.
 
 ## What PageSonic Does
 
 PageSonic is a browser-based application that:
 - Loads and displays PDF documents locally in the browser
 - Extracts text from PDF pages for reading
-- Provides text-to-speech functionality using either browser SpeechSynthesis or local ONNX models
-- Works entirely offline with no external server communication
+- Provides text-to-speech functionality using either browser SpeechSynthesis or ONNX models
 - Supports both CPU and WebGPU acceleration for TTS models
 
 ## Features
@@ -233,27 +232,6 @@ PageSonic is designed with privacy as a core principle:
 - Use Kitten model for faster loading on slower connections
 - Adjust chunk size based on your device performance
 - Enable text chunking for better TTS performance
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-### Development Guidelines
-- Follow TypeScript best practices
-- Maintain privacy-first architecture
-- Test across different browsers and devices
-- Document new features and changes
-
-## License
-
-This project is licensed under the ISC License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- **PDF.js**: Mozilla's PDF rendering library
-- **ONNX Runtime**: Microsoft's ONNX inference engine
-- **SolidJS**: Reactive JavaScript framework
-- **Kokoro/Kitten**: Open-source TTS models
 
 ---
 

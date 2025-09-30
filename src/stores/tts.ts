@@ -1,5 +1,6 @@
 import { createSignal, onCleanup } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
+import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
 
 const [state, setState] = createSignal<TTSState>({
   isPlaying: false,
@@ -44,6 +45,10 @@ const MODELS: TTSModel[] = [
 ]
 
 export const useTTS = () => {
+  // WebAudio handles to control local model playback
+  let audioCtx: AudioContext | null = null
+  let activeStop: (() => void) | null = null
+  let stopRequested = false
   // Check WebGPU support on mount
   const checkWebGPU = async () => {
     try {
@@ -417,6 +422,7 @@ export const useTTS = () => {
       try { speechSynthesis.cancel() } catch {}
     }
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
+    stopRequested = false
     try {
       const current = state()
 
@@ -426,10 +432,209 @@ export const useTTS = () => {
       console.log(`[TTS] text length=${text.length}, chunks=${chunks.length}`)
       meta.forEach(m => console.log(`[TTS] chunk #${m.idx + 1} chars=[${m.startChar}, ${m.endChar})`))
 
-      // Path 1: Local model (ONNX) — not yet implemented, log clear guidance
+      // Path 1: Local model (ONNX)
       if (current.model && current.session && current.engine === 'local') {
         console.log('Speaking with model:', current.model.name)
-        console.warn('[TTS] Local model synthesis not implemented yet for this model. Falling back to browser TTS if available.')
+        const ort = await import('onnxruntime-web') as any
+
+        // Ensure an AudioContext exists
+        audioCtx = ensureAudioContext(audioCtx)
+
+        const runChunk = async (chunk: string) => {
+          // Heuristic feeds builder for Kitten-style models
+          const session: any = current.session
+          const inMeta = session.inputMetadata || {}
+          const inNames: string[] = session.inputNames || Object.keys(inMeta)
+
+          const feeds: Record<string, any> = {}
+
+          const toCodes = (s: string) => {
+            // Basic UTF-8 code units; many small TTS models accept bytes or codepoints
+            const codes: number[] = []
+            for (let i = 0; i < s.length; i++) codes.push(s.charCodeAt(i) & 0xff)
+            return codes
+          }
+
+          const makeIntTensor = (dtype: string, arr: number[], dims: number[]) => {
+            const dt = (dtype || '').toLowerCase()
+            if (dt.includes('64')) {
+              const big = new BigInt64Array(arr.map(n => BigInt(n)))
+              return new ort.Tensor('int64', big, dims)
+            }
+            if (dt.includes('32')) return new ort.Tensor('int32', Int32Array.from(arr), dims)
+            if (dt.includes('uint8') || dt.includes('ubyte') || dt === 'byte') return new ort.Tensor('uint8', Uint8Array.from(arr), dims)
+            // Default to int64 for id-like tensors to avoid ORT int32/int64 mismatch
+            const big = new BigInt64Array(arr.map(n => BigInt(n)))
+            return new ort.Tensor('int64', big, dims)
+          }
+
+          const zeroTensor = (dtypeRaw: string, dims: number[]) => {
+            const dtype = (dtypeRaw || '').toLowerCase()
+            const norm =
+              dtype.includes('int64') ? 'int64' :
+              dtype.includes('int32') ? 'int32' :
+              dtype.includes('uint8') ? 'uint8' :
+              dtype.includes('float16') ? 'float16' :
+              dtype.includes('bfloat16') ? 'bfloat16' :
+              dtype.includes('float64') || dtype.includes('double') ? 'float64' :
+              dtype.includes('float') ? 'float32' :
+              dtype.includes('bool') ? 'bool' :
+              dtype.includes('string') ? 'string' : 'float32'
+            const shape = (dims && dims.length > 0) ? dims.map((d: any) => (typeof d === 'number' && d > 0 ? d : 1)) : [1]
+            const size = shape.reduce((a: number, b: number) => a * b, 1)
+            switch (norm) {
+              case 'int64': return new ort.Tensor('int64', new BigInt64Array(size), shape)
+              case 'int32': return new ort.Tensor('int32', new Int32Array(size), shape)
+              case 'uint8': return new ort.Tensor('uint8', new Uint8Array(size), shape)
+              case 'float64': return new ort.Tensor('float64', new Float64Array(size), shape)
+              case 'float16': return new ort.Tensor('float16', new Uint16Array(size), shape)
+              case 'bfloat16': return new ort.Tensor('bfloat16', new Uint16Array(size), shape)
+              case 'bool': return new ort.Tensor('bool', new Uint8Array(size), shape)
+              case 'string': return new ort.Tensor('string', Array(size).fill(''), shape)
+              default: return new ort.Tensor('float32', new Float32Array(size), shape)
+            }
+          }
+
+          const voiceIdFromState = () => {
+            const voices = (current.model?.voices || [])
+            const idx = Math.max(0, voices.indexOf(current.voice))
+            return idx < 0 ? 0 : idx
+          }
+
+          // Fill feeds based on common input names
+          for (const name of inNames) {
+            const meta = inMeta[name] || { type: 'tensor(float)' }
+            const type = (meta?.type || '').toString()
+            const elemType = (type.match(/tensor\(([^)]+)\)/)?.[1]) || type
+            const dims = (meta?.dimensions && meta.dimensions.length > 0) ? meta.dimensions.map((d: any) => (typeof d === 'number' ? d : -1)) : []
+
+            if (/text|chars|tokens|input_ids/i.test(name)) {
+              const codes = toCodes(chunk)
+              const shape = (dims.length > 0)
+                ? dims.map((d: number, idx: number) => (d === -1 ? (idx === dims.length - 1 ? codes.length : 1) : d))
+                : [1, codes.length]
+              // Prefer int64 unless metadata explicitly asks otherwise
+              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : (/32|uint8|int8/.test((elemType || '').toLowerCase()) ? elemType : 'int64')
+              feeds[name] = makeIntTensor(wanted, codes, shape)
+              continue
+            }
+            if (/length|len/i.test(name)) {
+              // Many TTS graphs expect lengths as int64
+              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : 'int64'
+              feeds[name] = makeIntTensor(wanted, [chunk.length], [1])
+              continue
+            }
+            if (/speaker|voice|spk|sid/i.test(name)) {
+              const vid = voiceIdFromState()
+              // Speaker ids are commonly int64 in ONNX graphs
+              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : 'int64'
+              feeds[name] = makeIntTensor(wanted, [vid], [1])
+              continue
+            }
+            if (/style|cond(itioning)?|prompt|emb(edding)?/i.test(name)) {
+              // Provide a style/conditioning embedding placeholder. Prefer model-declared dims.
+              const rawDims: any[] = (inMeta[name]?.dimensions as any) || []
+              let d1 = 1
+              let d2 = 256
+              if (Array.isArray(rawDims) && rawDims.length > 0) {
+                if (rawDims.length >= 2) {
+                  d1 = typeof rawDims[0] === 'number' && rawDims[0] > 0 ? rawDims[0] : 1
+                  const last = rawDims[1]
+                  d2 = typeof last === 'number' && last > 0 ? last : 256
+                } else if (rawDims.length === 1) {
+                  const only = rawDims[0]
+                  const val = typeof only === 'number' && only > 0 ? only : 256
+                  d1 = 1; d2 = val
+                }
+              }
+              const dims2 = [d1, d2]
+              feeds[name] = zeroTensor(elemType || 'float32', dims2)
+              continue
+            }
+            if (/rate|speed/i.test(name)) {
+              // Provide nominal speaking rate; many models ignore this
+              const r = Math.max(0.5, Math.min(current.rate || 1.0, 2.0))
+              feeds[name] = new ort.Tensor('float32', Float32Array.from([r]), [1])
+              continue
+            }
+            if (/pitch/i.test(name)) {
+              const p = Math.max(0.5, Math.min(current.pitch || 1.0, 2.0))
+              feeds[name] = new ort.Tensor('float32', Float32Array.from([p]), [1])
+              continue
+            }
+          }
+
+          // Provide default zero tensors for any remaining required inputs (e.g., 'style')
+          for (const name of inNames) {
+            if (feeds[name]) continue
+            const meta = inMeta[name] || {}
+            const type = (meta?.type || '').toString()
+            const elemType = (type.match(/tensor\(([^)]+)\)/)?.[1]) || type
+            // If dimensions are unknown but the input looks like a style/conditioning embedding,
+            // provide a rank-2 tensor with a trivial second dim to satisfy expected rank.
+            let dims: number[]
+            if (meta?.dimensions && meta.dimensions.length > 0) {
+              dims = meta.dimensions.map((d: any) => (typeof d === 'number' && d > 0 ? d : 1))
+            } else if (/style|cond(itioning)?|prompt|emb(edding)?/i.test(name)) {
+              dims = [1, 1]
+            } else {
+              dims = [1]
+            }
+            feeds[name] = zeroTensor(elemType, dims)
+          }
+
+          const outputs = await session.run(feeds)
+          // Attempt to locate waveform tensor and sample rate
+          const outNames = Object.keys(outputs)
+          let audioName = outNames.find(n => /audio|wave|pcm/i.test(n)) || outNames[0]
+          const audioTensor: any = outputs[audioName]
+          let data = audioTensor?.data as Float32Array | number[]
+          if (!data) throw new Error('Model did not return audio tensor')
+          let pcm = data instanceof Float32Array ? data : Float32Array.from(data)
+          // Flatten if 2D [1, T] or [T, 1]
+          if ((audioTensor?.dims?.length || 0) > 1) {
+            const flat = new Float32Array(audioTensor.data.length)
+            flat.set(audioTensor.data as any)
+            pcm = flat
+          }
+          // Sample rate extraction
+          let sr = current.targetSampleRate || 24000
+          const srName = outNames.find(n => /(sample|sampling).*rate|^sr$/i.test(n))
+          if (srName) {
+            const srT: any = outputs[srName]
+            const v = Array.isArray(srT?.data) ? (srT.data[0]) : (srT?.data ? (srT.data as any)[0] : null)
+            const num = typeof v === 'bigint' ? Number(v) : Number(v)
+            if (!Number.isNaN(num) && num > 8000 && num < 192000) sr = num
+          }
+
+          // Play the audio chunk
+          if (stopRequested) return
+          const handle = await playPCM(pcm, sr, {
+            audioContext: audioCtx!,
+            playbackRate: Math.max(0.5, Math.min(current.rate || 1.0, 2.0)),
+            onEnded: () => { /* handled by sequencing below */ }
+          })
+          activeStop = handle.stop
+          // Wait for buffer duration approximately before proceeding
+          const seconds = (pcm.length / sr) / (Math.max(0.5, Math.min(current.rate || 1.0, 2.0)))
+          await new Promise(res => setTimeout(res, Math.max(0, seconds * 1000)))
+        }
+
+        // Sequentially synthesize and play each chunk
+        for (let i = 0; i < chunks.length; i++) {
+          if (stopRequested) break
+          await runChunk(chunks[i])
+          if (stopRequested) break
+          const pause = current.interChunkPauseMs || 0
+          if (pause > 0) await new Promise(res => setTimeout(res, pause))
+        }
+
+        if (!stopRequested) {
+          const t1 = performance.now()
+          console.log(`[TTS] all chunks synthesized in ${(t1 - t0).toFixed(0)}ms`)
+        }
+        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+        return
       }
 
       // Path 2: Browser TTS (chunked) if available
@@ -459,24 +664,40 @@ export const useTTS = () => {
   }
   
   const stop = () => {
+    stopRequested = true
     setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+    try { if (activeStop) activeStop() } catch {}
+    activeStop = null
     if ('speechSynthesis' in window) {
-      speechSynthesis.cancel()
+      try { speechSynthesis.cancel() } catch {}
     }
+    // Try to close audio context gracefully
+    try { closeAudio(audioCtx) } catch {}
+    audioCtx = null
   }
 
   const pause = () => {
+    let paused = false
     if ('speechSynthesis' in window) {
-      speechSynthesis.pause()
-      setState(prev => ({ ...prev, isPaused: true }))
+      try { speechSynthesis.pause(); paused = true } catch {}
     }
+    if (audioCtx) {
+      suspendAudio(audioCtx).then(() => {}).catch(() => {})
+      paused = true
+    }
+    if (paused) setState(prev => ({ ...prev, isPaused: true }))
   }
 
   const resume = () => {
+    let resumed = false
     if ('speechSynthesis' in window) {
-      speechSynthesis.resume()
-      setState(prev => ({ ...prev, isPaused: false }))
+      try { speechSynthesis.resume(); resumed = true } catch {}
     }
+    if (audioCtx) {
+      resumeAudio(audioCtx).then(() => {}).catch(() => {})
+      resumed = true
+    }
+    if (resumed) setState(prev => ({ ...prev, isPaused: false }))
   }
   
   const setVoice = (voice: string) => {
