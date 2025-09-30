@@ -758,7 +758,8 @@ body {
   cursor: pointer;
 }
 
-.glass-menu-item:hover {
+.glass-menu-item:hover,
+.glass-menu-item.active {
   background: var(--glass-hover);
   border-color: var(--glass-border);
 }
@@ -781,10 +782,7 @@ body {
   text-align: center;
 }
 
-/* Active state color hint (no label change) */
-.glass-menu .glass-menu-item.active {
-  color: var(--brand);
-}
+/* Active state uses same visual as hover for persistence */
 
 /* Bottom-right FAB menu for viewer */
 .pdf-fab {

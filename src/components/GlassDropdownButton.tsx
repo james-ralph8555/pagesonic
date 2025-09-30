@@ -17,6 +17,7 @@ export const GlassDropdownButton: Component<{
   disabled?: boolean
   align?: Align
   class?: string
+  selectedValue?: string
 }> = (props) => {
   const [open, setOpen] = createSignal(false)
   let rootEl: HTMLDivElement | undefined
@@ -44,17 +45,21 @@ export const GlassDropdownButton: Component<{
     document.removeEventListener('keydown', onKey)
   })
 
-  const renderItems = () => props.items.map(item => (
-    <button
-      class={"glass-menu-item" + (item.disabled ? ' disabled' : '')}
-      disabled={item.disabled}
-      onClick={() => {
-        if (item.disabled) return
-        props.onSelect(item.value)
-        close()
-      }}
-    >{item.label}</button>
-  ))
+  const renderItems = () => props.items.map(item => {
+    const isActive = props.selectedValue === item.value
+    return (
+      <button
+        class={"glass-menu-item" + (isActive ? ' active' : '') + (item.disabled ? ' disabled' : '')}
+        aria-selected={isActive}
+        disabled={item.disabled}
+        onClick={() => {
+          if (item.disabled) return
+          props.onSelect(item.value)
+          close()
+        }}
+      >{item.label}</button>
+    )
+  })
 
   return (
     <div ref={rootEl} class="dropdown">
@@ -81,4 +86,3 @@ export const GlassDropdownButton: Component<{
     </div>
   )
 }
-
