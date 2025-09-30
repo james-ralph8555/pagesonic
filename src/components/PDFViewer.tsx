@@ -427,79 +427,81 @@ export const PDFViewer: Component = () => {
                 </svg>
               </button>
               {open() && (
-                <div class="fab-panel" role="menu">
-                  {/* Row 1: Zoom controls */}
-                  <div class="fab-row">
-                    <button
-                      class="icon-btn"
-                      aria-label="Zoom out"
-                      title="Zoom out (-)"
-                      onClick={() => setZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
-                    >
-                      −
-                    </button>
-                    <div class="zoom-chip" title="Reset to 100%" onClick={() => setZoom(1.0)}>
-                      {zoomLabel()}
-                    </div>
-                    <button
-                      class="icon-btn"
-                      aria-label="Zoom in"
-                      title="Zoom in (+)"
-                      onClick={() => setZoom(z => Math.min(4, +(z + 0.1).toFixed(2)))}
-                    >
-                      +
-                    </button>
-                  </div>
-
-                  {/* Row 2: Fit width toggle */}
+                <div class="glass-menu align-end from-bottom menu-grid" role="menu">
+                  {/* Row 1: −, +, {current%} (click to reset) */}
                   <button
-                    class={"fab-item" + (fitWidth() ? ' active' : '')}
+                    class="glass-menu-item"
+                    aria-label="Zoom out"
+                    title="Zoom out (-)"
+                    disabled={zoom() <= 0.25}
+                    onClick={() => setZoom(z => Math.max(0.25, +(z - 0.1).toFixed(2)))}
+                    style={{ 'grid-column': '1' }}
+                  >
+                    −
+                  </button>
+                  <button
+                    class="glass-menu-item"
+                    aria-label="Zoom in"
+                    title="Zoom in (+)"
+                    disabled={zoom() >= 4}
+                    onClick={() => setZoom(z => Math.min(4, +(z + 0.1).toFixed(2)))}
+                    style={{ 'grid-column': '2' }}
+                  >
+                    +
+                  </button>
+                  <button
+                    class="glass-menu-item zoom-chip"
+                    aria-label="Reset zoom"
+                    title="Reset to 100%"
+                    onClick={() => setZoom(1.0)}
+                    style={{ 'grid-column': '3' }}
+                  >
+                    {zoomLabel()}
+                  </button>
+
+                  {/* Row 2: Fit Width (label stays static; color indicates state) */}
+                  <button
+                    class={"glass-menu-item" + (fitWidth() ? ' active' : '')}
                     aria-pressed={fitWidth()}
                     onClick={() => setFitWidth(v => !v)}
                     title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
+                    style={{ 'grid-column': '1 / -1' }}
                   >
                     Fit Width
                   </button>
 
-                  {/* Row 3: Play/Pause separate icons */}
-                  <div class="fab-row">
-                    <button
-                      class={"icon-btn" + ((isPlaying() && !isPaused()) ? ' active' : '')}
-                      aria-label="Pause"
-                      title="Pause reading"
-                      disabled={!canTTS() || !isPlaying() || isPaused()}
-                      onClick={() => { try { if (isPlaying() && !isPaused()) pause() } catch {} }}
-                    >
-                      {/* Pause icon */}
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <rect x="6" y="5" width="4" height="14" rx="1"/>
-                        <rect x="14" y="5" width="4" height="14" rx="1"/>
-                      </svg>
-                    </button>
-                    <button
-                      class={"icon-btn" + ((isPlaying() && isPaused()) ? ' active' : (!isPlaying() ? ' active' : ''))}
-                      aria-label={isPlaying() ? 'Resume' : 'Play'}
-                      title={isPlaying() ? 'Resume reading' : 'Play reading'}
-                      disabled={!canTTS()}
-                      onClick={() => {
-                        try {
-                          if (isPlaying()) {
-                            if (isPaused()) {
-                              resume()
-                            }
-                          } else {
-                            const text = getAllExtractedText()
-                            if (text && text.trim()) void speak(text)
+                  {/* Row 3: Play and Pause on same row */}
+                  <button
+                    class="glass-menu-item"
+                    aria-label={isPlaying() ? 'Resume' : 'Play'}
+                    title={isPlaying() ? 'Resume reading' : 'Play reading'}
+                    disabled={!canTTS()}
+                    onClick={() => {
+                      try {
+                        if (isPlaying()) {
+                          if (isPaused()) {
+                            resume()
                           }
-                        } catch (err) { console.error('TTS error:', err) }
-                      }}
-                    >
-                      {/* Play icon */}
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <polygon points="6 4 20 12 6 20 6 4"/>
-                      </svg>
-                    </button>
-                  </div>
+                        } else {
+                          const text = getAllExtractedText()
+                          if (text && text.trim()) void speak(text)
+                        }
+                      } catch (err) { console.error('TTS error:', err) }
+                    }}
+                    style={{ 'grid-column': '1 / span 2' }}
+                  >
+                    {isPlaying() ? 'Resume' : 'Play'}
+                  </button>
+                  <button
+                    class="glass-menu-item"
+                    aria-label="Pause"
+                    title="Pause reading"
+                    disabled={!canTTS() || !isPlaying() || isPaused()}
+                    onClick={() => { try { if (isPlaying() && !isPaused()) pause() } catch {} }}
+                    style={{ 'grid-column': '3' }}
+                  >
+                    Pause
+                  </button>
                 </div>
               )}
             </div>

@@ -744,6 +744,7 @@ body {
 
 .glass-menu.align-start { left: 0; }
 .glass-menu.align-end { right: 0; }
+.glass-menu.from-bottom { bottom: calc(100% + 6px); top: auto; }
 
 .glass-menu-item {
   display: block;
@@ -766,6 +767,23 @@ body {
 .glass-menu-item:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* Grid variant for FAB dropdown: 3 rows layout */
+.glass-menu.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  gap: 6px;
+  min-width: 220px;
+}
+
+.glass-menu.menu-grid .glass-menu-item {
+  text-align: center;
+}
+
+/* Active state color hint (no label change) */
+.glass-menu .glass-menu-item.active {
+  color: var(--brand);
 }
 
 /* Bottom-right FAB menu for viewer */
