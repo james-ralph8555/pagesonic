@@ -3,7 +3,7 @@ import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
   const { state: ttsState, models, loadModel, setVoice, ensureBrowserEngine, primeSystemVoices, refreshSystemVoices,
-    setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs } = useTTS()
+    setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs, setTargetSampleRate } = useTTS()
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   
   const handleModelLoad = async (modelName: string) => {
@@ -57,7 +57,7 @@ export const SettingsView: Component = () => {
         <h3>TTS Engine / Model</h3>
         {!ttsState().isWebGPUSupported && (
           <p class="error" style={{ padding: '0.5rem 0.75rem', margin: '0 0 0.75rem 0' }}>
-            WebGPU not supported. Kokoro requires WebGPU; Kitten can run on CPU.
+            WebGPU not supported. Kokoro requires WebGPU; Piper can run on CPU.
           </p>
         )}
         {ttsState().lastError && (
@@ -211,12 +211,37 @@ export const SettingsView: Component = () => {
           {ttsState().model && (
             <p><strong>Loaded Model:</strong> {ttsState().model!.name}</p>
           )}
-          <p><strong>Current Voice:</strong> {ttsState().voice}</p>
+          <p><strong>Current Voice:</strong> {(() => {
+            if (ttsState().engine === 'browser' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+              const voices = window.speechSynthesis.getVoices()
+              const requested = (ttsState().voice || '').toLowerCase()
+              const selected = voices.find(v => v.name.toLowerCase() === requested) ||
+                               voices.find(v => v.name.toLowerCase().includes(requested))
+              return selected?.name || ttsState().voice
+            }
+            return ttsState().voice
+          })()}</p>
           <p><strong>Speech Rate:</strong> {ttsState().rate.toFixed(1)}x</p>
           <p><strong>Speech Pitch:</strong> {ttsState().pitch.toFixed(1)}</p>
         </div>
       </div>
       
+      <div class="settings-section">
+        <h3>Audio</h3>
+        <div class="voice-controls">
+          <label>Target sample rate:</label>
+          <input
+            type="number"
+            min="8000"
+            max="192000"
+            step="1000"
+            value={ttsState().targetSampleRate}
+            onInput={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
+          />
+          <span>{ttsState().targetSampleRate} Hz</span>
+        </div>
+      </div>
+
       <div class="settings-section">
         <h3>About</h3>
         <div class="about-info">

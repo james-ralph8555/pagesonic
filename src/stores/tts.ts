@@ -1,13 +1,17 @@
 import { createSignal, onCleanup } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
 import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
+import { cleanForTTS } from '@/tts/textCleaner'
+import { chunkText } from '@/tts/chunker'
 
+// Shared, app-wide TTS state
 const [state, setState] = createSignal<TTSState>({
   isPlaying: false,
   isPaused: false,
   currentSentence: 0,
   totalSentences: 0,
-  voice: 'af_sarah',
+  // Will be set to a valid voice when an engine/model is selected
+  voice: '',
   rate: 1.0,
   pitch: 1.0,
   model: null,
@@ -22,7 +26,7 @@ const [state, setState] = createSignal<TTSState>({
   chunkOverlapChars: 24,
   sentenceSplit: true,
   interChunkPauseMs: 120,
-  targetSampleRate: 24000
+  targetSampleRate: 22050
 })
 
 // Available TTS models based on architecture
@@ -35,20 +39,42 @@ const MODELS: TTSModel[] = [
     url: '/models/kokoro-82m.onnx'
   },
   {
-    name: 'Kitten TTS',
-    size: 15, // 15MB
-    voices: ['af_sarah', 'af_nicole', 'am_michael'],
-    // Kitten can run on CPU (WASM) and optionally WebGPU if available
+    name: 'Piper TTS',
+    size: 75, // 75MB
+    // Actual voices are loaded from voices.json at init time
+    voices: [],
     requiresWebGPU: false,
-    url: '/models/kitten-15m.onnx'
+    url: '/tts-model/en_US-libritts_r-medium.onnx'
   }
 ]
 
 export const useTTS = () => {
-  // WebAudio handles to control local model playback
-  let audioCtx: AudioContext | null = null
-  let activeStop: (() => void) | null = null
-  let stopRequested = false
+  // WebAudio handles to control local model playback (shared singleton)
+  // These are module-scoped singletons to ensure all useTTS() callers share the same worker/context.
+  // Without this, different components calling useTTS() would have isolated workers.
+  ;(globalThis as any).__tts_audioCtx ||= null as AudioContext | null
+  ;(globalThis as any).__tts_activeStop ||= null as (() => void) | null
+  ;(globalThis as any).__tts_stopRequested ||= false as boolean
+  ;(globalThis as any).__piper_worker ||= null as Worker | null
+  ;(globalThis as any).__piper_initialized ||= false as boolean
+  ;(globalThis as any).__piper_voiceNameToId ||= null as Record<string, number> | null
+  ;(globalThis as any).__piper_voiceList ||= null as string[] | null
+
+  const getAudioCtx = () => (globalThis as any).__tts_audioCtx as AudioContext | null
+  const setAudioCtx = (ctx: AudioContext | null) => { (globalThis as any).__tts_audioCtx = ctx }
+  const getActiveStop = () => (globalThis as any).__tts_activeStop as (() => void) | null
+  const setActiveStop = (fn: (() => void) | null) => { (globalThis as any).__tts_activeStop = fn }
+  const getStopRequested = () => (globalThis as any).__tts_stopRequested as boolean
+  const setStopRequested = (v: boolean) => { (globalThis as any).__tts_stopRequested = v }
+  const getPiperWorker = () => (globalThis as any).__piper_worker as Worker | null
+  const setPiperWorker = (w: Worker | null) => { (globalThis as any).__piper_worker = w }
+  const isPiperInitialized = () => (globalThis as any).__piper_initialized as boolean
+  const setPiperInitialized = (v: boolean) => { (globalThis as any).__piper_initialized = v }
+  const getPiperVoiceMap = () => (globalThis as any).__piper_voiceNameToId as Record<string, number> | null
+  const setPiperVoiceMap = (m: Record<string, number> | null) => { (globalThis as any).__piper_voiceNameToId = m }
+  const getPiperVoices = () => (globalThis as any).__piper_voiceList as string[] | null
+  const setPiperVoices = (arr: string[] | null) => { (globalThis as any).__piper_voiceList = arr }
+  
   // Check WebGPU support on mount
   const checkWebGPU = async () => {
     try {
@@ -84,6 +110,7 @@ export const useTTS = () => {
       // ignore
     }
   }
+  
   // Exposed primer that tries harder: poke synthesis with a silent utterance and wait longer
   const primeSystemVoices = async (timeoutMs = 5000) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return false
@@ -126,6 +153,7 @@ export const useTTS = () => {
 
     return (state().systemVoices?.length || 0) > 0
   }
+  
   const ensureSystemVoices = async () => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
     // Initial refresh
@@ -146,6 +174,94 @@ export const useTTS = () => {
   }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     ensureSystemVoices()
+  }
+
+  // --- Piper TTS Integration ---
+  const initPiperTTS = async () => {
+    if (isPiperInitialized()) return
+    
+    try {
+      // Initialize Piper worker
+      let piperWorker = getPiperWorker()
+      if (!piperWorker) {
+        piperWorker = new Worker(new URL('../tts/tts.worker.ts', import.meta.url), { type: 'module' })
+        setPiperWorker(piperWorker)
+      }
+      
+      // Wait for worker to be ready
+      await new Promise<void>((resolve, reject) => {
+        if (!piperWorker) return reject(new Error('Worker not created'))
+        
+        const onMessage = (e: MessageEvent) => {
+          if (e.data.status === 'ready') {
+            piperWorker?.removeEventListener('message', onMessage)
+            resolve()
+          } else if (e.data.status === 'error') {
+            piperWorker?.removeEventListener('message', onMessage)
+            reject(new Error(e.data.data))
+          }
+        }
+        
+        piperWorker.addEventListener('message', onMessage)
+        piperWorker.postMessage({
+          type: 'init',
+          modelURL: '/tts-model/en_US-libritts_r-medium.onnx',
+          cfgURL: '/tts-model/en_US-libritts_r-medium.onnx.json'
+        })
+      })
+      // Load voices list from voices.json (preferred) or model cfg as fallback
+      try {
+        let voiceList: string[] | null = null
+        let voiceMap: Record<string, number> | null = null
+        try {
+          const res = await fetch('/tts-model/voices.json')
+          if (res.ok) {
+            const json = await res.json()
+            const key = 'en_US-libritts_r-medium'
+            const entry = json?.[key]
+            const idMap = (entry && entry.speaker_id_map) || null
+            if (idMap && typeof idMap === 'object') {
+              const entries = Object.entries(idMap as Record<string, number>)
+              // sort by numeric id asc
+              entries.sort((a, b) => (a[1] - b[1]))
+              voiceList = entries.map(([label]) => label)
+              voiceMap = Object.fromEntries(entries)
+            }
+          }
+        } catch {}
+        // Fallback: load cfg directly
+        if (!voiceList || !voiceMap) {
+          try {
+            const res2 = await fetch('/tts-model/en_US-libritts_r-medium.onnx.json')
+            if (res2.ok) {
+              const cfg = await res2.json()
+              const idMap = cfg?.speaker_id_map
+              if (idMap && typeof idMap === 'object') {
+                const entries = Object.entries(idMap as Record<string, number>)
+                entries.sort((a, b) => (a[1] - b[1]))
+                voiceList = entries.map(([label]) => label)
+                voiceMap = Object.fromEntries(entries)
+              } else {
+                // Single speaker model
+                voiceList = ['default']
+                voiceMap = { default: 0 }
+              }
+            }
+          } catch {}
+        }
+        // Persist in singletons for later lookup
+        if (voiceList && voiceMap) {
+          setPiperVoices(voiceList)
+          setPiperVoiceMap(voiceMap)
+        }
+      } catch {}
+
+      setPiperInitialized(true)
+      setState(prev => ({ ...prev, lastError: null }))
+    } catch (error) {
+      setState(prev => ({ ...prev, lastError: (error as Error)?.message || 'Failed to initialize Piper TTS' }))
+      throw error
+    }
   }
   
   const loadModel = async (modelName: string) => {
@@ -172,7 +288,27 @@ export const useTTS = () => {
         throw new Error(`Model asset missing. Place file at ${model.url}`)
       }
 
-      // Load ORT build for WASM/WebGPU
+      // Special handling for Piper TTS
+      if (model.name === 'Piper TTS') {
+        await initPiperTTS()
+        // Prepare voices from loaded metadata
+        const loadedVoices = getPiperVoices() || []
+        const selectedVoice = loadedVoices.length > 0
+          ? (loadedVoices.includes(state().voice) ? state().voice : loadedVoices[0])
+          : (state().voice || 'default')
+        const piperModel: TTSModel = { ...model, voices: loadedVoices }
+        setState(prev => ({
+          ...prev,
+          model: piperModel,
+          engine: 'local',
+          isModelLoading: false,
+          lastError: null,
+          voice: selectedVoice
+        }))
+        return
+      }
+
+      // Load ORT build for WASM/WebGPU (for Kokoro)
       const ort = await import('onnxruntime-web') as any
       // Configure ORT asset paths and features; enable threads/SIMD only when COI is granted
       if (ort?.env?.wasm) {
@@ -186,7 +322,7 @@ export const useTTS = () => {
         ort.env.wasm.numThreads = coi ? (navigator.hardwareConcurrency || 4) : 1
         ort.env.wasm.simd = !!coi
       }
-      // Force CPU/WASM for Kitten; require WebGPU for Kokoro
+      // Force CPU/WASM for non-WebGPU models
       const eps: ("webgpu" | "wasm")[] = model.requiresWebGPU ? ['webgpu'] : ['wasm']
 
       const session = await ort.InferenceSession.create(model.url, {
@@ -210,7 +346,7 @@ export const useTTS = () => {
       throw error
     }
   }
-  
+
   // --- Text chunking helpers ---
   const splitIntoSentences = (text: string): string[] => {
     // Simple sentence splitter on punctuation boundaries
@@ -222,7 +358,7 @@ export const useTTS = () => {
     return parts.length > 0 ? parts : [text]
   }
 
-  const chunkText = (text: string): { chunks: string[]; meta: { idx: number; startChar: number; endChar: number }[] } => {
+  const chunkTextForTTS = (text: string): { chunks: string[]; meta: { idx: number; startChar: number; endChar: number }[] } => {
     const { chunkMaxChars, chunkOverlapChars, sentenceSplit } = state()
     const units = sentenceSplit ? splitIntoSentences(text) : [text]
     const chunks: string[] = []
@@ -342,7 +478,8 @@ export const useTTS = () => {
         utterance.voice = selected
         if (!utterance.lang && selected?.lang) utterance.lang = selected.lang
         const chunkIdx = i
-        console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) rate=${utterance.rate} pitch=${utterance.pitch}`)
+        const vName = selected?.name || state().voice || 'unknown'
+        console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) voice=${vName} rate=${utterance.rate} pitch=${utterance.pitch} sr=n/a`)
         utterance.onstart = () => {
           // Consider this chunk successful once speech starts
         }
@@ -416,43 +553,124 @@ export const useTTS = () => {
     }
   }
 
+  const speakWithPiperTTS = async (text: string) => {
+    const piperWorker = getPiperWorker()
+    if (!piperWorker || !isPiperInitialized()) {
+      throw new Error('Piper TTS not initialized')
+    }
+
+    const cleaned = cleanForTTS(text)
+    const chunks = chunkText(cleaned)
+    
+    return new Promise<void>((resolve, reject) => {
+      let completedChunks = 0
+      let errorOccurred = false
+      
+      const onMessage = (e: MessageEvent) => {
+        if (e.data.status === 'stream') {
+          // Play the chunk audio
+          const audio = new Audio(URL.createObjectURL(e.data.chunk.audio))
+          audio.play().catch(err => {
+            console.warn('[TTS] Failed to play chunk:', err)
+          })
+          audio.onended = () => {
+            completedChunks++
+            if (completedChunks === chunks.length && !errorOccurred) {
+              piperWorker?.removeEventListener('message', onMessage)
+              resolve()
+            }
+          }
+        } else if (e.data.status === 'complete') {
+          piperWorker?.removeEventListener('message', onMessage)
+          resolve()
+        } else if (e.data.status === 'error') {
+          errorOccurred = true
+          piperWorker?.removeEventListener('message', onMessage)
+          reject(new Error(e.data.data))
+        }
+      }
+      
+      if (!piperWorker) {
+        throw new Error('Piper worker not initialized')
+      }
+      
+      // Resolve speakerId from selected voice using voices.json map; fallback to 0
+      const m = getPiperVoiceMap() || {}
+      const vName = (state().voice || '').trim()
+      let speakerId = 0
+      if (typeof m[vName] === 'number') {
+        speakerId = m[vName]!
+      } else {
+        // Accept "Voice N" format as fallback
+        const match = vName.match(/voice\s+(\d+)/i)
+        if (match) {
+          const n = parseInt(match[1] || '1', 10)
+          if (!Number.isNaN(n) && n > 0) speakerId = n - 1
+        }
+      }
+      piperWorker.addEventListener('message', onMessage)
+      piperWorker.postMessage({
+        type: 'generate',
+        text: cleaned,
+        speakerId,
+        speed: state().rate
+      })
+    })
+  }
+
   const speak = async (text: string) => {
     // Clear any queued/busy utterances to prevent piling up
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try { speechSynthesis.cancel() } catch {}
     }
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
-    stopRequested = false
+    setStopRequested(false)
     try {
       const current = state()
 
       // Prepare chunks + logging
       const t0 = performance.now()
-      const { chunks, meta } = chunkText(text)
-      console.log(`[TTS] text length=${text.length}, chunks=${chunks.length}`)
+      const { chunks, meta } = chunkTextForTTS(text)
+      const eng = current.engine
+      const modelName = current.model?.name || 'Browser TTS'
+      console.log(`[TTS] text length=${text.length}, chunks=${chunks.length}, engine=${eng}, model=${modelName}, voice=${current.voice}, rate=${current.rate.toFixed(2)}, pitch=${current.pitch.toFixed(2)}, targetSr=${current.targetSampleRate}`)
       meta.forEach(m => console.log(`[TTS] chunk #${m.idx + 1} chars=[${m.startChar}, ${m.endChar})`))
 
-      // Path 1: Local model (ONNX)
-      if (current.model && current.session && current.engine === 'local') {
-        console.log('Speaking with model:', current.model.name)
+      // Path 1: Piper TTS
+      if (current.model?.name === 'Piper TTS' && current.engine === 'local') {
+        console.log(`[TTS] Speaking with Piper TTS`)
+        await speakWithPiperTTS(text)
+        const t1 = performance.now()
+        console.log(`[TTS] Piper TTS completed in ${(t1 - t0).toFixed(0)}ms`)
+        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+        return
+      }
+
+      // Path 2: Local model (ONNX) for Kokoro
+      if (current.model && current.session && current.engine === 'local' && current.model?.name !== 'Piper TTS') {
+        console.log(`[TTS] Speaking with model=${current.model.name}, voice=${current.voice}`)
         const ort = await import('onnxruntime-web') as any
 
         // Ensure an AudioContext exists
-        audioCtx = ensureAudioContext(audioCtx)
+        const audioCtx = ensureAudioContext(getAudioCtx())
+        setAudioCtx(audioCtx)
 
         const runChunk = async (chunk: string) => {
-          // Heuristic feeds builder for Kitten-style models
+          // Generic feeds builder for ONNX models
           const session: any = current.session
           const inMeta = session.inputMetadata || {}
           const inNames: string[] = session.inputNames || Object.keys(inMeta)
 
-          const feeds: Record<string, any> = {}
-
           const toCodes = (s: string) => {
-            // Basic UTF-8 code units; many small TTS models accept bytes or codepoints
-            const codes: number[] = []
-            for (let i = 0; i < s.length; i++) codes.push(s.charCodeAt(i) & 0xff)
-            return codes
+            // UTF-8 encode; safer than charCode for non-ASCII
+            try {
+              const bytes = new TextEncoder().encode(s)
+              return Array.from(bytes)
+            } catch {
+              const codes: number[] = []
+              for (let i = 0; i < s.length; i++) codes.push(s.charCodeAt(i) & 0xff)
+              return codes
+            }
           }
 
           const makeIntTensor = (dtype: string, arr: number[], dims: number[]) => {
@@ -502,6 +720,7 @@ export const useTTS = () => {
           }
 
           // Fill feeds based on common input names
+          const feeds: Record<string, any> = {}
           for (const name of inNames) {
             const meta = inMeta[name] || { type: 'tensor(float)' }
             const type = (meta?.type || '').toString()
@@ -509,13 +728,22 @@ export const useTTS = () => {
             const dims = (meta?.dimensions && meta.dimensions.length > 0) ? meta.dimensions.map((d: any) => (typeof d === 'number' ? d : -1)) : []
 
             if (/text|chars|tokens|input_ids/i.test(name)) {
-              const codes = toCodes(chunk)
-              const shape = (dims.length > 0)
-                ? dims.map((d: number, idx: number) => (d === -1 ? (idx === dims.length - 1 ? codes.length : 1) : d))
-                : [1, codes.length]
-              // Prefer int64 unless metadata explicitly asks otherwise
-              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : (/32|uint8|int8/.test((elemType || '').toLowerCase()) ? elemType : 'int64')
-              feeds[name] = makeIntTensor(wanted, codes, shape)
+              // If model expects string tensor input, pass the raw text directly.
+              const elem = (elemType || '').toLowerCase()
+              if (elem.includes('string')) {
+                const shape = (dims.length > 0)
+                  ? dims.map((d: number) => (typeof d === 'number' && d > 0 ? d : 1))
+                  : [1]
+                feeds[name] = new ort.Tensor('string', Array(shape.reduce((a:number,b:number)=>a*b,1)).fill('').map((_,i)=> i===0? chunk : ''), shape)
+              } else {
+                const codes = toCodes(chunk)
+                const shape = (dims.length > 0)
+                  ? dims.map((d: number, idx: number) => (d === -1 ? (idx === dims.length - 1 ? codes.length : 1) : d))
+                  : [1, codes.length]
+                // Prefer int64 unless metadata explicitly asks otherwise
+                const wanted = /64/.test(elem) ? 'int64' : (/32|uint8|int8/.test(elem) ? elemType : 'int64')
+                feeds[name] = makeIntTensor(wanted, codes, shape)
+              }
               continue
             }
             if (/length|len/i.test(name)) {
@@ -608,28 +836,29 @@ export const useTTS = () => {
           }
 
           // Play the audio chunk
-          if (stopRequested) return
+          if (getStopRequested()) return
           const handle = await playPCM(pcm, sr, {
             audioContext: audioCtx!,
             playbackRate: Math.max(0.5, Math.min(current.rate || 1.0, 2.0)),
             onEnded: () => { /* handled by sequencing below */ }
           })
-          activeStop = handle.stop
+          setActiveStop(handle.stop)
           // Wait for buffer duration approximately before proceeding
           const seconds = (pcm.length / sr) / (Math.max(0.5, Math.min(current.rate || 1.0, 2.0)))
+          console.log(`[TTS] synthesized chunk: voice=${current.voice}, sr=${sr}, samples=${pcm.length}, durSec=${seconds.toFixed(2)}`)
           await new Promise(res => setTimeout(res, Math.max(0, seconds * 1000)))
         }
 
         // Sequentially synthesize and play each chunk
         for (let i = 0; i < chunks.length; i++) {
-          if (stopRequested) break
+          if (getStopRequested()) break
           await runChunk(chunks[i])
-          if (stopRequested) break
+          if (getStopRequested()) break
           const pause = current.interChunkPauseMs || 0
           if (pause > 0) await new Promise(res => setTimeout(res, pause))
         }
 
-        if (!stopRequested) {
+        if (!getStopRequested()) {
           const t1 = performance.now()
           console.log(`[TTS] all chunks synthesized in ${(t1 - t0).toFixed(0)}ms`)
         }
@@ -637,7 +866,7 @@ export const useTTS = () => {
         return
       }
 
-      // Path 2: Browser TTS (chunked) if available
+      // Path 3: Browser TTS (chunked) if available
       if ('speechSynthesis' in window) {
         // Ensure voices are initialized before selecting; prime if needed
         await primeSystemVoices().catch(() => {})
@@ -664,16 +893,18 @@ export const useTTS = () => {
   }
   
   const stop = () => {
-    stopRequested = true
+    setStopRequested(true)
     setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+    const activeStop = getActiveStop()
     try { if (activeStop) activeStop() } catch {}
-    activeStop = null
+    setActiveStop(null)
     if ('speechSynthesis' in window) {
       try { speechSynthesis.cancel() } catch {}
     }
     // Try to close audio context gracefully
+    const audioCtx = getAudioCtx()
     try { closeAudio(audioCtx) } catch {}
-    audioCtx = null
+    setAudioCtx(null)
   }
 
   const pause = () => {
@@ -681,8 +912,9 @@ export const useTTS = () => {
     if ('speechSynthesis' in window) {
       try { speechSynthesis.pause(); paused = true } catch {}
     }
-    if (audioCtx) {
-      suspendAudio(audioCtx).then(() => {}).catch(() => {})
+    {
+      const audioCtx = getAudioCtx()
+      if (audioCtx) suspendAudio(audioCtx).then(() => {}).catch(() => {})
       paused = true
     }
     if (paused) setState(prev => ({ ...prev, isPaused: true }))
@@ -693,8 +925,9 @@ export const useTTS = () => {
     if ('speechSynthesis' in window) {
       try { speechSynthesis.resume(); resumed = true } catch {}
     }
-    if (audioCtx) {
-      resumeAudio(audioCtx).then(() => {}).catch(() => {})
+    {
+      const audioCtx = getAudioCtx()
+      if (audioCtx) resumeAudio(audioCtx).then(() => {}).catch(() => {})
       resumed = true
     }
     if (resumed) setState(prev => ({ ...prev, isPaused: false }))
@@ -727,6 +960,11 @@ export const useTTS = () => {
   const setInterChunkPauseMs = (n: number) => {
     setState(prev => ({ ...prev, interChunkPauseMs: Math.max(0, Math.min(n || 0, 2000)) }))
   }
+
+  const setTargetSampleRate = (n: number) => {
+    const v = Math.max(8000, Math.min(n || 24000, 192000))
+    setState(prev => ({ ...prev, targetSampleRate: v }))
+  }
   
   return {
     state,
@@ -746,6 +984,7 @@ export const useTTS = () => {
     setChunkMaxChars,
     setChunkOverlapChars,
     setSentenceSplit,
-    setInterChunkPauseMs
+    setInterChunkPauseMs,
+    setTargetSampleRate
   }
 }

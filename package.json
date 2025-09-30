@@ -26,6 +26,7 @@
     "idb": "^8.0.3",
     "onnxruntime-web": "^1.23.0",
     "pdfjs-dist": "^5.4.149",
+    "phonemizer": "^1.2.1",
     "solid-js": "^1.9.9",
     "typescript": "^5.9.2",
     "vite": "^7.1.7",

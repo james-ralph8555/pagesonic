@@ -28,6 +28,7 @@ bin/
 
 # Model files
 public/models/
+public/tts-model/
 public/ort/
 *.onnx
 *.wasm
