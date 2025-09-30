@@ -1,4 +1,4 @@
-import { createSignal, onCleanup } from 'solid-js'
+import { createSignal } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
 import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
 import { cleanForTTS } from '@/tts/textCleaner'
@@ -178,8 +178,8 @@ export const useTTS = () => {
       refreshSystemVoices()
       tries++
     }
-    // Cleanup IDL handler when this hook instance is torn down
-    try { onCleanup(() => { try { (window.speechSynthesis as any).onvoiceschanged = null } catch {} }) } catch {}
+    // Note: avoid using onCleanup here; this store may be imported outside a Solid root.
+    // We rely on one-time listeners for the app lifetime to prevent Solid warnings.
   }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     ensureSystemVoices()

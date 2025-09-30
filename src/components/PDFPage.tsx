@@ -12,7 +12,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   const { state: pdfState, getCurrentPage } = usePDF()
   const [canvasRef, setCanvasRef] = createSignal<HTMLCanvasElement | null>(null)
   const [textLayerRef, setTextLayerRef] = createSignal<HTMLDivElement | null>(null)
-  const [isLoading, setIsLoading] = createSignal(false)
+  // Removed unused isLoading signal; rendering is driven by hasRendered/error
   const [error, setError] = createSignal<string | null>(null)
   const [hasRendered, setHasRendered] = createSignal(false)
   let renderTask: any = null
@@ -37,16 +37,23 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
 
   const renderPage = async () => {
-    if (!canvasRef() || !props.isVisible) return
+    if (!canvasRef() || !props.isVisible) {
+      if (!props.isVisible) {
+        console.log('[PDFPage] skip render page', props.pageNumber, 'visible=false')
+      }
+      return
+    }
 
-    setIsLoading(true)
+    console.info('[PDFPage] queue render page', props.pageNumber, 'scale', props.scale)
     setError(null)
 
     try {
       await acquire()
+      console.info('[PDFPage] start render page', props.pageNumber)
       const page = await getCurrentPage(props.pageNumber)
       if (!page) {
         setError('Page not found')
+        console.error('[PDFPage] page not found', props.pageNumber)
         return
       }
 
@@ -82,6 +89,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       renderTask = page.render(renderContext)
       await renderTask.promise
       setHasRendered(true)
+      console.info('[PDFPage] finished render page', props.pageNumber)
 
       // Render selectable text layer on top of the canvas using TextLayerBuilder
       const container = textLayerRef()
@@ -117,8 +125,10 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         setError('Failed to render page')
         console.error('Error rendering page:', error)
       }
+      if (isCancel) {
+        console.log('[PDFPage] canceled render page', props.pageNumber)
+      }
     } finally {
-      setIsLoading(false)
       if (renderTask) {
         renderTask = null
       }
@@ -128,6 +138,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
   // Initial render on mount
   onMount(() => {
+    console.info('[PDFPage] mount page', props.pageNumber)
     if (props.isVisible) {
       renderPage()
     }

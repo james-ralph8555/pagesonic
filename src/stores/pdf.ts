@@ -73,6 +73,7 @@ export const usePDF = () => {
         error: null,
         pdfDoc: pdf
       })
+      try { console.info('[PDF] Loaded document:', documentInfo.title || '(untitled)', `· ${pages.length} pages`) } catch {}
     } catch (error) {
       setState(prev => ({
         ...prev,
