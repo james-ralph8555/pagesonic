@@ -13,6 +13,11 @@ export const PDFViewer: Component = () => {
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
   const [showRail, setShowRail] = createSignal<boolean>(true)
   let hideTimer: number | undefined
+  let scrollRoot: HTMLDivElement | null = null
+
+  // Track which pages are (near) visible to lazily render
+  const [visiblePages, setVisiblePages] = createSignal<Set<number>>(new Set([1]))
+  let io: IntersectionObserver | null = null
 
   // Zoom controls
   const [zoom, setZoom] = createSignal<number>(1.0) // 1.0 = 100%
@@ -58,6 +63,45 @@ export const PDFViewer: Component = () => {
     document.addEventListener('scroll', pokeUI, { passive: true })
     // Start hidden after a moment for immersion
     hideTimer = window.setTimeout(() => setShowRail(false), 1500)
+    
+    // Setup IntersectionObserver to drive page visibility
+    const setupIO = () => {
+      if (!scrollRoot) return
+      if (io) io.disconnect()
+      io = new IntersectionObserver((entries) => {
+        setVisiblePages(prev => {
+          const next = new Set(prev)
+          for (const entry of entries) {
+            const pnAttr = entry.target.getAttribute('data-page')
+            const pn = pnAttr ? parseInt(pnAttr, 10) : NaN
+            if (!Number.isFinite(pn)) continue
+            if (entry.isIntersecting) {
+              next.add(pn)
+            } else {
+              // Do not remove on exit to avoid thrash/cancellation storms
+              // Optionally prune later via distance/window heuristics
+            }
+          }
+          if (next.size === 0 && pdfState().pages.length > 0) next.add(1)
+          return next
+        })
+      }, {
+        root: scrollRoot,
+        rootMargin: '300px 0px',
+        threshold: 0
+      })
+
+      // Observe all page containers
+      const observeAll = () => {
+        if (!io) return
+        const nodes = scrollRoot!.querySelectorAll('.pdf-page-container')
+        nodes.forEach(n => io!.observe(n))
+      }
+      // Wait a tick for DOM to settle
+      requestAnimationFrame(observeAll)
+    }
+
+    setupIO()
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null
       const isTyping = target && (
@@ -93,12 +137,24 @@ export const PDFViewer: Component = () => {
     document.removeEventListener('mousemove', pokeUI)
     document.removeEventListener('scroll', pokeUI)
     if (hideTimer) window.clearTimeout(hideTimer)
+    if (io) io.disconnect()
   })
 
   createEffect(() => {
     // Recompute when pages change (new document)
     pdfState().pages.length
     pokeUI()
+    // When a new document loads, re-bind IO to new nodes
+    if (scrollRoot && io) {
+      io.disconnect()
+      requestAnimationFrame(() => {
+        if (!io || !scrollRoot) return
+        const nodes = scrollRoot.querySelectorAll('.pdf-page-container')
+        nodes.forEach(n => io!.observe(n))
+      })
+      // Reset visible set to start with first page
+      setVisiblePages(new Set(pdfState().pages.length > 0 ? [1] : []))
+    }
   })
 
   return (
@@ -188,7 +244,7 @@ export const PDFViewer: Component = () => {
         </div>
       </div>
 
-      <div class="pdf-scroll">
+      <div class="pdf-scroll" ref={el => { scrollRoot = el }}>
         {pdfState().isLoading && (
           <div class="loading">Loading PDF...</div>
         )}
@@ -204,7 +260,7 @@ export const PDFViewer: Component = () => {
                 <PDFPage
                   pageNumber={p.pageNumber}
                   scale={scaleForPage(i())}
-                  isVisible={true}
+                  isVisible={visiblePages().has(p.pageNumber)}
                   fitWidth={fitWidth()}
                 />
               )}

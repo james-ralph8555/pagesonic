@@ -9,13 +9,31 @@ interface PDFPageProps {
 }
 
 export const PDFPage: Component<PDFPageProps> = (props) => {
-  const { getCurrentPage } = usePDF()
+  const { state: pdfState, getCurrentPage } = usePDF()
   const [canvasRef, setCanvasRef] = createSignal<HTMLCanvasElement | null>(null)
   const [textLayerRef, setTextLayerRef] = createSignal<HTMLDivElement | null>(null)
   const [isLoading, setIsLoading] = createSignal(false)
   const [error, setError] = createSignal<string | null>(null)
+  const [hasRendered, setHasRendered] = createSignal(false)
   let renderTask: any = null
   let textLayerBuilder: any = null
+
+  // Simple global concurrency limiter across page renders to reduce jank
+  // and avoid large bursts that can snap scroll position.
+  const MAX_CONCURRENT = 2
+  const waiters: (() => void)[] = (globalThis as any).__pdfRenderWaiters || ((globalThis as any).__pdfRenderWaiters = [])
+  const inflightRef: { count: number } = (globalThis as any).__pdfRenderInflight || ((globalThis as any).__pdfRenderInflight = { count: 0 })
+  const acquire = async () => {
+    if (inflightRef.count >= MAX_CONCURRENT) {
+      await new Promise<void>(resolve => waiters.push(resolve))
+    }
+    inflightRef.count++
+  }
+  const release = () => {
+    inflightRef.count = Math.max(0, inflightRef.count - 1)
+    const next = waiters.shift()
+    if (next) next()
+  }
 
 
   const renderPage = async () => {
@@ -25,6 +43,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     setError(null)
 
     try {
+      await acquire()
       const page = await getCurrentPage(props.pageNumber)
       if (!page) {
         setError('Page not found')
@@ -62,6 +81,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
       renderTask = page.render(renderContext)
       await renderTask.promise
+      setHasRendered(true)
 
       // Render selectable text layer on top of the canvas using TextLayerBuilder
       const container = textLayerRef()
@@ -85,7 +105,15 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       }
     } catch (err) {
       const error = err as any
-      if (error.name !== 'RenderingCancelledException' && error.name !== 'RenderingCancelled') {
+      // Ignore benign cancellations that occur when visibility flips or re-render happens
+      const name = (error && (error.name || error.message)) || ''
+      const isCancel = (
+        name === 'RenderingCancelledException' ||
+        name === 'RenderingCancelled' ||
+        name === 'AbortException' ||
+        (typeof error?.message === 'string' && /cancel/i.test(error.message))
+      )
+      if (!isCancel) {
         setError('Failed to render page')
         console.error('Error rendering page:', error)
       }
@@ -94,6 +122,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       if (renderTask) {
         renderTask = null
       }
+      release()
     }
   }
 
@@ -129,23 +158,38 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
   return (
     <div class="pdf-page-container" data-page={props.pageNumber}>
-      {isLoading() && (
-        <div class="page-loading">
-          <div class="loading-spinner">Loading...</div>
-        </div>
-      )}
       
       {error() && (
         <div class="page-error">
           {error()}
         </div>
       )}
+
+      {(() => {
+        const meta = pdfState().pages[props.pageNumber - 1]
+        if (!meta) return null
+        const w = Math.max(1, Math.round(meta.width * props.scale))
+        const h = Math.max(1, Math.round(meta.height * props.scale))
+        // Show placeholder only until the first successful render
+        const showPlaceholder = !hasRendered()
+        return (
+          <div
+            class="pdf-page-placeholder"
+            style={{
+              display: showPlaceholder ? 'block' : 'none',
+              width: `${w}px`,
+              height: `${h}px`
+            }}
+          />
+        )
+      })()}
       
       <canvas
         ref={setCanvasRef}
         class="pdf-page-canvas"
         style={{
-          display: isLoading() || error() ? 'none' : 'block',
+          // Keep canvas visible once rendered to avoid layout thrash
+          display: (error() || !hasRendered()) ? 'none' : 'block',
           'max-width': props.fitWidth ? '100%' : 'none',
           height: 'auto'
         }}
@@ -154,7 +198,8 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         ref={setTextLayerRef}
         class="pdf-text-layer"
         style={{
-          display: isLoading() || error() ? 'none' : 'block'
+          // Mirror canvas visibility
+          display: (error() || !hasRendered()) ? 'none' : 'block'
         }}
       />
     </div>
