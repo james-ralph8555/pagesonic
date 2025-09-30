@@ -48,6 +48,8 @@ export const PDFViewer: Component = () => {
   // Zoom controls
   const [zoom, setZoom] = createSignal<number>(1.0) // 1.0 = 100%
   const [fitWidth, setFitWidth] = createSignal<boolean>(false)
+  // Track the current (center) page in view
+  const [currentPage, setCurrentPage] = createSignal<number>(1)
 
   const H_PADDING = 16 * 2 // matches .pdf-pages horizontal padding
 
@@ -193,12 +195,14 @@ export const PDFViewer: Component = () => {
           console.info('[PDFViewer] seed: no intersecting pages; fallback to 1')
           seedFirst = 1
           seedLast = 1
+          setCurrentPage(1)
           recomputeVisiblePages()
         }
         return
       }
       if (centerPage === lastSeedCenter) return
       lastSeedCenter = centerPage
+      setCurrentPage(centerPage)
       // Include a window around the center page to start rendering nearby
       seedFirst = Math.max(1, centerPage - SEED_WINDOW_RADIUS)
       seedLast = Math.min(pdfState().pages.length, centerPage + SEED_WINDOW_RADIUS)
@@ -341,7 +345,14 @@ export const PDFViewer: Component = () => {
         </div>
         <div class="rail-meta">
           {pdfState().document
-            ? <span>{pdfState().document?.title || 'Untitled Document'} · {pdfState().pages.length} pages</span>
+            ? (
+              <>
+                <span>{pdfState().document?.title || 'Untitled Document'}</span>
+                <div class="rail-value" role="status" aria-live="polite">
+                  {currentPage()} / {pdfState().pages.length}
+                </div>
+              </>
+            )
             : <span>No PDF loaded</span>
           }
         </div>
