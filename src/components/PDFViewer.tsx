@@ -458,7 +458,7 @@ export const PDFViewer: Component = () => {
                     onClick={() => setFitWidth(v => !v)}
                     title={fitWidth() ? 'Disable fit width (F)' : 'Fit to width (F)'}
                   >
-                    {fitWidth() ? 'Fit Width ✓' : 'Fit Width'}
+                    Fit Width
                   </button>
 
                   {/* Row 3: Play/Pause separate icons */}

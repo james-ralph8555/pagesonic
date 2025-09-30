@@ -785,6 +785,7 @@ body {
   gap: 8px;
   padding: 8px;
   min-width: 180px;
+  box-sizing: border-box;
   border-radius: 12px;
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
@@ -795,12 +796,44 @@ body {
 
 .fab-row { display: flex; align-items: center; gap: 8px; }
 
+/* Unify zoom controls (first row) into a single group without per-button borders */
+.fab-panel > .fab-row:first-of-type {
+  gap: 4px;
+  padding: 4px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+}
+.fab-panel > .fab-row:first-of-type .icon-btn,
+.fab-panel > .fab-row:first-of-type .zoom-chip {
+  border: 0;
+  background: transparent;
+}
+.fab-panel > .fab-row:first-of-type .icon-btn:hover,
+.fab-panel > .fab-row:first-of-type .zoom-chip:hover {
+  background: var(--glass-hover);
+  border-radius: 8px;
+}
+
+/* Make pause/play fill available width equally */
+.fab-panel > .fab-row:last-of-type {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.fab-panel > .fab-row:last-of-type .icon-btn {
+  width: auto;            /* override fixed size */
+  height: 36px;
+  border-radius: 8px;
+}
+
 .fab-item {
   all: unset;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 100%;
+  box-sizing: border-box; /* ensure border doesn’t overflow panel width */
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
   border: 1px solid var(--glass-border);
@@ -819,6 +852,7 @@ body {
   justify-content: center;
   width: 36px;
   height: 36px;
+  box-sizing: border-box; /* include borders in declared size */
   border-radius: 8px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
@@ -835,7 +869,8 @@ body {
   justify-content: center;
   min-width: 64px;
   padding: 0.35rem 0.6rem;
-  border-radius: 999vw;
+  /* Make rectangular instead of pill */
+  border-radius: 8px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
   color: #fff;
