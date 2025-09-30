@@ -48,6 +48,7 @@ export class PiperLikeTTS {
   }
 
   async synthesizeChunk(text: string, opts?: { speakerId?: number; lengthScale?: number; noiseScale?: number; noiseWScale?: number }): Promise<RawAudio> {
+    // Skip synthesis for empty or non-speakable chunks to avoid ORT shape {0}
     if (!text.trim()) return new RawAudio(new Float32Array(0), this.getSampleRate());
 
     const sentences = this.cfg.phoneme_type === "espeak"
@@ -55,9 +56,16 @@ export class PiperLikeTTS {
       : textToPhonemeSentencesText(text);
 
     const ids32 = mapPhonemesToIds(sentences, this.cfg.phoneme_id_map);
+    // If cleaning/phonemization produced no tokens (e.g., punctuation-only), return silence
+    if (!ids32 || ids32.length === 0) {
+      return new RawAudio(new Float32Array(0), this.getSampleRate());
+    }
     const ids64 = BigInt64Array.from(ids32 as unknown as number[], v => BigInt(v));
 
     const N = BigInt(ids64.length);
+    if (N === 0n) {
+      return new RawAudio(new Float32Array(0), this.getSampleRate());
+    }
     const scales = Float32Array.from([
       opts?.noiseScale ?? this.cfg.inference?.noise_scale ?? 0.333,
       opts?.lengthScale ?? this.cfg.inference?.length_scale ?? 1.0,

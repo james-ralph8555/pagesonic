@@ -59,6 +59,9 @@ export const useTTS = () => {
   ;(globalThis as any).__piper_initialized ||= false as boolean
   ;(globalThis as any).__piper_voiceNameToId ||= null as Record<string, number> | null
   ;(globalThis as any).__piper_voiceList ||= null as string[] | null
+  ;(globalThis as any).__piper_pauseFn ||= null as (() => void) | null
+  ;(globalThis as any).__piper_resumeFn ||= null as (() => void) | null
+  ;(globalThis as any).__piper_isPaused ||= false as boolean
 
   const getAudioCtx = () => (globalThis as any).__tts_audioCtx as AudioContext | null
   const setAudioCtx = (ctx: AudioContext | null) => { (globalThis as any).__tts_audioCtx = ctx }
@@ -74,6 +77,12 @@ export const useTTS = () => {
   const setPiperVoiceMap = (m: Record<string, number> | null) => { (globalThis as any).__piper_voiceNameToId = m }
   const getPiperVoices = () => (globalThis as any).__piper_voiceList as string[] | null
   const setPiperVoices = (arr: string[] | null) => { (globalThis as any).__piper_voiceList = arr }
+  const getPiperPauseFn = () => (globalThis as any).__piper_pauseFn as (() => void) | null
+  const setPiperPauseFn = (fn: (() => void) | null) => { (globalThis as any).__piper_pauseFn = fn }
+  const getPiperResumeFn = () => (globalThis as any).__piper_resumeFn as (() => void) | null
+  const setPiperResumeFn = (fn: (() => void) | null) => { (globalThis as any).__piper_resumeFn = fn }
+  const getPiperIsPaused = () => (globalThis as any).__piper_isPaused as boolean
+  const setPiperIsPaused = (v: boolean) => { (globalThis as any).__piper_isPaused = v }
   
   // Check WebGPU support on mount
   const checkWebGPU = async () => {
@@ -575,6 +584,9 @@ export const useTTS = () => {
         currentAudio = null
         while (queue.length > 0) { const u = queue.shift()!; try { URL.revokeObjectURL(u) } catch {} }
         setActiveStop(null)
+        setPiperPauseFn(null)
+        setPiperResumeFn(null)
+        setPiperIsPaused(false)
       }
 
       const tryResolve = () => {
@@ -585,6 +597,7 @@ export const useTTS = () => {
       }
 
       const startNext = () => {
+        if (getPiperIsPaused()) return
         if (getStopRequested()) { cleanup(); return resolve() }
         if (playing) return
         const url = queue.shift()
@@ -596,6 +609,21 @@ export const useTTS = () => {
           try { audio.pause() } catch {}
           try { audio.currentTime = audio.duration || 0 } catch {}
           try { URL.revokeObjectURL(url) } catch {}
+        })
+        // Expose pause/resume controls for Piper playback
+        setPiperPauseFn(() => {
+          setPiperIsPaused(true)
+          try { audio.pause() } catch {}
+        })
+        setPiperResumeFn(() => {
+          setPiperIsPaused(false)
+          try {
+            if (currentAudio) {
+              currentAudio.play().catch(() => {})
+            } else if (!playing) {
+              startNext()
+            }
+          } catch {}
         })
         audio.onended = () => {
           try { URL.revokeObjectURL(url) } catch {}
@@ -943,6 +971,11 @@ export const useTTS = () => {
     const activeStop = getActiveStop()
     try { if (activeStop) activeStop() } catch {}
     setActiveStop(null)
+    // Reset Piper pause controls
+    try { const p = getPiperPauseFn(); if (p) p() } catch {}
+    setPiperPauseFn(null)
+    setPiperResumeFn(null)
+    setPiperIsPaused(false)
     if ('speechSynthesis' in window) {
       try { speechSynthesis.cancel() } catch {}
     }
@@ -954,6 +987,12 @@ export const useTTS = () => {
 
   const pause = () => {
     let paused = false
+    // Piper path: pause HTMLAudio playback via exposed control
+    if (state().model?.name === 'Piper TTS' && state().engine === 'local') {
+      const pf = getPiperPauseFn()
+      if (pf) { try { pf() } catch {} }
+      paused = true
+    }
     if ('speechSynthesis' in window) {
       try { speechSynthesis.pause(); paused = true } catch {}
     }
@@ -967,6 +1006,12 @@ export const useTTS = () => {
 
   const resume = () => {
     let resumed = false
+    // Piper path: resume HTMLAudio playback via exposed control
+    if (state().model?.name === 'Piper TTS' && state().engine === 'local') {
+      const rf = getPiperResumeFn()
+      if (rf) { try { rf() } catch {} }
+      resumed = true
+    }
     if ('speechSynthesis' in window) {
       try { speechSynthesis.resume(); resumed = true } catch {}
     }

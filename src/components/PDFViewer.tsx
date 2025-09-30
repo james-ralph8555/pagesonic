@@ -6,7 +6,7 @@ import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
-  const { state: ttsState, speak, stop, models, loadModel, ensureBrowserEngine } = useTTS()
+  const { state: ttsState, speak, pause, resume, models, loadModel, ensureBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
@@ -250,22 +250,16 @@ export const PDFViewer: Component = () => {
           >{fitWidth() ? 'Fit Width ✓' : 'Fit Width'}</button>
           <button
             class="zoom-btn"
-            aria-label={ttsState().isPlaying ? 'Pause' : 'Play'}
-            title={ttsState().isPlaying ? 'Pause reading' : 'Play reading'}
+            aria-label={ttsState().isPlaying ? (ttsState().isPaused ? 'Resume' : 'Pause') : 'Play'}
+            title={ttsState().isPlaying ? (ttsState().isPaused ? 'Resume reading' : 'Pause reading') : 'Play reading'}
             disabled={!pdfState().document || (!ttsState().model && !('speechSynthesis' in window))}
             onClick={() => {
               try {
                 if (ttsState().isPlaying) {
-                  // Toggle pause via SpeechSynthesis if available, otherwise stop
-                  if ('speechSynthesis' in window) {
-                    if ((window.speechSynthesis as any).paused) {
-                      // resume
-                      window.speechSynthesis.resume()
-                    } else {
-                      window.speechSynthesis.pause()
-                    }
+                  if (ttsState().isPaused) {
+                    resume()
                   } else {
-                    stop()
+                    pause()
                   }
                 } else {
                   const text = getAllExtractedText()
@@ -278,10 +272,7 @@ export const PDFViewer: Component = () => {
               }
             }}
           >{(() => {
-            if (ttsState().isPlaying) {
-              if ('speechSynthesis' in window && (window.speechSynthesis as any).paused) return 'Resume'
-              return 'Pause'
-            }
+            if (ttsState().isPlaying) return (ttsState().isPaused ? 'Resume' : 'Pause')
             return 'Play'
           })()}</button>
         </div>
