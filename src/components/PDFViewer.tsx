@@ -265,6 +265,7 @@ export const PDFViewer: Component = () => {
         <GlassDropdownButton
           ariaLabel="Switch view"
           title="Switch view"
+          header={'Navigation'}
           class="rail-btn"
           align="start"
           selectedValue={'pdf'}
@@ -296,6 +297,7 @@ export const PDFViewer: Component = () => {
           <GlassDropdownButton
             ariaLabel="Select TTS engine/model"
             title="Select TTS engine/model"
+            header={'Model'}
             class="rail-btn"
             align="start"
             containerClass={(() => {

@@ -762,6 +762,25 @@ body {
   cursor: pointer;
 }
 
+/* Non-interactive header and separator inside dropdowns */
+.glass-menu-title {
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: default;
+  user-select: none;
+  text-align: left;
+  text-transform: capitalize;
+}
+
+.glass-menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 6px 4px;
+  border-radius: 1px;
+}
+
 .glass-menu-item:hover,
 .glass-menu-item.active {
   background: var(--glass-hover);

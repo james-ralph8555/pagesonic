@@ -12,6 +12,7 @@ export const GlassDropdownButton: Component<{
   icon: JSX.Element
   ariaLabel: string
   title?: string
+  header?: string
   items: DropdownItem[]
   onSelect: (value: string) => void
   disabled?: boolean
@@ -81,6 +82,12 @@ export const GlassDropdownButton: Component<{
           class={"glass-menu " + (props.align === 'end' ? 'align-end' : 'align-start')}
           role="menu"
         >
+          {props.header && (
+            <div class="glass-menu-title" aria-hidden="true">{props.header}</div>
+          )}
+          {props.header && (
+            <div class="glass-menu-separator" role="separator" />
+          )}
           {renderItems()}
         </div>
       )}
