@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect } from 'solid-js'
 import { useTTS } from '@/stores/tts'
+import { GlassDropdownButton } from './GlassDropdownButton'
 
 export const SettingsView: Component = () => {
   const { state: ttsState, models, loadModel, setVoice, ensureBrowserEngine, primeSystemVoices, refreshSystemVoices,
@@ -59,17 +60,27 @@ export const SettingsView: Component = () => {
   return (
     <div class="settings-view-wrap">
       <div class="settings-top-rail">
-        <select
-          class="rail-select"
-          aria-label="Switch tab"
-          onChange={(e) => {
-            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
-            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
+        <GlassDropdownButton
+          ariaLabel="Switch view"
+          title="Switch view"
+          class="rail-btn"
+          align="start"
+          icon={(
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          )}
+          items={[
+            { value: 'pdf', label: 'PDF Viewer' },
+            { value: 'settings', label: 'Settings' }
+          ]}
+          onSelect={(value) => {
+            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value as 'pdf' | 'settings' }))
           }}
-        >
-          <option value="pdf">PDF Viewer</option>
-          <option value="settings" selected>Settings</option>
-        </select>
+        />
         <div class="rail-meta">App Settings</div>
       </div>
 

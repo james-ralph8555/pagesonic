@@ -1,6 +1,7 @@
 import { Component, createSignal } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
+import { GlassDropdownButton } from './GlassDropdownButton'
 
 export const ReaderView: Component = () => {
   const { state: pdfState, getAllExtractedText } = usePDF()
@@ -70,15 +71,25 @@ export const ReaderView: Component = () => {
         
         <div class="model-controls">
           <label>TTS Model:</label>
-          <select 
-            onChange={(e) => handleLoadModel(e.target.value)}
+          <GlassDropdownButton
+            ariaLabel="Select TTS engine/model"
+            title="Select TTS engine/model"
+            class="rail-btn"
+            align="start"
             disabled={ttsState().isModelLoading}
-          >
-            <option value="">Select engine/model...</option>
-            <option value="Browser TTS">Browser TTS (System)</option>
-            <option value="Kokoro TTS">Kokoro TTS (82MB)</option>
-            <option value="Kitten TTS">Kitten TTS (15MB)</option>
-          </select>
+            icon={(
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                <path d="M8 8h8v8H8z"/>
+              </svg>
+            )}
+            items={[
+              { value: 'Browser TTS', label: 'Browser TTS (System)' },
+              { value: 'Kokoro TTS', label: 'Kokoro TTS (82MB)' },
+              { value: 'Kitten TTS', label: 'Kitten TTS (15MB)' }
+            ]}
+            onSelect={(v) => handleLoadModel(v)}
+          />
           {ttsState().isModelLoading && <span class="loading-model">Loading model...</span>}
         </div>
         

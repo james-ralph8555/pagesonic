@@ -2,6 +2,7 @@ import { Component, createSignal, onMount, onCleanup, For, createEffect } from '
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
 import { PDFPage } from './PDFPage'
+import { GlassDropdownButton } from './GlassDropdownButton'
 import { SelectionToolbar } from './SelectionToolbar'
 
 export const PDFViewer: Component = () => {
@@ -251,17 +252,27 @@ export const PDFViewer: Component = () => {
   return (
     <div class="pdf-viewer">
       <div class={"pdf-top-rail" + (showRail() ? '' : ' hidden')}>
-        <select
-          class="rail-select"
-          aria-label="Switch tab"
-          onChange={(e) => {
-            const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
-            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
+        <GlassDropdownButton
+          ariaLabel="Switch view"
+          title="Switch view"
+          class="rail-btn"
+          align="start"
+          icon={(
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1"/>
+              <rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/>
+              <rect x="14" y="14" width="7" height="7" rx="1"/>
+            </svg>
+          )}
+          items={[
+            { value: 'pdf', label: 'PDF Viewer' },
+            { value: 'settings', label: 'Settings' }
+          ]}
+          onSelect={(value) => {
+            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value as 'pdf' | 'settings' }))
           }}
-        >
-          <option value="pdf" selected>PDF Viewer</option>
-          <option value="settings">Settings</option>
-        </select>
+        />
         <input
           ref={setFileInput}
           type="file"
@@ -271,19 +282,23 @@ export const PDFViewer: Component = () => {
         />
         <button class="rail-btn" onClick={() => fileInput()?.click()}>Open</button>
         <div style="display: inline-flex; gap: 6px; align-items: center;">
-          <select
-            class="rail-select"
-            aria-label="Select TTS model"
-            value={selectedModel()}
-            onChange={(e) => setSelectedModel((e.target as HTMLSelectElement).value)}
-          >
-            <option value="Browser TTS">Browser TTS (System)</option>
-            {models.map(m => (
-              <option value={m.name}>
-                {m.name}{m.requiresWebGPU ? ' (WebGPU)' : ''}
-              </option>
-            ))}
-          </select>
+          <GlassDropdownButton
+            ariaLabel="Select TTS engine/model"
+            title="Select TTS engine/model"
+            class="rail-btn"
+            align="start"
+            icon={(
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="16" height="16" rx="2"/>
+                <path d="M8 8h8v8H8z"/>
+              </svg>
+            )}
+            items={[
+              { value: 'Browser TTS', label: 'Browser TTS (System)' },
+              ...models.map(m => ({ value: m.name, label: m.name + (m.requiresWebGPU ? ' (WebGPU)' : '') }))
+            ]}
+            onSelect={(v) => setSelectedModel(v)}
+          />
           <button
             class={"rail-btn" + (
               (selectedModel() === 'Browser TTS' && 'speechSynthesis' in window && (ttsState().systemVoices || []).length === 0 && !!ttsState().lastError && ttsState().engine !== 'browser')

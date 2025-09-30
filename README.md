@@ -102,9 +102,6 @@ Pass `-c distPath=/absolute/path/to/dist` if the build artifacts live somewhere 
   ```bash
   npm run deploy -- PagesonicCertificateStack
   ```
-- Provide the parameter values when prompted (or pass them explicitly with `--parameters CertificateDomainName=app.example.com --parameters CertificateAlternativeNames=www.example.com`). Supply multiple alternative names as a comma-separated list. DNS validation remains the default; switch to email validation by entering `EMAIL` at the prompt or using `--parameters CertificateValidationMethod=EMAIL`.
-- Override the deployment environment for the certificate stack with `CERTIFICATE_ACCOUNT` and `CERTIFICATE_REGION` environment variables if you need to target a different account or `us-east-1` for CloudFront.
-- Skip the stack entirely if you intend to manage the certificate in the AWS console; the CloudFront distribution keeps the default AWS certificate until you attach a custom one.
 
 ### Usage
 
