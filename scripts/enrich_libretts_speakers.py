@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-import argparse, json, glob
+import argparse, json, glob, re, hashlib
 import pandas as pd
+import numpy as np
 from collections import Counter, defaultdict
 
 CSV_CANON = {

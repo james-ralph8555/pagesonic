@@ -37,14 +37,13 @@ export const SettingsView: Component = () => {
         <select
           class="rail-select"
           aria-label="Switch tab"
-          value="settings"
           onChange={(e) => {
             const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
             window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
           }}
         >
           <option value="pdf">PDF Viewer</option>
-          <option value="settings">Settings</option>
+          <option value="settings" selected>Settings</option>
         </select>
         <div class="rail-meta">App Settings</div>
       </div>

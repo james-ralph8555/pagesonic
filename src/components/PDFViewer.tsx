@@ -107,13 +107,12 @@ export const PDFViewer: Component = () => {
         <select
           class="rail-select"
           aria-label="Switch tab"
-          value="pdf"
           onChange={(e) => {
             const value = (e.target as HTMLSelectElement).value as 'pdf' | 'settings'
             window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value }))
           }}
         >
-          <option value="pdf">PDF Viewer</option>
+          <option value="pdf" selected>PDF Viewer</option>
           <option value="settings">Settings</option>
         </select>
         <input
