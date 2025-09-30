@@ -1,0 +1,6 @@
+/* Modular stylesheet entrypoint */
+@import './tokens.css';
+@import './base.css';
+@import './components.css';
+/* Temporary: include legacy consolidated styles until fully split */
+@import '../index.css';
