@@ -335,9 +335,7 @@ export const PDFViewer: Component = () => {
               } catch (e) { /* handled in store */ }
             }}
           />
-          <span class="rail-meta" title={`WebGPU ${ttsState().isWebGPUSupported ? 'supported' : 'not supported'}`}>
-            {ttsState().isWebGPUSupported ? 'WebGPU ✓' : 'WebGPU ×'}
-          </span>
+          {/* WebGPU indicator removed from rail */}
         </div>
         <div class="rail-meta">
           {pdfState().document

@@ -198,6 +198,17 @@ The development server is configured with:
 ## Architecture
 
 ### State Management
+ 
+## CSS Organization
+
+- Entry: `src/styles/index.css` imports tokens, base, and the legacy `src/index.css`.
+- Tokens: `src/styles/tokens.css` centralizes CSS variables and custom properties.
+- Base: `src/styles/base.css` resets and app shell styles.
+- Components: `src/styles/components.css` holds component styles temporarily; split further as needed.
+
+Migration notes
+- New styles should go into `src/styles/` instead of the legacy `src/index.css`.
+- As you migrate blocks out of `src/index.css`, remove them there to avoid duplication.
 - **Custom Stores**: Uses SolidJS signals for reactive state management
 - **PDF Store**: Manages document loading, page navigation, and text extraction
 - **TTS Store**: Handles model loading, playback controls, and voice settings
