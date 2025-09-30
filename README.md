@@ -72,6 +72,43 @@ npm run build
 npm run preview
 ```
 
+## Infrastructure
+
+The `infra/` directory contains an AWS CDK (v2) application that provisions the AWS resources required to serve the optimized SolidJS build from Amazon S3 behind a CloudFront distribution.
+
+### Deploying the static site
+1. From the repository root, generate the build output (this copies every asset from `public/`, including ONNX models and ORT binaries):
+   ```bash
+   npm run build
+   ```
+2. Install CDK dependencies and synthesize the stacks:
+   ```bash
+   cd infra
+   npm install
+   npm run synth
+   ```
+   If you have not bootstrapped the target AWS account for CDK v2 yet, run `npm run cdk -- bootstrap` before deploying.
+3. Deploy the site stack:
+   ```bash
+   npm run deploy -- PagesonicSiteStack
+   ```
+
+The deployment command uploads the local `dist/` directory to a private, versioned S3 bucket and invalidates the CloudFront cache so the new build (including bundled models) is immediately available. The command output prints the bucket name, distribution ID, and distribution domain.
+
+Pass `-c distPath=/absolute/path/to/dist` if the build artifacts live somewhere other than the default `../dist` relative to the `infra/` directory.
+
+### Managing the certificate
+- The CDK app also includes a separate stack (`PagesonicCertificateStack`) that can mint an ACM certificate in `us-east-1` via DNS validation when provided with hosted zone details:
+  ```bash
+  npm run deploy -- PagesonicCertificateStack \
+    -c certificateDomain=app.example.com \
+    -c certificateHostedZoneId=Z123456789ABCDEFG \
+    -c certificateHostedZoneName=example.com \
+    -c certificateAlternativeNames=www.example.com
+  ```
+- Skip the stack or leave the context values empty if you prefer to create the certificate manually in the AWS Console; doing so keeps the infrastructure split across two CloudFormation stacks, as requested.
+- The CloudFront distribution uses the default AWS certificate by design. After you provision your own certificate, attach it (and any custom domains) to the distribution from the console or by updating the stack parameters.
+
 ### Usage
 
 1. **Open PageSonic** in your browser
