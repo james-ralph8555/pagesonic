@@ -60,8 +60,6 @@ export class PagesonicSiteStack extends Stack {
       comment: 'Access identity for the Pagesonic static site bucket',
     })
 
-    siteBucket.grantRead(originAccessIdentity)
-
     const responseHeadersPolicy = new ResponseHeadersPolicy(this, 'ResponseHeadersPolicy', {
       customHeadersBehavior: {
         customHeaders: [
@@ -86,7 +84,7 @@ export class PagesonicSiteStack extends Stack {
     })
 
     const defaultBehavior: BehaviorOptions = {
-      origin: new S3BucketOrigin(siteBucket, {
+      origin: S3BucketOrigin.withOriginAccessIdentity(siteBucket, {
         originAccessIdentity,
       }),
       viewerProtocolPolicy: ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

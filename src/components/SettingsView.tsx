@@ -281,7 +281,7 @@ export const SettingsView: Component = () => {
             max="192000"
             step="1000"
             value={ttsState().targetSampleRate}
-            onInput={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
+            onChange={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
           />
           <span>{ttsState().targetSampleRate} Hz</span>
         </div>
