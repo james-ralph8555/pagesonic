@@ -24,6 +24,8 @@ export const PDFViewer: Component = () => {
   const ioVisible = new Set<number>()
   let seedFirst = 1
   let seedLast = 1
+  // Number of pages to eagerly render before/after the viewport center
+  const SEED_WINDOW_RADIUS = 10
 
   const recomputeVisiblePages = () => {
     setVisiblePages(prev => {
@@ -196,10 +198,9 @@ export const PDFViewer: Component = () => {
       }
       if (centerPage === lastSeedCenter) return
       lastSeedCenter = centerPage
-      // Include a small window around the center page to start rendering nearby
-      const windowSize = 2
-      seedFirst = Math.max(1, centerPage - windowSize)
-      seedLast = Math.min(pdfState().pages.length, centerPage + windowSize)
+      // Include a window around the center page to start rendering nearby
+      seedFirst = Math.max(1, centerPage - SEED_WINDOW_RADIUS)
+      seedLast = Math.min(pdfState().pages.length, centerPage + SEED_WINDOW_RADIUS)
       console.info('[PDFViewer] seed from scroll: center', centerPage, 'window', seedFirst, ' - ', seedLast)
       recomputeVisiblePages()
     } catch {
