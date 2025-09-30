@@ -15,7 +15,13 @@ const [state, setState] = createSignal<TTSState>({
   isWebGPUSupported: false,
   lastError: null,
   session: undefined,
-  systemVoices: []
+  systemVoices: [],
+  // Chunking/config params (tunable in Settings)
+  chunkMaxChars: 280,
+  chunkOverlapChars: 24,
+  sentenceSplit: true,
+  interChunkPauseMs: 120,
+  targetSampleRate: 24000
 })
 
 // Available TTS models based on architecture
@@ -98,13 +104,14 @@ export const useTTS = () => {
         throw new Error(`Model asset missing. Place file at ${model.url}`)
       }
 
-      // Load ORT build for WASM
+      // Load ORT build for WASM/WebGPU
       const ort = await import('onnxruntime-web') as any
-      // Configure WASM paths explicitly for ORT
+      // Configure ORT asset paths and features; enable threads/SIMD only when COI is granted
       if (ort?.env?.wasm) {
-        ort.env.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.0/dist/'
-        ort.env.wasm.numThreads = 1
-        ort.env.wasm.proxy = false
+        ort.env.wasm.wasmPaths = '/ort/'
+        const coi = (globalThis as any).crossOriginIsolated === true
+        ort.env.wasm.numThreads = coi ? (navigator.hardwareConcurrency || 4) : 1
+        ort.env.wasm.simd = !!coi
       }
       // Force CPU/WASM for Kitten; require WebGPU for Kokoro
       const eps: ("webgpu" | "wasm")[] = model.requiresWebGPU ? ['webgpu'] : ['wasm']
@@ -131,6 +138,114 @@ export const useTTS = () => {
     }
   }
   
+  // --- Text chunking helpers ---
+  const splitIntoSentences = (text: string): string[] => {
+    // Simple sentence splitter on punctuation boundaries
+    const parts = text
+      .replace(/\s+/g, ' ')
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.trim())
+      .filter(Boolean)
+    return parts.length > 0 ? parts : [text]
+  }
+
+  const chunkText = (text: string): { chunks: string[]; meta: { idx: number; startChar: number; endChar: number }[] } => {
+    const { chunkMaxChars, chunkOverlapChars, sentenceSplit } = state()
+    const units = sentenceSplit ? splitIntoSentences(text) : [text]
+    const chunks: string[] = []
+    const meta: { idx: number; startChar: number; endChar: number }[] = []
+
+    let buffer = ''
+    let cursor = 0
+    const pushChunk = (c: string) => {
+      const startChar = cursor
+      const endChar = cursor + c.length
+      chunks.push(c)
+      meta.push({ idx: chunks.length - 1, startChar, endChar })
+      cursor = endChar
+    }
+
+    const maxLen = Math.max(64, Math.min(2000, chunkMaxChars || 280))
+    const overlap = Math.max(0, Math.min(200, chunkOverlapChars || 0))
+
+    const flush = () => {
+      if (!buffer.trim()) return
+      if (buffer.length <= maxLen) {
+        pushChunk(buffer)
+        buffer = ''
+        return
+      }
+      // If buffer is too large, hard-wrap on word boundaries with overlap
+      let start = 0
+      while (start < buffer.length) {
+        const end = Math.min(buffer.length, start + maxLen)
+        let slice = buffer.slice(start, end)
+        if (end < buffer.length) {
+          const lastSpace = slice.lastIndexOf(' ')
+          if (lastSpace > maxLen * 0.5) {
+            slice = slice.slice(0, lastSpace)
+          }
+        }
+        pushChunk(slice)
+        if (overlap > 0) {
+          start += (slice.length - Math.min(overlap, slice.length))
+        } else {
+          start += slice.length
+        }
+      }
+      buffer = ''
+    }
+
+    for (const u of units) {
+      if ((buffer + (buffer ? ' ' : '') + u).length > maxLen * 1.2) {
+        flush()
+        buffer = u
+      } else {
+        buffer = buffer ? buffer + ' ' + u : u
+      }
+    }
+    flush()
+
+    return { chunks, meta }
+  }
+
+  // --- Playback helpers (browser SpeechSynthesis path) ---
+  const speakChunksWithBrowserTTS = async (chunks: string[]) => {
+    const { interChunkPauseMs } = state()
+    return new Promise<void>((resolve) => {
+      let i = 0
+      const next = () => {
+        if (i >= chunks.length) {
+          resolve()
+          return
+        }
+        const text = chunks[i]
+        const utterance = new SpeechSynthesisUtterance(text)
+        utterance.rate = state().rate
+        utterance.pitch = state().pitch
+        const voice = speechSynthesis.getVoices().find(v => v.name.toLowerCase().includes(state().voice.toLowerCase())) || null
+        utterance.voice = voice
+        const chunkIdx = i
+        console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) rate=${utterance.rate} pitch=${utterance.pitch}`)
+        utterance.onend = () => {
+          i += 1
+          if (interChunkPauseMs && interChunkPauseMs > 0) {
+            setTimeout(next, interChunkPauseMs)
+          } else {
+            next()
+          }
+        }
+        utterance.onerror = (ev) => {
+          console.warn('[TTS] chunk error', ev.error)
+          i += 1
+          next()
+        }
+        speechSynthesis.speak(utterance)
+      }
+      next()
+    })
+  }
+
   const selectBrowserEngine = () => {
     // Switch to browser SpeechSynthesis engine
     setState(prev => ({
@@ -148,26 +263,26 @@ export const useTTS = () => {
   const speak = async (text: string) => {
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     try {
-      // If a local model is loaded, future: synthesize via ONNX session
       const current = state()
-      if (current.model && current.session) {
+
+      // Prepare chunks + logging
+      const t0 = performance.now()
+      const { chunks, meta } = chunkText(text)
+      console.log(`[TTS] text length=${text.length}, chunks=${chunks.length}`)
+      meta.forEach(m => console.log(`[TTS] chunk #${m.idx + 1} chars=[${m.startChar}, ${m.endChar})`))
+
+      // Path 1: Local model (ONNX) — not yet implemented, log clear guidance
+      if (current.model && current.session && current.engine === 'local') {
         console.log('Speaking with model:', current.model.name)
-        // TODO: Generate audio via ONNX and play via AudioContext
-        // Temporary: fall through to SpeechSynthesis until model pipeline is implemented
+        console.warn('[TTS] Local model synthesis not implemented yet for this model. Falling back to browser TTS if available.')
       }
 
-      // Fallback: use browser SpeechSynthesis if available
+      // Path 2: Browser TTS (chunked) if available
       if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text)
-        utterance.rate = state().rate
-        utterance.pitch = state().pitch
-        // Try to match voice by substring; otherwise let system default
-        const voice = speechSynthesis.getVoices().find(v => v.name.toLowerCase().includes(state().voice.toLowerCase())) || null
-        utterance.voice = voice
-        utterance.onend = () => {
-          setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
-        }
-        speechSynthesis.speak(utterance)
+        await speakChunksWithBrowserTTS(chunks)
+        const t1 = performance.now()
+        console.log(`[TTS] all chunks spoken in ${(t1 - t0).toFixed(0)}ms`)
+        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
         return
       }
 
@@ -213,6 +328,22 @@ export const useTTS = () => {
   const setPitch = (pitch: number) => {
     setState(prev => ({ ...prev, pitch: Math.max(0.5, Math.min(pitch, 2.0)) }))
   }
+
+  const setChunkMaxChars = (n: number) => {
+    setState(prev => ({ ...prev, chunkMaxChars: Math.max(64, Math.min(n || 280, 2000)) }))
+  }
+
+  const setChunkOverlapChars = (n: number) => {
+    setState(prev => ({ ...prev, chunkOverlapChars: Math.max(0, Math.min(n || 0, 200)) }))
+  }
+
+  const setSentenceSplit = (enabled: boolean) => {
+    setState(prev => ({ ...prev, sentenceSplit: !!enabled }))
+  }
+
+  const setInterChunkPauseMs = (n: number) => {
+    setState(prev => ({ ...prev, interChunkPauseMs: Math.max(0, Math.min(n || 0, 2000)) }))
+  }
   
   return {
     state,
@@ -225,6 +356,10 @@ export const useTTS = () => {
     resume,
     setVoice,
     setRate,
-    setPitch
+    setPitch,
+    setChunkMaxChars,
+    setChunkOverlapChars,
+    setSentenceSplit,
+    setInterChunkPauseMs
   }
 }

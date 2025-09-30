@@ -42,6 +42,12 @@ export interface TTSState {
   session?: unknown
   // Available system voices for browser SpeechSynthesis
   systemVoices?: string[]
+  // Chunking / synthesis parameters
+  chunkMaxChars?: number
+  chunkOverlapChars?: number
+  sentenceSplit?: boolean
+  interChunkPauseMs?: number
+  targetSampleRate?: number
 }
 
 export interface ReaderState {

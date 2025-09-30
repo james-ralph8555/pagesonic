@@ -2,7 +2,8 @@ import { Component } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 
 export const SettingsView: Component = () => {
-  const { state: ttsState, models, loadModel, setVoice, selectBrowserEngine } = useTTS()
+  const { state: ttsState, models, loadModel, setVoice, selectBrowserEngine,
+    setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs } = useTTS()
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -136,6 +137,52 @@ export const SettingsView: Component = () => {
               <option value={voice}>{voice}</option>
             ))}
           </select>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3>TTS Chunking</h3>
+        <p class="hint">Controls how input text is split for inference/playback. Console logs include chunk indices and timing.</p>
+        <div class="voice-controls">
+          <label>Max chunk size:</label>
+          <input
+            type="number"
+            min="64"
+            max="2000"
+            step="10"
+            value={ttsState().chunkMaxChars}
+            onInput={(e) => setChunkMaxChars(parseInt((e.target as HTMLInputElement).value || '280'))}
+          />
+          <span>{ttsState().chunkMaxChars} chars</span>
+
+          <label>Overlap:</label>
+          <input
+            type="number"
+            min="0"
+            max="200"
+            step="1"
+            value={ttsState().chunkOverlapChars}
+            onInput={(e) => setChunkOverlapChars(parseInt((e.target as HTMLInputElement).value || '0'))}
+          />
+          <span>{ttsState().chunkOverlapChars} chars</span>
+
+          <label>Split by sentence:</label>
+          <input
+            type="checkbox"
+            checked={!!ttsState().sentenceSplit}
+            onChange={(e) => setSentenceSplit((e.target as HTMLInputElement).checked)}
+          />
+
+          <label>Pause between chunks:</label>
+          <input
+            type="number"
+            min="0"
+            max="2000"
+            step="20"
+            value={ttsState().interChunkPauseMs}
+            onInput={(e) => setInterChunkPauseMs(parseInt((e.target as HTMLInputElement).value || '0'))}
+          />
+          <span>{ttsState().interChunkPauseMs} ms</span>
         </div>
       </div>
       
