@@ -33,3 +33,6 @@ public/ort/
 *.onnx
 *.wasm
 *.mjs
+
+# CDK
+cdk.out/
