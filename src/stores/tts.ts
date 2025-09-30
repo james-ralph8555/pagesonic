@@ -2,7 +2,7 @@ import { createSignal, onCleanup } from 'solid-js'
 import { TTSState, TTSModel } from '@/types'
 import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
 import { cleanForTTS } from '@/tts/textCleaner'
-import { chunkText } from '@/tts/chunker'
+// Note: Piper streaming provides its own chunking; avoid double chunking here
 
 // Shared, app-wide TTS state
 const [state, setState] = createSignal<TTSState>({
@@ -560,40 +560,85 @@ export const useTTS = () => {
     }
 
     const cleaned = cleanForTTS(text)
-    const chunks = chunkText(cleaned)
-    
+    // Sequential playback queue to avoid overlapping streamed chunks
     return new Promise<void>((resolve, reject) => {
-      let completedChunks = 0
-      let errorOccurred = false
-      
-      const onMessage = (e: MessageEvent) => {
-        if (e.data.status === 'stream') {
-          // Play the chunk audio
-          const audio = new Audio(URL.createObjectURL(e.data.chunk.audio))
-          audio.play().catch(err => {
-            console.warn('[TTS] Failed to play chunk:', err)
-          })
-          audio.onended = () => {
-            completedChunks++
-            if (completedChunks === chunks.length && !errorOccurred) {
-              piperWorker?.removeEventListener('message', onMessage)
-              resolve()
-            }
-          }
-        } else if (e.data.status === 'complete') {
-          piperWorker?.removeEventListener('message', onMessage)
+      if (!piperWorker) return reject(new Error('Piper worker not initialized'))
+
+      const queue: string[] = []
+      let playing = false
+      let done = false
+      let currentAudio: HTMLAudioElement | null = null
+
+      const cleanup = () => {
+        try { piperWorker.removeEventListener('message', onMessage as any) } catch {}
+        try { if (currentAudio) { currentAudio.onended = null as any; currentAudio.onerror = null as any; currentAudio.pause() } } catch {}
+        currentAudio = null
+        while (queue.length > 0) { const u = queue.shift()!; try { URL.revokeObjectURL(u) } catch {} }
+        setActiveStop(null)
+      }
+
+      const tryResolve = () => {
+        if (done && !playing && queue.length === 0) {
+          cleanup()
           resolve()
-        } else if (e.data.status === 'error') {
-          errorOccurred = true
-          piperWorker?.removeEventListener('message', onMessage)
-          reject(new Error(e.data.data))
         }
       }
-      
-      if (!piperWorker) {
-        throw new Error('Piper worker not initialized')
+
+      const startNext = () => {
+        if (getStopRequested()) { cleanup(); return resolve() }
+        if (playing) return
+        const url = queue.shift()
+        if (!url) return tryResolve()
+        playing = true
+        const audio = new Audio(url)
+        currentAudio = audio
+        setActiveStop(() => {
+          try { audio.pause() } catch {}
+          try { audio.currentTime = audio.duration || 0 } catch {}
+          try { URL.revokeObjectURL(url) } catch {}
+        })
+        audio.onended = () => {
+          try { URL.revokeObjectURL(url) } catch {}
+          playing = false
+          currentAudio = null
+          const pause = Math.max(0, state().interChunkPauseMs || 0)
+          if (pause > 0) setTimeout(() => startNext(), pause)
+          else startNext()
+        }
+        audio.onerror = () => {
+          console.warn('[TTS] Piper chunk playback error')
+          try { URL.revokeObjectURL(url) } catch {}
+          playing = false
+          currentAudio = null
+          startNext()
+        }
+        audio.play().catch(err => {
+          console.warn('[TTS] Failed to play Piper chunk:', err)
+          audio.onerror?.(new Event('error') as any)
+        })
       }
-      
+
+      const onMessage = (e: MessageEvent<any>) => {
+        if (getStopRequested()) { cleanup(); return resolve() }
+        const d = e.data
+        if (!d || !d.status) return
+        if (d.status === 'stream') {
+          try {
+            const url = URL.createObjectURL(d.chunk.audio)
+            queue.push(url)
+            if (!playing) startNext()
+          } catch (err) {
+            console.warn('[TTS] Failed to enqueue Piper chunk:', err)
+          }
+        } else if (d.status === 'complete') {
+          done = true
+          tryResolve()
+        } else if (d.status === 'error') {
+          cleanup()
+          reject(new Error(String(d.data || 'Piper TTS error')))
+        }
+      }
+
       // Resolve speakerId from selected voice using voices.json map; fallback to 0
       const m = getPiperVoiceMap() || {}
       const vName = (state().voice || '').trim()
@@ -601,14 +646,14 @@ export const useTTS = () => {
       if (typeof m[vName] === 'number') {
         speakerId = m[vName]!
       } else {
-        // Accept "Voice N" format as fallback
         const match = vName.match(/voice\s+(\d+)/i)
         if (match) {
           const n = parseInt(match[1] || '1', 10)
           if (!Number.isNaN(n) && n > 0) speakerId = n - 1
         }
       }
-      piperWorker.addEventListener('message', onMessage)
+
+      piperWorker.addEventListener('message', onMessage as any)
       piperWorker.postMessage({
         type: 'generate',
         text: cleaned,
