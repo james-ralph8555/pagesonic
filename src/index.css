@@ -813,6 +813,11 @@ body {
   text-align: center;
 }
 
+/* Make row separators span all columns in grid menus */
+.glass-menu.menu-grid .glass-menu-separator {
+  grid-column: 1 / -1;
+}
+
 /* Active state uses same visual as hover for persistence */
 
 /* Bottom-right FAB menu for viewer */

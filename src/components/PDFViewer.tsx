@@ -456,6 +456,9 @@ export const PDFViewer: Component = () => {
                     {zoomLabel()}
                   </button>
 
+                  {/* Divider between rows */}
+                  <div class="glass-menu-separator" style={{ 'grid-column': '1 / -1' }} />
+
                   {/* Row 2: Fit Width (label stays static; color indicates state) */}
                   <button
                     class={"glass-menu-item" + (fitWidth() ? ' active' : '')}
@@ -466,6 +469,9 @@ export const PDFViewer: Component = () => {
                   >
                     Fit Width
                   </button>
+
+                  {/* Divider between rows */}
+                  <div class="glass-menu-separator" style={{ 'grid-column': '1 / -1' }} />
 
                   {/* Row 3: Play and Pause on same row */}
                   <button
