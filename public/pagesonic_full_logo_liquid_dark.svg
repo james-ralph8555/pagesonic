@@ -7,7 +7,7 @@
    width="2706.667"
    height="560"
    viewBox="0 0 2706.667 560"
-   sodipodi:docname="pagesonic_full_logo_liquid.svg"
+   sodipodi:docname="pagesonic_full_logo_liquid_dark.svg"
    inkscape:version="1.4.2 (ebf0e940d0, 2025-05-08)"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
@@ -20,7 +20,7 @@
        id="linearGradient126"
        inkscape:collect="always">
       <stop
-         style="stop-color:#000000;stop-opacity:1;"
+         style="stop-color:#ffffff;stop-opacity:1;"
          offset="0"
          id="stop126" />
       <stop
@@ -32,7 +32,7 @@
        id="linearGradient124"
        inkscape:collect="always">
       <stop
-         style="stop-color:#000000;stop-opacity:1;"
+         style="stop-color:#ffffff;stop-opacity:1;"
          offset="0"
          id="stop124" />
       <stop
@@ -499,7 +499,7 @@
   </defs>
   <sodipodi:namedview
      id="namedview1"
-     pagecolor="#ffffff"
+     pagecolor="#1e1e1e"
      bordercolor="#000000"
      borderopacity="0.25"
      inkscape:showpageshadow="2"

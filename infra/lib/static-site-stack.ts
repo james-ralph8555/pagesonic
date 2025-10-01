@@ -133,10 +133,9 @@ export class PagesonicSiteStack extends Stack {
         CacheControl.fromString('public, max-age=0, must-revalidate'),
       ],
       prune: true,
-      // Large model assets can make uploads slow; give the
-      // custom resource more resources and time to finish.
+      // Large model assets can make uploads slow; increase
+      // Lambda memory to speed up uploads.
       memoryLimit: 2048,
-      timeout: Duration.minutes(30),
     })
 
     new CfnOutput(this, 'BucketName', {
