@@ -8,11 +8,17 @@ type GenMsg  = { type: "generate"; text: string; speakerId?: number; speed?: num
 type PrevMsg = { type: "preview"; text: string; speakerId?: number; speed?: number };
 type Msg = InitMsg | GenMsg | PrevMsg;
 
-self.addEventListener("message", async (e: MessageEvent<Msg>) => {
-  const m = e.data;
+self.addEventListener("message", async (e: MessageEvent<any>) => {
+  const m = e.data as Msg | { type: 'ping'; timestamp?: number };
   try {
-    if (m.type === "init") {
-      tts = await PiperLikeTTS.create(m.modelURL, m.cfgURL);
+    // lightweight liveness check
+    if ((m as any)?.type === 'ping') {
+      (self as any).postMessage({ type: 'pong', timestamp: (m as any)?.timestamp ?? Date.now() });
+      return;
+    }
+    const mm = m as Msg;
+    if (mm.type === "init") {
+      tts = await PiperLikeTTS.create(mm.modelURL, mm.cfgURL);
       const voices = tts.getSpeakers();
       (self as any).postMessage({ status: "ready", voices });
       return;
@@ -21,27 +27,36 @@ self.addEventListener("message", async (e: MessageEvent<Msg>) => {
       (self as any).postMessage({ status: "error", data: "Model not initialized" });
       return;
     }
-    const lengthScale = m.speed ? 1.0 / m.speed : undefined;
+    const lengthScale = (mm as any).speed ? 1.0 / (mm as any).speed : undefined;
 
-    if (m.type === "preview") {
+    if (mm.type === "preview") {
       let first: RawAudio | null = null;
-      for await (const { audio } of tts.stream(m.text, { speakerId: m.speakerId, lengthScale })) {
+      for await (const { audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale })) {
         first = audio; break;
       }
       if (first) (self as any).postMessage({ status: "preview", audio: first.toWavBlob() });
       return;
     }
 
-    if (m.type === "generate") {
+    if (mm.type === "generate") {
       const chunks: RawAudio[] = [];
-      for await (const { text, audio } of tts.stream(m.text, { speakerId: m.speakerId, lengthScale })) {
+      for await (const { text, audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale })) {
         // Send both a WAV Blob (fallback) and a copy of Float32Array buffer for WebAudio consumers
         const wav = audio.toWavBlob();
         const f32Copy = new Float32Array(audio.audio); // copy to avoid detached ArrayBuffer
-        (self as any).postMessage({
-          status: "stream",
-          chunk: { text, audio: wav, sr: audio.sr, f32: f32Copy.buffer }
-        });
+        // Transfer the underlying ArrayBuffer when possible for performance/stability
+        try {
+          (self as any).postMessage({
+            status: "stream",
+            chunk: { text, audio: wav, sr: audio.sr, f32: f32Copy.buffer }
+          }, [f32Copy.buffer]);
+        } catch {
+          // Fallback without transfer list if environment disallows it
+          (self as any).postMessage({
+            status: "stream",
+            chunk: { text, audio: wav, sr: audio.sr, f32: f32Copy.buffer }
+          });
+        }
         chunks.push(audio);
       }
       // Merge chunks

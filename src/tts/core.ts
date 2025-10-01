@@ -67,9 +67,26 @@ export class PiperLikeTTS {
     // Skip synthesis for empty or non-speakable chunks to avoid ORT shape {0}
     if (!text.trim()) return new RawAudio(new Float32Array(0), this.getSampleRate());
 
-    const sentences = this.cfg.phoneme_type === "espeak"
-      ? await textToPhonemeSentencesEspeak(text)
-      : textToPhonemeSentencesText(text);
+    // Prefer espeak phonemization when configured, but add a safe timeout + fallback on iOS/Safari
+    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    const useEspeak = this.cfg.phoneme_type === 'espeak'
+    let sentences: string[][]
+    if (useEspeak) {
+      try {
+        const timeoutMs = isiOS ? 1500 : 4000
+        const res = await Promise.race([
+          textToPhonemeSentencesEspeak(text),
+          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('phonemizer timeout')), timeoutMs))
+        ])
+        // If we got here, phonemizer returned successfully
+        sentences = res as unknown as string[][]
+      } catch {
+        // Fall back to simple text-based phonemes if espeak fails or times out
+        sentences = textToPhonemeSentencesText(text)
+      }
+    } else {
+      sentences = textToPhonemeSentencesText(text)
+    }
 
     const ids32 = mapPhonemesToIds(sentences, this.cfg.phoneme_id_map);
     // If cleaning/phonemization produced no tokens (e.g., punctuation-only), return silence

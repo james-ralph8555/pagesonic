@@ -2709,3 +2709,7 @@ button.loaded:disabled::after {
 .theme-light .glass-menu-item:disabled {
   opacity: 0.5;
 }
+
+.theme-light .glass-menu-title {
+  color: rgba(17, 17, 24, 0.8);
+}
