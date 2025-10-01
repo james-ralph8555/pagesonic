@@ -22,6 +22,8 @@ const [state, setState] = createSignal<TTSState>({
   lastError: null,
   session: undefined,
   systemVoices: [],
+  phonemizer: 'auto',
+  espeakTimeoutMs: /iPad|iPhone|iPod/.test(navigator.userAgent) ? 2000 : 4000,
   // Chunking/config params (tunable in Settings)
   chunkMaxChars: 280,
   chunkOverlapChars: 24,
@@ -319,6 +321,15 @@ export const useTTS = () => {
   }
   if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     ensureSystemVoices()
+  }
+  
+  // Phonemizer preference setters
+  const setPhonemizer = async (mode: 'auto' | 'espeak' | 'text') => {
+    setState(prev => ({ ...prev, phonemizer: mode }))
+    try { await setPref('tts.phonemizer', mode) } catch {}
+  }
+  const setEspeakTimeoutMs = (ms: number) => {
+    setState(prev => ({ ...prev, espeakTimeoutMs: Math.max(500, Math.min(ms || 0, 10000)) }))
   }
 
   // --- Piper TTS Integration ---
@@ -711,6 +722,8 @@ export const useTTS = () => {
       if (done) return
       ;(globalThis as any).__tts_autoload_done = true
       const pref = await getPref<any>('tts.selected')
+      const ph = await getPref<'auto' | 'espeak' | 'text'>('tts.phonemizer')
+      if (ph) setState(prev => ({ ...prev, phonemizer: ph }))
       if (!pref) return
       if (pref.engine === 'browser') {
         await ensureBrowserEngine()
@@ -912,6 +925,9 @@ export const useTTS = () => {
               const handle = await playPCM(f32, sr, { 
                 audioContext: audioCtx!, 
                 playbackRate,
+                onInfo: (info) => {
+                  addToDebugLog(`✅ WebAudio buffer ready: ${info.length} samples at ${info.finalSampleRate}Hz (ctx ${info.contextSampleRate}Hz)`) 
+                },
                 onEnded: () => {
                   addToDebugLog('✅ WebAudio chunk playback completed')
                 }
@@ -1140,11 +1156,14 @@ export const useTTS = () => {
       
       piperWorker.addEventListener('message', onMessage as any)
       
+      const phonemeType = state().phonemizer === 'auto' ? undefined : state().phonemizer
       const synthesisRequest = {
         type: 'generate',
         text: cleaned,
         speakerId,
-        speed: state().rate
+        speed: state().rate,
+        phonemeType,
+        espeakTimeoutMs: state().espeakTimeoutMs
       }
       
       console.log('[TTS] 📤 Sending synthesis request to worker:', synthesisRequest)
@@ -1422,6 +1441,9 @@ export const useTTS = () => {
           const handle = await playPCM(pcm, sr, {
             audioContext: audioCtx!,
             playbackRate: Math.max(0.5, Math.min(current.rate || 1.0, 2.0)),
+            onInfo: (info) => {
+              console.log(`[TTS] WebAudio buffer: ${info.length} samples at ${info.finalSampleRate}Hz (ctx ${info.contextSampleRate}Hz)`) 
+            },
             onEnded: () => { /* handled by sequencing below */ }
           })
           setActiveStop(handle.stop)
@@ -1652,6 +1674,8 @@ export const useTTS = () => {
     state,
     models: MODELS,
     loadModel,
+    setPhonemizer,
+    setEspeakTimeoutMs,
     selectBrowserEngine,
     ensureBrowserEngine,
     primeSystemVoices,

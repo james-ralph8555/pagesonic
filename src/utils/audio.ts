@@ -66,7 +66,7 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
 export const playPCM = async (
   pcmIn: Float32Array,
   sampleRate: number,
-  opts?: { playbackRate?: number; onEnded?: () => void; audioContext?: AudioContext }
+  opts?: { playbackRate?: number; onEnded?: () => void; audioContext?: AudioContext; onInfo?: (info: { finalSampleRate: number; length: number; contextSampleRate: number }) => void }
 ): Promise<PlayHandle> => {
   const ctx = ensureAudioContext(opts?.audioContext || null)
   const pcm = sanitizeAndNormalize(pcmIn)
@@ -80,32 +80,44 @@ export const playPCM = async (
     targetSampleRate = ctx.sampleRate
     console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz`)
   }
-  
+
+  // Create source buffer at original rate
   const buffer = ctx.createBuffer(1, pcm.length, sampleRate)
   buffer.getChannelData(0).set(pcm)
-  
-  // If resampling is needed, create a new buffer at the target rate
+
+  // High-quality resampling using OfflineAudioContext when rates differ substantially
   let finalBuffer = buffer
   if (targetSampleRate !== sampleRate) {
-    const ratio = targetSampleRate / sampleRate
-    const newLength = Math.floor(pcm.length * ratio)
-    finalBuffer = ctx.createBuffer(1, newLength, targetSampleRate)
-    
-    // Simple linear interpolation for resampling
-    const oldData = buffer.getChannelData(0)
-    const newData = finalBuffer.getChannelData(0)
-    for (let i = 0; i < newLength; i++) {
-      const srcIndex = i / ratio
-      const srcIndexInt = Math.floor(srcIndex)
-      const fraction = srcIndex - srcIndexInt
-      
-      if (srcIndexInt < oldData.length - 1) {
-        newData[i] = oldData[srcIndexInt] * (1 - fraction) + oldData[srcIndexInt + 1] * fraction
-      } else {
-        newData[i] = oldData[srcIndexInt] || 0
+    try {
+      const frames = Math.max(1, Math.floor((pcm.length / sampleRate) * targetSampleRate))
+      const offline = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(1, frames, targetSampleRate)
+      const src = offline.createBufferSource()
+      src.buffer = buffer
+      src.connect(offline.destination)
+      src.start()
+      const rendered: AudioBuffer = await offline.startRendering()
+      finalBuffer = rendered
+      console.log('[Audio] Used OfflineAudioContext for high-quality resampling')
+    } catch (e) {
+      // Fallback to lightweight linear interpolation
+      const ratio = targetSampleRate / sampleRate
+      const newLength = Math.floor(pcm.length * ratio)
+      finalBuffer = ctx.createBuffer(1, newLength, targetSampleRate)
+      const oldData = buffer.getChannelData(0)
+      const newData = finalBuffer.getChannelData(0)
+      for (let i = 0; i < newLength; i++) {
+        const srcIndex = i / ratio
+        const srcIndexInt = Math.floor(srcIndex)
+        const fraction = srcIndex - srcIndexInt
+        newData[i] = (oldData[srcIndexInt] || 0) * (1 - fraction) + (oldData[srcIndexInt + 1] || 0) * fraction
       }
+      console.warn('[Audio] Offline resample failed; used linear interpolation fallback:', e)
     }
   }
+
+  try {
+    opts?.onInfo?.({ finalSampleRate: finalBuffer.sampleRate, length: finalBuffer.length, contextSampleRate: ctx.sampleRate })
+  } catch {}
   
   const src = ctx.createBufferSource()
   src.buffer = finalBuffer

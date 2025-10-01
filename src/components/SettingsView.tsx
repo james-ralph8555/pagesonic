@@ -9,6 +9,12 @@ export const SettingsView: Component = () => {
     models, 
     loadModel, 
     setVoice, 
+    // Phonemizer controls
+    setPhonemizer,
+    
+    // Optional advanced tweak
+    // setEspeakTimeoutMs,
+    
     ensureBrowserEngine, 
     primeSystemVoices, 
     refreshSystemVoices,
@@ -309,6 +315,22 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>Voice Settings</h3>
+        
+        {/* Phonemizer selection */}
+        {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' && (
+          <div class="dropdown">
+            <label>Phonemizer:</label>
+            <select
+              value={ttsState().phonemizer || 'auto'}
+              onChange={(e) => setPhonemizer(((e.target as HTMLSelectElement).value as any))}
+            >
+              <option value="auto">Auto (safe on iOS)</option>
+              <option value="espeak">eSpeak (experimental)</option>
+              <option value="text">Text (fallback)</option>
+            </select>
+            <p class="hint">Auto uses eSpeak where reliable; falls back on iOS if it stalls. Choose eSpeak to force higher quality if stable on your device.</p>
+          </div>
+        )}
         
         {/* Show filtering controls only when Piper TTS is loaded */}
         {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' && (
@@ -716,6 +738,22 @@ export const SettingsView: Component = () => {
           />
           <span>{ttsState().targetSampleRate} Hz</span>
         </div>
+        {/* Optional: eSpeak timeout control (hidden by default) */}
+        {/*
+        {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' && (
+          <div class="dropdown">
+            <label>eSpeak timeout (ms):</label>
+            <input
+              type="number"
+              min="500"
+              max="10000"
+              step="100"
+              value={ttsState().espeakTimeoutMs || 2000}
+              onInput={(e) => setEspeakTimeoutMs(parseInt((e.target as HTMLInputElement).value || '2000'))}
+            />
+          </div>
+        )}
+        */}
       </div>
       <hr class="section-divider" />
 
