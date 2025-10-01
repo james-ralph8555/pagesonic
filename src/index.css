@@ -309,6 +309,33 @@ body {
   }
 }
 
+/* Page selector bubble: circular liquid glass around current page */
+.page-selector { display: inline-flex; align-items: center; gap: 6px; }
+
+.page-selector .slash { opacity: 0.9; }
+
+.page-bubble { /* wrapper that gets the glass ring via .rail-btn */
+  height: 36px; /* match other rail buttons */
+  width: 36px;  /* circular */
+  padding: 0;   /* override rail-btn padding */
+  border-radius: 999vw;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.page-bubble--static { cursor: default; user-select: none; }
+.page-bubble .bubble-input {
+  all: unset;
+  width: 100%;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  line-height: 1;
+  cursor: text;
+}
+
+
 /* Error state for rail buttons */
 .rail-btn.error {
   all: unset;

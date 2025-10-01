@@ -50,6 +50,8 @@ export const PDFViewer: Component = () => {
   const [fitWidth, setFitWidth] = createSignal<boolean>(false)
   // Track the current (center) page in view
   const [currentPage, setCurrentPage] = createSignal<number>(1)
+  const [pageInput, setPageInput] = createSignal<string>('1')
+  let pageInputEl: HTMLInputElement | null = null
 
   const H_PADDING = 16 * 2 // matches .pdf-pages horizontal padding
 
@@ -218,6 +220,25 @@ export const PDFViewer: Component = () => {
     requestAnimationFrame(() => seedVisibleFromScroll())
   }
 
+  const clampPage = (pn: number) => {
+    const total = pdfState().pages.length || 1
+    return Math.min(Math.max(1, Math.floor(pn)), total)
+  }
+
+  const scrollToPage = (pn: number) => {
+    if (!scrollRoot) return
+    const target = scrollRoot.querySelector(`.pdf-page-container[data-page="${pn}"]`) as HTMLElement | null
+    if (!target) return
+    // Compute target scrollTop to center the page within the scrollRoot
+    const rootRect = scrollRoot.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const currentScroll = scrollRoot.scrollTop
+    const offsetWithinRoot = (targetRect.top - rootRect.top) + currentScroll
+    const centerTop = Math.max(0, offsetWithinRoot - (scrollRoot.clientHeight / 2) + (target.clientHeight / 2))
+    scrollRoot.scrollTo({ top: centerTop, behavior: 'smooth' })
+    setCurrentPage(pn)
+  }
+
   onCleanup(() => {
     window.removeEventListener('resize', onResize)
     document.removeEventListener('mousemove', pokeUI)
@@ -238,10 +259,21 @@ export const PDFViewer: Component = () => {
     }
   })
 
+  // Keep the page input text in sync with currentPage when not editing
+  createEffect(() => {
+    const cp = currentPage()
+    const active = document.activeElement
+    if (!pageInputEl || active !== pageInputEl) {
+      setPageInput(String(cp))
+    }
+  })
+
   createEffect(() => {
     // Recompute when pages change (new document)
     pdfState().pages.length
     pokeUI()
+    // Keep page input in sync when document changes
+    setPageInput(String(currentPage()))
     // When a new document loads, re-bind IO to new nodes
     if (scrollRoot && io) {
       io.disconnect()
@@ -348,8 +380,44 @@ export const PDFViewer: Component = () => {
             ? (
               <>
                 <span>{pdfState().document?.title || 'Untitled Document'}</span>
-                <div class="rail-value" role="status" aria-live="polite">
-                  {currentPage()} / {pdfState().pages.length}
+                <div class="page-selector" role="status" aria-live="polite">
+                  <div class="rail-btn page-bubble" aria-label="Current page">
+                    <input
+                      ref={el => (pageInputEl = el)}
+                      class="bubble-input"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      value={pageInput()}
+                      onInput={(e) => {
+                        // Only allow digits, keep non-empty to avoid uncontrolled state
+                        const v = (e.currentTarget.value || '').replace(/[^0-9]/g, '')
+                        setPageInput(v || '')
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const v = clampPage(parseInt(pageInput() || '0', 10) || 0)
+                          setPageInput(String(v))
+                          scrollToPage(v)
+                          ;(e.currentTarget as HTMLInputElement).blur()
+                        } else if (e.key === 'Escape') {
+                          setPageInput(String(currentPage()))
+                          ;(e.currentTarget as HTMLInputElement).blur()
+                        }
+                      }}
+                      onBlur={() => {
+                        const v = clampPage(parseInt(pageInput() || '0', 10) || 0)
+                        setPageInput(String(v))
+                        if (v !== currentPage()) scrollToPage(v)
+                      }}
+                      aria-label="Current page"
+                      title="Go to page"
+                    />
+                  </div>
+                  <span class="slash">/</span>
+                  <div class="rail-btn page-bubble page-bubble--static" aria-label="Total pages" title="Total pages">
+                    <span class="maxpage">{pdfState().pages.length}</span>
+                  </div>
                 </div>
               </>
             )
