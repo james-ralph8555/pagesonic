@@ -35,13 +35,13 @@ self.addEventListener("message", async (e: MessageEvent<Msg>) => {
     if (m.type === "generate") {
       const chunks: RawAudio[] = [];
       for await (const { text, audio } of tts.stream(m.text, { speakerId: m.speakerId, lengthScale })) {
-        // Send both a WAV Blob (fallback) and a transferable Float32Array buffer for WebAudio consumers
+        // Send both a WAV Blob (fallback) and a copy of Float32Array buffer for WebAudio consumers
         const wav = audio.toWavBlob();
-        const buf = audio.audio.buffer; // underlying ArrayBuffer of Float32Array
-        (self as any).postMessage(
-          { status: "stream", chunk: { text, audio: wav, sr: audio.sr, f32: buf } },
-          [buf]
-        );
+        const f32Copy = new Float32Array(audio.audio); // copy to avoid detached ArrayBuffer
+        (self as any).postMessage({
+          status: "stream",
+          chunk: { text, audio: wav, sr: audio.sr, f32: f32Copy.buffer }
+        });
         chunks.push(audio);
       }
       // Merge chunks

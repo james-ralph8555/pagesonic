@@ -315,19 +315,20 @@ body {
 .page-selector .slash { opacity: 0.9; }
 
 .page-bubble { /* wrapper that gets the glass ring via .rail-btn */
-  height: 36px; /* match other rail buttons */
-  min-width: 36px;  /* at least the same height */
-  padding: 0 10px;   /* pill-like, flat top/bottom */
+  height: 36px;            /* match other rail buttons */
+  min-width: 56px;         /* enforce pill shape greater than height */
+  padding: 0 10px;         /* pill shape, horizontal padding */
   border-radius: 999vw;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   text-align: center;
+  box-sizing: border-box;  /* width (when set) includes padding, for matching */
 }
 .page-bubble--static { cursor: default; user-select: none; }
 .page-bubble .bubble-input {
   all: unset;
-  width: 100%; /* fill pill; keep digits centered */
+  width: 100%; /* fill bubble; keep digits centered */
   text-align: center;
   font-variant-numeric: tabular-nums;
   color: inherit;
