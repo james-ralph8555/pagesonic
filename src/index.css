@@ -1044,6 +1044,19 @@ body {
   transition: all var(--anim--hover-time) var(--anim--hover-ease);
 }
 
+/* Wide logo placeholder support */
+.placeholder-logo {
+  display: inline-block;
+  margin-bottom: 1.25rem;
+}
+
+.placeholder-logo img {
+  display: block;
+  width: min(80vw, 420px);
+  max-width: 100%;
+  height: auto;
+}
+
 .liquid-glass-placeholder h2 {
   font-size: 1.5rem;
   font-weight: 600;

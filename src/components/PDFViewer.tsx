@@ -472,15 +472,11 @@ export const PDFViewer: Component = () => {
             <div class="liquid-glass-placeholder">
               <div class="liquid-glass-shadow"></div>
               <div class="liquid-glass-content">
-                <div class="placeholder-icon">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <line x1="3" y1="6" x2="21" y2="6"/>
-                    <line x1="3" y1="12" x2="21" y2="12"/>
-                    <line x1="3" y1="18" x2="21" y2="18"/>
-                  </svg>
+                <div class="placeholder-logo">
+                  <img src="/pagesonic_full_logo_liquid.svg" alt="PageSonic" />
                 </div>
-                <h2>No PDF loaded</h2>
-                <p>Click the menu icon <span class="icon-ref">☰</span> in the top-left corner, then select "Open" to load a PDF file</p>
+                <h2>Welcome to PageSonic!</h2>
+                <p>Click the menu icon <span class="icon-ref"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg></span> in the top-left corner, then select "Open" to load a PDF file</p>
               </div>
             </div>
           )}
