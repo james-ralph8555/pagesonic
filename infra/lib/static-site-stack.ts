@@ -6,6 +6,7 @@ import {
   CfnOutput,
 } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
+import path from 'path'
 import {
   BlockPublicAccess,
   Bucket,
@@ -34,7 +35,8 @@ export class PagesonicSiteStack extends Stack {
   constructor(scope: Construct, id: string, props: StackProps = {}) {
     super(scope, id, props)
 
-    const distPath = '../dist'
+    // Resolve to the repo root `dist/` regardless of current working directory
+    const distPath = path.resolve(__dirname, '../../dist')
 
     const siteBucket = new Bucket(this, 'SiteBucket', {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,

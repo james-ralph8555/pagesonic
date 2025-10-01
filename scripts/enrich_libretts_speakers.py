@@ -255,7 +255,7 @@ def main():
     block["ui_filters"] = {
         "dropdowns": ["gender"],
         "sliders": ["pitch_mean", "speaking_rate", "brightness"],
-        "tags": true
+        "tags": True
     }
     
     voices[args.variant_key] = block
