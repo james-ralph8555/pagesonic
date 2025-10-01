@@ -206,7 +206,6 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>Appearance</h3>
-        <hr class="section-divider" />
         <div class="dropdown">
           <label>Theme:</label>
           <select
@@ -218,10 +217,10 @@ export const SettingsView: Component = () => {
           </select>
         </div>
       </div>
+      <hr class="section-divider" />
 
       <div class="settings-section">
         <h3>TTS Engine / Model</h3>
-        <hr class="section-divider" />
         {!ttsState().isWebGPUSupported && (
           <p class="error" style={{ padding: '0.5rem 0.75rem', margin: '0 0 0.75rem 0' }}>
             WebGPU not supported. Kokoro requires WebGPU; Piper can run on CPU.
@@ -299,10 +298,10 @@ export const SettingsView: Component = () => {
           })}
         </div>
       </div>
+      <hr class="section-divider" />
 
       <div class="settings-section">
         <h3>Voice Settings</h3>
-        <hr class="section-divider" />
         
         {/* Show filtering controls only when Piper TTS is loaded */}
         {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' && (
@@ -462,10 +461,10 @@ export const SettingsView: Component = () => {
           )}
         </div>
       </div>
+      <hr class="section-divider" />
 
       <div class="settings-section">
         <h3>TTS Chunking</h3>
-        <hr class="section-divider" />
         <p class="hint">Controls how input text is split for inference/playback. Console logs include chunk indices and timing.</p>
         <div class="dropdown">
           <label>Max chunk size:</label>
@@ -509,10 +508,10 @@ export const SettingsView: Component = () => {
           <span>{ttsState().interChunkPauseMs} ms</span>
         </div>
       </div>
+      <hr class="section-divider" />
       
       <div class="settings-section">
         <h3>System Information</h3>
-        <hr class="section-divider" />
         <div class="system-info">
           <p><strong>WebGPU Status:</strong> {ttsState().isWebGPUSupported ? 'Supported' : 'Not Supported'}</p>
           {ttsState().model && (
@@ -623,10 +622,10 @@ export const SettingsView: Component = () => {
           )}
         </div>
       </div>
+      <hr class="section-divider" />
       
       <div class="settings-section">
         <h3>Audio</h3>
-        <hr class="section-divider" />
         <div class="dropdown">
           <label>Target sample rate:</label>
           <input
@@ -640,6 +639,7 @@ export const SettingsView: Component = () => {
           <span>{ttsState().targetSampleRate} Hz</span>
         </div>
       </div>
+      <hr class="section-divider" />
 
       <div class="settings-section">
         <h3>About</h3>

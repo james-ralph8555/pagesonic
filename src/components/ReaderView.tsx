@@ -96,7 +96,7 @@ export const ReaderView: Component = () => {
           {ttsState().isModelLoading && <span class="loading-model">Loading model...</span>}
         </div>
         
-        <div class="voice-controls">
+        <div class="dropdown">
           <label>Voice:</label>
           <select 
             value={ttsState().voice}

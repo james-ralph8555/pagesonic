@@ -68,3 +68,240 @@
 .theme-light .no-document {
   color: rgba(0, 0, 0, 0.75);
 }
+
+/* Settings view model info text */
+.theme-light .model-info h4,
+.theme-light .model-info p {
+  color: #111 !important;
+}
+
+/* Status indicators - maintain colors but ensure proper contrast */
+.theme-light .status.loaded {
+  color: #16a34a !important;
+}
+
+.theme-light .status.incompatible {
+  color: #dc2626 !important;
+}
+
+.theme-light .status.available {
+  color: #4f46e5 !important;
+}
+
+/* Voice filter controls and labels */
+.theme-light .filter-group label {
+  color: #111 !important;
+}
+
+.theme-light .search-input,
+.theme-light .range-inputs input {
+  color: #111 !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* Voice settings container */
+.theme-light .voice-filters {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(0, 0, 0, 0.2) !important;
+  border-radius: 12px !important;
+  padding: 1rem !important;
+  backdrop-filter: blur(10px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(10px) saturate(160%) !important;
+}
+
+/* Tags container in light mode */
+.theme-light .tag-filter {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border: 1px solid rgba(0, 0, 0, 0.2) !important;
+  border-radius: 8px !important;
+  padding: 0.75rem !important;
+  max-height: 200px !important;
+  overflow-y: auto !important;
+}
+
+.theme-light .gender-buttons button {
+  color: #111 !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.theme-light .gender-buttons button:hover {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.theme-light .gender-buttons button.active {
+  color: #fff !important;
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+}
+
+.theme-light .tag {
+  color: #111 !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.theme-light .tag:hover {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+.theme-light .tag.selected {
+  color: #fff !important;
+  background-color: var(--brand) !important;
+  border-color: var(--brand) !important;
+}
+
+.theme-light .clear-filters {
+  color: #111 !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  background-color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.theme-light .clear-filters:hover {
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  color: #111 !important;
+}
+
+.theme-light .filter-count {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Filter actions divider */
+.theme-light .filter-actions {
+  border-top-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* System info and about sections */
+.theme-light .system-info p,
+.theme-light .about-info p {
+  color: #111 !important;
+}
+
+.theme-light .about-info ul {
+  color: #111 !important;
+}
+
+.theme-light .about-info li {
+  color: #111 !important;
+}
+
+/* Voice metadata section */
+.theme-light .voice-metadata {
+  border-top-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+.theme-light .voice-metadata h4 {
+  color: #111 !important;
+}
+
+.theme-light .voice-metadata p {
+  color: #111 !important;
+}
+
+.theme-light .characteristic .label,
+.theme-light .characteristic .value {
+  color: #111 !important;
+}
+
+.theme-light .voice-tags p {
+  color: #111 !important;
+}
+
+.theme-light .voice-tag {
+  color: #111 !important;
+  background-color: rgba(0, 0, 0, 0.1) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Form inputs and dropdown text */
+.theme-light .dropdown label {
+  color: #111 !important;
+}
+
+.theme-light .dropdown select,
+.theme-light .dropdown input[type="number"],
+.theme-light .dropdown input[type="text"] {
+  color: #111 !important;
+}
+
+.theme-light .dropdown select option {
+  background-color: #ffffff !important;
+  color: #111 !important;
+}
+
+.theme-light .dropdown span {
+  color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Settings section headers */
+.theme-light .settings-section h3 {
+  color: #111 !important;
+}
+
+/* Loading, error, and no-document states */
+.theme-light .loading {
+  color: var(--brand) !important;
+}
+
+.theme-light .error {
+  color: #dc2626 !important;
+}
+
+.theme-light .no-text {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* iOS debug section colors */
+.theme-light div[style*="background: #f0f4f8"] {
+  background-color: #f8fafc !important;
+  color: #111 !important;
+}
+
+.theme-light div[style*="color: #2563eb"] h4 {
+  color: #2563eb !important;
+}
+
+.theme-light p[style*="color: #dc2626"] {
+  color: #dc2626 !important;
+}
+
+/* Dark mode iOS debug info fixes - ensure proper contrast */
+div[style*="background: #f0f4f8"] {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  color: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+div[style*="color: #2563eb"] h4 {
+  color: #60a5fa !important;
+}
+
+p[style*="color: #dc2626"] {
+  color: #f87171 !important;
+}
+
+/* iOS debug buttons in dark mode */
+div[style*="background: #f0f4f8"] button {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+div[style*="background: #f0f4f8"] button:hover {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Additional button and control text */
+.theme-light button {
+  color: #111 !important;
+}
+
+.theme-light button.loaded {
+  color: #fff !important;
+}
+
+/* Hint text */
+.theme-light .hint {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
