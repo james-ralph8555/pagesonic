@@ -469,9 +469,19 @@ export const PDFViewer: Component = () => {
               )}
             </For>
           ) : (
-            <div class="placeholder-page">
-              <p>No PDF loaded</p>
-              <p>Click "Open" to select a file</p>
+            <div class="liquid-glass-placeholder">
+              <div class="liquid-glass-shadow"></div>
+              <div class="liquid-glass-content">
+                <div class="placeholder-icon">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                  </svg>
+                </div>
+                <h2>No PDF loaded</h2>
+                <p>Click the menu icon <span class="icon-ref">☰</span> in the top-left corner, then select "Open" to load a PDF file</p>
+              </div>
             </div>
           )}
         </div>
