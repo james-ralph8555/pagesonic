@@ -4,6 +4,7 @@ type DropdownItem = {
   value: string
   label: string
   disabled?: boolean
+  isHeader?: boolean
 }
 
 type Align = 'start' | 'end'
@@ -47,21 +48,36 @@ export const GlassDropdownButton: Component<{
     document.removeEventListener('keydown', onKey)
   })
 
-  const renderItems = () => props.items.map(item => {
-    const isActive = props.selectedValue === item.value
-    return (
-      <button
-        class={"glass-menu-item" + (isActive ? ' active' : '') + (item.disabled ? ' disabled' : '')}
-        aria-selected={isActive}
-        disabled={item.disabled}
-        onClick={() => {
-          if (item.disabled) return
-          props.onSelect(item.value)
-          close()
-        }}
-      >{item.label}</button>
-    )
-  })
+  const renderItems = () => {
+    const elements: JSX.Element[] = []
+    
+    props.items.forEach(item => {
+      if (item.isHeader) {
+        // Add separator before header (but not before first item)
+        if (elements.length > 0) {
+          elements.push(<div class="glass-menu-separator" role="separator" />)
+        }
+        // Add header
+        elements.push(<div class="glass-menu-title" aria-hidden="true">{item.label}</div>)
+      } else {
+        const isActive = props.selectedValue === item.value
+        elements.push(
+          <button
+            class={"glass-menu-item" + (isActive ? ' active' : '') + (item.disabled ? ' disabled' : '')}
+            aria-selected={isActive}
+            disabled={item.disabled}
+            onClick={() => {
+              if (item.disabled) return
+              props.onSelect(item.value)
+              close()
+            }}
+          >{item.label}</button>
+        )
+      }
+    })
+    
+    return elements
+  }
 
   return (
     <div ref={rootEl} class={"dropdown" + (props.containerClass ? ` ${props.containerClass}` : '')}>

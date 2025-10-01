@@ -316,13 +316,29 @@ export const PDFViewer: Component = () => {
   return (
     <div class="pdf-viewer">
       <div class={"pdf-top-rail" + (showRail() ? '' : ' hidden')}>
+        <input
+          ref={setFileInput}
+          type="file"
+          accept=".pdf"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
         <GlassDropdownButton
-          ariaLabel="Switch view"
-          title="Switch view"
-          header={'Navigation'}
+          ariaLabel="Menu"
+          title="Menu"
           class="rail-btn"
           align="start"
-          selectedValue={'pdf'}
+          containerClass={(() => {
+            // Flag dropdown error state: for Browser TTS when no voices available and lastError present
+            const browserError = (
+              selectedModel() === 'Browser TTS' &&
+              'speechSynthesis' in window &&
+              (ttsState().systemVoices || []).length === 0 &&
+              !!ttsState().lastError &&
+              ttsState().engine !== 'browser'
+            )
+            return browserError ? 'error-select' : ''
+          })()}
           icon={(
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <rect x="3" y="3" width="7" height="7" rx="1"/>
@@ -332,67 +348,36 @@ export const PDFViewer: Component = () => {
             </svg>
           )}
           items={[
+            { value: 'open', label: 'Open' },
+            { value: 'nav-header', label: 'Navigation', isHeader: true },
             { value: 'pdf', label: 'PDF Viewer' },
-            { value: 'settings', label: 'Settings' }
+            { value: 'settings', label: 'Settings' },
+            { value: 'model-header', label: 'Models', isHeader: true },
+            { value: 'Browser TTS', label: 'Browser TTS (System)', disabled: !('speechSynthesis' in window) },
+            ...models.map(m => ({
+              value: m.name,
+              label: m.name + (m.requiresWebGPU ? ' (WebGPU)' : ''),
+              disabled: !!(m.requiresWebGPU && !ttsState().isWebGPUSupported)
+            }))
           ]}
-          onSelect={(value) => {
-            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value as 'pdf' | 'settings' }))
-          }}
-        />
-        <input
-          ref={setFileInput}
-          type="file"
-          accept=".pdf"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-        <button class="rail-btn" onClick={() => fileInput()?.click()}>Open</button>
-        <div style="display: inline-flex; gap: 6px; align-items: center;">
-          <GlassDropdownButton
-            ariaLabel="Select TTS engine/model"
-            title="Select TTS engine/model"
-            header={'Model'}
-            class="rail-btn"
-            align="start"
-            containerClass={(() => {
-              // Flag dropdown error state: for Browser TTS when no voices available and lastError present
-              const browserError = (
-                selectedModel() === 'Browser TTS' &&
-                'speechSynthesis' in window &&
-                (ttsState().systemVoices || []).length === 0 &&
-                !!ttsState().lastError &&
-                ttsState().engine !== 'browser'
-              )
-              return browserError ? 'error-select' : ''
-            })()}
-            selectedValue={selectedModel()}
-            icon={(
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <rect x="4" y="4" width="16" height="16" rx="2"/>
-                <path d="M8 8h8v8H8z"/>
-              </svg>
-            )}
-            items={[
-              { value: 'Browser TTS', label: 'Browser TTS (System)', disabled: !('speechSynthesis' in window) },
-              ...models.map(m => ({
-                value: m.name,
-                label: m.name + (m.requiresWebGPU ? ' (WebGPU)' : ''),
-                disabled: !!(m.requiresWebGPU && !ttsState().isWebGPUSupported)
-              }))
-            ]}
-            onSelect={async (v) => {
+          onSelect={async (v) => {
+            if (v === 'open') {
+              fileInput()?.click()
+            } else if (v === 'pdf' || v === 'settings') {
+              window.dispatchEvent(new CustomEvent('app:set-mode', { detail: v as 'pdf' | 'settings' }))
+            } else if (v === 'Browser TTS') {
               setSelectedModel(v)
               try {
-                if (v === 'Browser TTS') {
-                  await ensureBrowserEngine()
-                } else {
-                  await loadModel(v)
-                }
+                await ensureBrowserEngine()
               } catch (e) { /* handled in store */ }
-            }}
-          />
-          {/* WebGPU indicator removed from rail */}
-        </div>
+            } else if (v !== 'nav-header' && v !== 'model-header') {
+              setSelectedModel(v)
+              try {
+                await loadModel(v)
+              } catch (e) { /* handled in store */ }
+            }
+          }}
+        />
         <div class="rail-meta">
           {pdfState().document
             ? (

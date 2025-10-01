@@ -388,6 +388,69 @@ body {
   max-width: 40vw; /* leave room for the page selector to stay near center */
 }
 
+/* Mobile-specific adjustments to prevent overlap */
+@media (max-width: 768px) {
+  .pdf-top-rail {
+    padding: 0 1rem; /* ensure enough padding for buttons */
+    min-width: 0; /* allow flex shrinking */
+  }
+  
+  .rail-meta {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 200px); /* leave space for left and right buttons */
+    min-width: 0; /* allow proper flex behavior */
+  }
+  
+  .rail-meta > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: min(40vw, calc(100vw - 280px)); /* smaller max width, account for page selector */
+    min-width: 0; /* allow text to shrink */
+    font-size: 0.9rem;
+  }
+  
+  .page-selector {
+    gap: 4px;
+    flex-shrink: 0; /* prevent page selector from shrinking */
+  }
+  
+  .page-bubble {
+    min-width: 44px; /* slightly smaller on mobile */
+    height: 32px;
+    padding: 0 8px;
+    font-size: 0.85rem;
+    flex-shrink: 0; /* prevent bubbles from shrinking */
+  }
+  
+  /* Ensure buttons don't get too crowded on mobile */
+  .rail-btn {
+    height: 32px;
+    padding: 0 0.8em;
+    font-size: 0.85rem;
+    flex-shrink: 0; /* prevent buttons from shrinking */
+  }
+  
+  /* For very small screens, further constrain the title */
+  @media (max-width: 480px) {
+    .rail-meta > span:first-child {
+      max-width: min(30vw, calc(100vw - 320px)); /* even smaller max width */
+    }
+    
+    .page-bubble {
+      min-width: 40px;
+      height: 30px;
+      padding: 0 6px;
+      font-size: 0.8rem;
+    }
+  }
+}
+
 
 /* Error state for rail buttons */
 .rail-btn.error {

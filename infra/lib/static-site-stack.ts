@@ -7,6 +7,7 @@ import {
 } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import path from 'path'
+import { existsSync } from 'fs'
 import {
   BlockPublicAccess,
   Bucket,
@@ -35,8 +36,15 @@ export class PagesonicSiteStack extends Stack {
   constructor(scope: Construct, id: string, props: StackProps = {}) {
     super(scope, id, props)
 
-    // Resolve to the repo root `dist/` regardless of current working directory
-    const distPath = path.resolve(__dirname, '../../dist')
+    // Resolve deployment source path for the site assets
+    // - default: repo root `dist/`
+    // - override: `-c distPath=/abs/path` when invoking CDK
+    const contextDist = this.node.tryGetContext('distPath') as string | undefined
+    const distPath = contextDist ?? path.resolve(__dirname, '../../dist')
+
+    if (!existsSync(distPath)) {
+      throw new Error(`Build artifacts not found at: ${distPath}. Run 'npm run build' from repo root or pass '-c distPath=/abs/path'.`)
+    }
 
     const siteBucket = new Bucket(this, 'SiteBucket', {
       blockPublicAccess: BlockPublicAccess.BLOCK_ALL,
@@ -125,6 +133,10 @@ export class PagesonicSiteStack extends Stack {
         CacheControl.fromString('public, max-age=0, must-revalidate'),
       ],
       prune: true,
+      // Large model assets can make uploads slow; give the
+      // custom resource more resources and time to finish.
+      memoryLimit: 2048,
+      timeout: Duration.minutes(30),
     })
 
     new CfnOutput(this, 'BucketName', {
