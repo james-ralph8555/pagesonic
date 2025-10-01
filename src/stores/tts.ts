@@ -1279,6 +1279,70 @@ export const useTTS = () => {
     setState(prev => ({ ...prev, targetSampleRate: v }))
   }
   
+  // --- Voice filtering functions for enhanced UI ---
+  const getVoiceMetadata = async () => {
+    try {
+      const response = await fetch('/tts-model/voices.json')
+      if (response.ok) {
+        const data = await response.json()
+        return data['en_US-libritts_r-medium']?.speakers || []
+      }
+    } catch (error) {
+      console.warn('Failed to load voice metadata:', error)
+    }
+    return []
+  }
+
+  const getAvailableTags = async () => {
+    const speakers = await getVoiceMetadata()
+    const allTags = new Set<string>()
+    speakers.forEach(speaker => {
+      if (speaker.tags && Array.isArray(speaker.tags)) {
+        speaker.tags.forEach(tag => allTags.add(tag))
+      }
+    })
+    return Array.from(allTags).sort()
+  }
+
+  const filterVoicesByGender = (speakers: any[], gender: string) => {
+    if (!gender || gender === 'all') return speakers
+    return speakers.filter(speaker => speaker.gender === gender)
+  }
+
+  const filterVoicesByTags = (speakers: any[], selectedTags: string[]) => {
+    if (!selectedTags || selectedTags.length === 0) return speakers
+    return speakers.filter(speaker => {
+      if (!speaker.tags || !Array.isArray(speaker.tags)) return false
+      return selectedTags.every(tag => speaker.tags.includes(tag))
+    })
+  }
+
+  const filterVoicesByPitchRange = (speakers: any[], minPitch: number, maxPitch: number) => {
+    return speakers.filter(speaker => {
+      if (speaker.pitch_mean === null || speaker.pitch_mean === undefined) return true
+      return speaker.pitch_mean >= minPitch && speaker.pitch_mean <= maxPitch
+    })
+  }
+
+  const filterVoicesByRateRange = (speakers: any[], minRate: number, maxRate: number) => {
+    return speakers.filter(speaker => {
+      if (speaker.speaking_rate === null || speaker.speaking_rate === undefined) return true
+      return speaker.speaking_rate >= minRate && speaker.speaking_rate <= maxRate
+    })
+  }
+
+  const filterVoicesByBrightnessRange = (speakers: any[], minBrightness: number, maxBrightness: number) => {
+    return speakers.filter(speaker => {
+      if (speaker.brightness === null || speaker.brightness === undefined) return true
+      return speaker.brightness >= minBrightness && speaker.brightness <= maxBrightness
+    })
+  }
+
+  const getVoiceMetadataById = async (speakerId: string) => {
+    const speakers = await getVoiceMetadata()
+    return speakers.find(speaker => speaker.speaker_id === speakerId)
+  }
+
   // iOS-specific helpers
   const getAudioState = () => ({
     isIOS: isiOS,
@@ -1316,6 +1380,15 @@ export const useTTS = () => {
     setSentenceSplit,
     setInterChunkPauseMs,
     setTargetSampleRate,
+    // Voice filtering functions
+    getVoiceMetadata,
+    getAvailableTags,
+    filterVoicesByGender,
+    filterVoicesByTags,
+    filterVoicesByPitchRange,
+    filterVoicesByRateRange,
+    filterVoicesByBrightnessRange,
+    getVoiceMetadataById,
     // iOS-specific helpers
     getAudioState,
     unlockAudioIOS

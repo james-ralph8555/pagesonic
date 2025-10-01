@@ -3,10 +3,43 @@ import { useTTS } from '@/stores/tts'
 import { GlassDropdownButton } from './GlassDropdownButton'
 
 export const SettingsView: Component = () => {
-  const { state: ttsState, models, loadModel, setVoice, ensureBrowserEngine, primeSystemVoices, refreshSystemVoices,
-    setChunkMaxChars, setChunkOverlapChars, setSentenceSplit, setInterChunkPauseMs, setTargetSampleRate } = useTTS()
+  const { 
+    state: ttsState, 
+    models, 
+    loadModel, 
+    setVoice, 
+    ensureBrowserEngine, 
+    primeSystemVoices, 
+    refreshSystemVoices,
+    setChunkMaxChars, 
+    setChunkOverlapChars, 
+    setSentenceSplit, 
+    setInterChunkPauseMs, 
+    setTargetSampleRate,
+    // Voice filtering functions
+    getVoiceMetadata,
+    getAvailableTags,
+    filterVoicesByGender,
+    filterVoicesByTags,
+    filterVoicesByPitchRange,
+    filterVoicesByRateRange,
+    filterVoicesByBrightnessRange,
+    getVoiceMetadataById
+  } = useTTS()
+  
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   const [voiceMetadata, setVoiceMetadata] = createSignal<any>(null)
+  
+  // Voice filtering state
+  const [availableTags, setAvailableTags] = createSignal<string[]>([])
+  const [allSpeakers, setAllSpeakers] = createSignal<any[]>([])
+  const [filteredSpeakers, setFilteredSpeakers] = createSignal<any[]>([])
+  const [selectedGender, setSelectedGender] = createSignal('all')
+  const [selectedTags, setSelectedTags] = createSignal<string[]>([])
+  const [pitchRange, setPitchRange] = createSignal({ min: 0, max: 500 })
+  const [rateRange, setRateRange] = createSignal({ min: 0, max: 300 })
+  const [brightnessRange, setBrightnessRange] = createSignal({ min: 0, max: 1 })
+  const [searchQuery, setSearchQuery] = createSignal('')
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -16,18 +49,99 @@ export const SettingsView: Component = () => {
     }
   }
 
-  // Load voice metadata when component mounts
+  // Load voice metadata and initialize filters when component mounts
   createEffect(async () => {
     try {
-      const response = await fetch('/tts-model/voices.json')
-      if (response.ok) {
-        const data = await response.json()
-        setVoiceMetadata(data)
+      const metadata = await getVoiceMetadata()
+      const tags = await getAvailableTags()
+      setVoiceMetadata({ 'en_US-libritts_r-medium': { speakers: metadata } })
+      setAllSpeakers(metadata)
+      setFilteredSpeakers(metadata)
+      setAvailableTags(tags)
+      
+      // Set initial ranges based on actual data
+      if (metadata.length > 0) {
+        const pitches = metadata.map(s => s.pitch_mean).filter(p => p !== null && p !== undefined)
+        const rates = metadata.map(s => s.speaking_rate).filter(r => r !== null && r !== undefined)
+        const brightnesses = metadata.map(s => s.brightness).filter(b => b !== null && b !== undefined)
+        
+        if (pitches.length > 0) {
+          setPitchRange({ min: Math.min(...pitches), max: Math.max(...pitches) })
+        }
+        if (rates.length > 0) {
+          setRateRange({ min: Math.min(...rates), max: Math.max(...rates) })
+        }
+        if (brightnesses.length > 0) {
+          setBrightnessRange({ min: Math.min(...brightnesses), max: Math.max(...brightnesses) })
+        }
       }
     } catch (error) {
       console.warn('Failed to load voice metadata:', error)
     }
   })
+
+  // Apply filters when any filter criteria changes
+  createEffect(() => {
+    let filtered = [...allSpeakers()]
+    
+    // Apply gender filter
+    if (selectedGender() !== 'all') {
+      filtered = filterVoicesByGender(filtered, selectedGender())
+    }
+    
+    // Apply tag filter
+    if (selectedTags().length > 0) {
+      filtered = filterVoicesByTags(filtered, selectedTags())
+    }
+    
+    // Apply numeric range filters
+    filtered = filterVoicesByPitchRange(filtered, pitchRange().min, pitchRange().max)
+    filtered = filterVoicesByRateRange(filtered, rateRange().min, rateRange().max)
+    filtered = filterVoicesByBrightnessRange(filtered, brightnessRange().min, brightnessRange().max)
+    
+    // Apply search filter
+    if (searchQuery().trim()) {
+      const query = searchQuery().toLowerCase()
+      filtered = filtered.filter(speaker => 
+        speaker.speaker_id.toLowerCase().includes(query) ||
+        speaker.display_name.toLowerCase().includes(query) ||
+        (speaker.description && speaker.description.toLowerCase().includes(query))
+      )
+    }
+    
+    setFilteredSpeakers(filtered)
+  })
+
+  const handleTagToggle = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag)
+        : [...prev, tag]
+    )
+  }
+
+  const clearFilters = () => {
+    setSelectedGender('all')
+    setSelectedTags([])
+    setSearchQuery('')
+    // Reset ranges to full range
+    const speakers = allSpeakers()
+    if (speakers.length > 0) {
+      const pitches = speakers.map(s => s.pitch_mean).filter(p => p !== null && p !== undefined)
+      const rates = speakers.map(s => s.speaking_rate).filter(r => r !== null && r !== undefined)
+      const brightnesses = speakers.map(s => s.brightness).filter(b => b !== null && b !== undefined)
+      
+      if (pitches.length > 0) {
+        setPitchRange({ min: Math.min(...pitches), max: Math.max(...pitches) })
+      }
+      if (rates.length > 0) {
+        setRateRange({ min: Math.min(...rates), max: Math.max(...rates) })
+      }
+      if (brightnesses.length > 0) {
+        setBrightnessRange({ min: Math.min(...brightnesses), max: Math.max(...brightnesses) })
+      }
+    }
+  }
 
   // Get current speaker metadata
   const getCurrentSpeakerInfo = () => {
@@ -171,26 +285,163 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>Voice Settings</h3>
+        
+        {/* Show filtering controls only when Piper TTS is loaded */}
+        {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' && (
+          <div class="voice-filters">
+            {/* Search and Gender controls */}
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>Search:</label>
+                <input
+                  type="text"
+                  placeholder="Voice ID or name..."
+                  value={searchQuery()}
+                  onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
+                  class="search-input"
+                />
+              </div>
+              
+              <div class="filter-group">
+                <label>Gender:</label>
+                <div class="gender-buttons">
+                  <button
+                    class={selectedGender() === 'all' ? 'active' : ''}
+                    onClick={() => setSelectedGender('all')}
+                  >All</button>
+                  <button
+                    class={selectedGender() === 'F' ? 'active' : ''}
+                    onClick={() => setSelectedGender('F')}
+                  >Female</button>
+                  <button
+                    class={selectedGender() === 'M' ? 'active' : ''}
+                    onClick={() => setSelectedGender('M')}
+                  >Male</button>
+                  <button
+                    class={selectedGender() === 'U' ? 'active' : ''}
+                    onClick={() => setSelectedGender('U')}
+                  >Unknown</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Numeric range controls */}
+            <div class="filter-row">
+              <div class="filter-group">
+                <label>Pitch Range ({Math.round(pitchRange().min)}-{Math.round(pitchRange().max)} Hz):</label>
+                <div class="range-inputs">
+                  <input
+                    type="number"
+                    value={Math.round(pitchRange().min)}
+                    onInput={(e) => setPitchRange(prev => ({ ...prev, min: parseInt((e.target as HTMLInputElement).value) || 0 }))}
+                    min="50"
+                    max="300"
+                  />
+                  <span>-</span>
+                  <input
+                    type="number"
+                    value={Math.round(pitchRange().max)}
+                    onInput={(e) => setPitchRange(prev => ({ ...prev, max: parseInt((e.target as HTMLInputElement).value) || 500 }))}
+                    min="50"
+                    max="300"
+                  />
+                </div>
+              </div>
+              
+              <div class="filter-group">
+                <label>Rate Range ({Math.round(rateRange().min)}-{Math.round(rateRange().max)} wpm):</label>
+                <div class="range-inputs">
+                  <input
+                    type="number"
+                    value={Math.round(rateRange().min)}
+                    onInput={(e) => setRateRange(prev => ({ ...prev, min: parseInt((e.target as HTMLInputElement).value) || 0 }))}
+                    min="50"
+                    max="250"
+                  />
+                  <span>-</span>
+                  <input
+                    type="number"
+                    value={Math.round(rateRange().max)}
+                    onInput={(e) => setRateRange(prev => ({ ...prev, max: parseInt((e.target as HTMLInputElement).value) || 300 }))}
+                    min="50"
+                    max="250"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Tag filter */}
+            <div class="filter-row">
+              <div class="filter-group full-width">
+                <label>Traits:</label>
+                <div class="tag-filter">
+                  <div class="selected-tags">
+                    {selectedTags().map(tag => (
+                      <span class="tag selected" onClick={() => handleTagToggle(tag)}>
+                        {tag} ×
+                      </span>
+                    ))}
+                  </div>
+                  <div class="available-tags">
+                    {availableTags().slice(0, 20).map(tag => (
+                      <span
+                        class={`tag ${selectedTags().includes(tag) ? 'selected' : ''}`}
+                        onClick={() => handleTagToggle(tag)}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="filter-actions">
+              <button onClick={clearFilters} class="clear-filters">Clear Filters</button>
+              <span class="filter-count">{filteredSpeakers().length} voices found</span>
+            </div>
+          </div>
+        )}
+
+        {/* Voice selector */}
         <div class="voice-controls">
           <label>Voice:</label>
-          <select
-            value={ttsState().voice}
-            onChange={(e) => {
-              const target = e.target as HTMLSelectElement
-              // Allow change when a local model is loaded or browser TTS is active
-              if (ttsState().model || ttsState().engine === 'browser') {
+          {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' ? (
+            <select
+              value={ttsState().voice}
+              onChange={(e) => {
+                const target = e.target as HTMLSelectElement
                 setVoice(target.value)
-              }
-            }}
-            disabled={(!ttsState().model && ttsState().engine !== 'browser') || (ttsState().engine === 'browser' && (ttsState().systemVoices || []).length === 0)}
-          >
-            {(ttsState().engine === 'browser'
-              ? (ttsState().systemVoices || [])
-              : (ttsState().model?.voices || [])
-            ).map(voice => (
-              <option value={voice}>{voice}</option>
-            ))}
-          </select>
+              }}
+              disabled={!ttsState().model}
+            >
+              <option value="">Select a voice...</option>
+              {filteredSpeakers().map(speaker => (
+                <option value={speaker.speaker_id}>
+                  {speaker.display_name} ({speaker.speaker_id})
+                </option>
+              ))}
+            </select>
+          ) : (
+            <select
+              value={ttsState().voice}
+              onChange={(e) => {
+                const target = e.target as HTMLSelectElement
+                // Allow change when a local model is loaded or browser TTS is active
+                if (ttsState().model || ttsState().engine === 'browser') {
+                  setVoice(target.value)
+                }
+              }}
+              disabled={(!ttsState().model && ttsState().engine !== 'browser') || (ttsState().engine === 'browser' && (ttsState().systemVoices || []).length === 0)}
+            >
+              {(ttsState().engine === 'browser'
+                ? (ttsState().systemVoices || [])
+                : (ttsState().model?.voices || [])
+              ).map(voice => (
+                <option value={voice}>{voice}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
@@ -313,17 +564,40 @@ export const SettingsView: Component = () => {
               <h4 style={{ 'margin-bottom': '0.5rem' }}>Voice Details</h4>
               <p><strong>Display Name:</strong> {getCurrentSpeakerInfo()?.display_name || 'N/A'}</p>
               <p><strong>Description:</strong> {getCurrentSpeakerInfo()?.description || 'N/A'}</p>
-              <p><strong>Gender:</strong> {getCurrentSpeakerInfo()?.gender || 'N/A'}</p>
-              <p><strong>Accent:</strong> {getCurrentSpeakerInfo()?.accent || 'N/A'}</p>
-              <p><strong>Subset:</strong> {getCurrentSpeakerInfo()?.subset || 'N/A'}</p>
-              {getCurrentSpeakerInfo()?.pitch_mean && (
-                <p><strong>Avg Pitch:</strong> {Math.round(getCurrentSpeakerInfo().pitch_mean)} Hz</p>
-              )}
-              {getCurrentSpeakerInfo()?.speaking_rate && (
-                <p><strong>Speaking Rate:</strong> {Math.round(getCurrentSpeakerInfo().speaking_rate)} wpm</p>
-              )}
-              {getCurrentSpeakerInfo()?.brightness && (
-                <p><strong>Brightness:</strong> {getCurrentSpeakerInfo().brightness.toFixed(2)}</p>
+              <p><strong>Gender:</strong> {getCurrentSpeakerInfo()?.gender === 'F' ? 'Female' : getCurrentSpeakerInfo()?.gender === 'M' ? 'Male' : 'Unknown'}</p>
+              
+              {/* Numeric characteristics */}
+              <div class="voice-characteristics">
+                {getCurrentSpeakerInfo()?.pitch_mean && (
+                  <div class="characteristic">
+                    <span class="label">Avg Pitch:</span>
+                    <span class="value">{Math.round(getCurrentSpeakerInfo().pitch_mean)} Hz</span>
+                  </div>
+                )}
+                {getCurrentSpeakerInfo()?.speaking_rate && (
+                  <div class="characteristic">
+                    <span class="label">Speaking Rate:</span>
+                    <span class="value">{Math.round(getCurrentSpeakerInfo().speaking_rate)} wpm</span>
+                  </div>
+                )}
+                {getCurrentSpeakerInfo()?.brightness && (
+                  <div class="characteristic">
+                    <span class="label">Brightness:</span>
+                    <span class="value">{getCurrentSpeakerInfo().brightness.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Rich tags display */}
+              {getCurrentSpeakerInfo()?.tags && getCurrentSpeakerInfo()?.tags.length > 0 && (
+                <div class="voice-tags">
+                  <p><strong>Voice Traits:</strong></p>
+                  <div class="tags-list">
+                    {getCurrentSpeakerInfo().tags.map((tag: string) => (
+                      <span class="voice-tag">{tag}</span>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
