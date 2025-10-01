@@ -328,16 +328,26 @@ export const PDFViewer: Component = () => {
           title="Menu"
           class="rail-btn"
           align="start"
-          containerClass={(() => {
-            // Flag dropdown error state: for Browser TTS when no voices available and lastError present
-            const browserError = (
+          selectedValues={['pdf', selectedModel()]}
+          errorValues={(() => {
+            const errors: string[] = []
+            // Add Browser TTS to errors if no voices available and lastError present
+            if (
               selectedModel() === 'Browser TTS' &&
               'speechSynthesis' in window &&
               (ttsState().systemVoices || []).length === 0 &&
               !!ttsState().lastError &&
               ttsState().engine !== 'browser'
-            )
-            return browserError ? 'error-select' : ''
+            ) {
+              errors.push('Browser TTS')
+            }
+            // Add models with WebGPU requirement but no WebGPU support
+            models.forEach(m => {
+              if (m.requiresWebGPU && !ttsState().isWebGPUSupported && m.name === selectedModel()) {
+                errors.push(m.name)
+              }
+            })
+            return errors
           })()}
           icon={(
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

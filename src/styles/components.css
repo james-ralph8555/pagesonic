@@ -181,6 +181,24 @@
   color: #fecaca;
 }
 
+/* Individual item error state */
+.glass-menu-item.error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.glass-menu-item.error.active {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fecaca;
+}
+
+.glass-menu-item.error:hover:not(.disabled):not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
 /* Settings (subset retained; rest below) */
 .settings-view { display: flex; flex-direction: column; gap: 2rem; padding: 1rem; }
 .settings-section { padding: 1.5rem; border-radius: 12px; background: var(--glass-bg-strong); border: 1px solid var(--glass-border); backdrop-filter: blur(12px) saturate(160%); -webkit-backdrop-filter: blur(12px) saturate(160%); box-shadow: 0 8px 24px rgba(0,0,0,0.35); }

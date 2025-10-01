@@ -20,6 +20,8 @@ export const GlassDropdownButton: Component<{
   align?: Align
   class?: string
   selectedValue?: string
+  selectedValues?: string[]
+  errorValues?: string[]
   containerClass?: string
 }> = (props) => {
   const [open, setOpen] = createSignal(false)
@@ -60,10 +62,11 @@ export const GlassDropdownButton: Component<{
         // Add header
         elements.push(<div class="glass-menu-title" aria-hidden="true">{item.label}</div>)
       } else {
-        const isActive = props.selectedValue === item.value
+        const isActive = props.selectedValue === item.value || (props.selectedValues && props.selectedValues.includes(item.value))
+        const hasError = props.errorValues && props.errorValues.includes(item.value)
         elements.push(
           <button
-            class={"glass-menu-item" + (isActive ? ' active' : '') + (item.disabled ? ' disabled' : '')}
+            class={"glass-menu-item" + (isActive ? ' active' : '') + (item.disabled ? ' disabled' : '') + (hasError ? ' error' : '')}
             aria-selected={isActive}
             disabled={item.disabled}
             onClick={() => {
