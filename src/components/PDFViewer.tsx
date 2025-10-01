@@ -4,11 +4,14 @@ import { useTTS } from '@/stores/tts'
 import { PDFPage } from './PDFPage'
 import { GlassDropdownButton } from './GlassDropdownButton'
 import { SelectionToolbar } from './SelectionToolbar'
+import { useTheme } from '@/stores/theme'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
   const { state: ttsState, speak, pause, resume, models, loadModel, ensureBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
+  const { theme, setTheme } = useTheme()
+  const logoSrc = () => theme() === 'dark' ? '/pagesonic_full_logo_liquid_dark.svg' : '/pagesonic_full_logo_liquid.svg'
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
@@ -473,7 +476,7 @@ export const PDFViewer: Component = () => {
               <div class="liquid-glass-shadow"></div>
               <div class="liquid-glass-content">
                 <div class="placeholder-logo">
-                  <img src="/pagesonic_full_logo_liquid.svg" alt="PageSonic" />
+                  <img src={logoSrc()} alt="PageSonic" />
                 </div>
                 <h2>Welcome to PageSonic!</h2>
                 <p>Click the menu icon <span class="icon-ref"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"></rect><rect x="14" y="3" width="7" height="7" rx="1"></rect><rect x="3" y="14" width="7" height="7" rx="1"></rect><rect x="14" y="14" width="7" height="7" rx="1"></rect></svg></span> in the top-left corner, then select "Open" to load a PDF file</p>
@@ -579,7 +582,30 @@ export const PDFViewer: Component = () => {
                   {/* Divider between rows */}
                   <div class="glass-menu-separator" style={{ 'grid-column': '1 / -1' }} />
 
-                  {/* Row 3: Play and Pause on same row */}
+                  {/* Row 3: Theme selection */}
+                  <button
+                    class={"glass-menu-item" + (theme() === 'light' ? ' active' : '')}
+                    aria-label="Light theme"
+                    title="Switch to light theme"
+                    onClick={() => setTheme('light')}
+                    style={{ 'grid-column': '1' }}
+                  >
+                    Light
+                  </button>
+                  <button
+                    class={"glass-menu-item" + (theme() === 'dark' ? ' active' : '')}
+                    aria-label="Dark theme"
+                    title="Switch to dark theme"
+                    onClick={() => setTheme('dark')}
+                    style={{ 'grid-column': '2 / span 2' }}
+                  >
+                    Dark
+                  </button>
+
+                  {/* Divider between rows */}
+                  <div class="glass-menu-separator" style={{ 'grid-column': '1 / -1' }} />
+
+                  {/* Row 4: Play and Pause on same row */}
                   <button
                     class="glass-menu-item"
                     aria-label={isPlaying() ? 'Resume' : 'Play'}

@@ -2525,3 +2525,54 @@ button.loaded:disabled::after {
 :root {
   /* Import PDF.js viewer CSS for text layer defaults */
 }
+
+/* Light theme overrides */
+.theme-light {
+  color-scheme: light;
+  color: rgba(17, 17, 24, 0.9);
+  --glass-bg: rgba(0, 0, 0, 0.06);
+  --glass-bg-strong: rgba(0, 0, 0, 0.1);
+  --glass-border: rgba(0, 0, 0, 0.14);
+  --glass-hover: rgba(0, 0, 0, 0.12);
+}
+
+.theme-light body {
+  background:
+    radial-gradient(1200px 600px at 50% -200px, rgba(0,0,0,0.04), rgba(0,0,0,0) 60%),
+    radial-gradient(800px 400px at 10% 10%, rgba(99,102,241,0.12), rgba(0,0,0,0) 60%),
+    radial-gradient(900px 450px at 90% 15%, rgba(236,72,153,0.10), rgba(0,0,0,0) 60%),
+    linear-gradient(180deg, #f7f8fb, #eef1f7);
+}
+
+.theme-light .app-header,
+.theme-light .pdf-top-rail,
+.theme-light .settings-top-rail,
+.theme-light .glass-menu,
+.theme-light .fab-panel {
+  background-color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  color: #111;
+}
+
+.theme-light .app-nav button,
+.theme-light .rail-btn,
+.theme-light .glass-menu-item,
+.theme-light .page-bubble,
+.theme-light .zoom-chip,
+.theme-light .icon-btn,
+.theme-light .reader-controls button,
+.theme-light .settings-section button,
+.theme-light .gender-buttons button,
+.theme-light .tag,
+.theme-light .range-inputs input {
+  color: rgba(17, 17, 24, 0.9);
+}
+
+.theme-light .app-nav button:hover {
+  background-color: var(--glass-hover);
+}
+
+.theme-light .glass-menu-item.disabled,
+.theme-light .glass-menu-item:disabled {
+  opacity: 0.5;
+}

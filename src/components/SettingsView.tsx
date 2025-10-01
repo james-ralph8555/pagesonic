@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect } from 'solid-js'
 import { useTTS } from '@/stores/tts'
+import { useTheme } from '@/stores/theme'
 import { GlassDropdownButton } from './GlassDropdownButton'
 
 export const SettingsView: Component = () => {
@@ -26,6 +27,7 @@ export const SettingsView: Component = () => {
     filterVoicesByBrightnessRange,
     getVoiceMetadataById
   } = useTTS()
+  const { theme, setTheme } = useTheme()
   
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   const [voiceMetadata, setVoiceMetadata] = createSignal<any>(null)
@@ -202,7 +204,21 @@ export const SettingsView: Component = () => {
       <div class="settings-scroll">
         <div class="settings-view">
           <h2>Settings</h2>
-      
+
+      <div class="settings-section">
+        <h3>Appearance</h3>
+        <div class="voice-controls">
+          <label>Theme:</label>
+          <select
+            value={theme()}
+            onChange={(e) => setTheme(((e.target as HTMLSelectElement).value as 'dark' | 'light'))}
+          >
+            <option value="dark">Dark</option>
+            <option value="light">Light</option>
+          </select>
+        </div>
+      </div>
+
       <div class="settings-section">
         <h3>TTS Engine / Model</h3>
         {!ttsState().isWebGPUSupported && (
