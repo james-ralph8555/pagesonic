@@ -334,6 +334,7 @@ body {
   line-height: 1;
   cursor: text;
 }
+.page-bubble .maxpage { font-variant-numeric: tabular-nums; }
 
 /* Center the meta (title + page selector) over the rail; allow shift if title grows */
 .pdf-top-rail { position: fixed; }

@@ -52,6 +52,15 @@ export const PDFViewer: Component = () => {
   const [currentPage, setCurrentPage] = createSignal<number>(1)
   const [pageInput, setPageInput] = createSignal<string>('1')
   let pageInputEl: HTMLInputElement | null = null
+  // Keep current/total page bubbles visually equal width
+  let staticBubbleEl: HTMLDivElement | null = null
+  const [pageBubbleWidth, setPageBubbleWidth] = createSignal<number>(0)
+
+  const measurePageBubble = () => {
+    if (!staticBubbleEl) return
+    const w = staticBubbleEl.offsetWidth || 0
+    if (w && w !== pageBubbleWidth()) setPageBubbleWidth(w)
+  }
 
   const H_PADDING = 16 * 2 // matches .pdf-pages horizontal padding
 
@@ -93,6 +102,8 @@ export const PDFViewer: Component = () => {
     document.addEventListener('scroll', pokeUI, { passive: true })
     // Start hidden after a moment for immersion
     hideTimer = window.setTimeout(() => setShowRail(false), 1500)
+    // Measure page bubble width once content mounts
+    requestAnimationFrame(measurePageBubble)
     
     // Setup IntersectionObserver to drive page visibility
     const setupIO = () => {
@@ -169,6 +180,13 @@ export const PDFViewer: Component = () => {
     }
     document.addEventListener('keydown', onKeyDown)
     onCleanup(() => document.removeEventListener('keydown', onKeyDown))
+  })
+
+  // Re-measure when page count changes (e.g., PDF loaded)
+  createEffect(() => {
+    // Track dependency
+    void pdfState().pages.length
+    requestAnimationFrame(measurePageBubble)
   })
 
   // Seed initial visible pages from current scroll position
@@ -381,7 +399,11 @@ export const PDFViewer: Component = () => {
               <>
                 <span>{pdfState().document?.title || 'Untitled Document'}</span>
                 <div class="page-selector" role="status" aria-live="polite">
-                  <div class="rail-btn page-bubble" aria-label="Current page">
+                  <div
+                    class="rail-btn page-bubble"
+                    style={{ width: pageBubbleWidth() ? `${pageBubbleWidth()}px` : undefined }}
+                    aria-label="Current page"
+                  >
                     <input
                       ref={el => (pageInputEl = el)}
                       class="bubble-input"
@@ -410,12 +432,16 @@ export const PDFViewer: Component = () => {
                         setPageInput(String(v))
                         if (v !== currentPage()) scrollToPage(v)
                       }}
-                      aria-label="Current page"
                       title="Go to page"
                     />
                   </div>
                   <span class="slash">/</span>
-                  <div class="rail-btn page-bubble page-bubble--static" aria-label="Total pages" title="Total pages">
+                  <div
+                    class="rail-btn page-bubble page-bubble--static"
+                    ref={el => (staticBubbleEl = el)}
+                    aria-label="Total pages"
+                    title="Total pages"
+                  >
                     <span class="maxpage">{pdfState().pages.length}</span>
                   </div>
                 </div>
