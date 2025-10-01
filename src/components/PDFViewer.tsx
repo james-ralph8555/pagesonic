@@ -11,7 +11,7 @@ export const PDFViewer: Component = () => {
   const { state: ttsState, speak, pause, resume, models, loadModel, ensureBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
   const { theme, setTheme } = useTheme()
-  const logoSrc = () => theme() === 'dark' ? '/pagesonic_full_logo_liquid_dark.svg' : '/pagesonic_full_logo_liquid.svg'
+  const logoSrc = () => theme() === 'dark' ? '/pagesonic_full_logo_liquid_dark.webp' : '/pagesonic_full_logo_liquid.webp'
 
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)

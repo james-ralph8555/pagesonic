@@ -1,0 +1,70 @@
+/* Light theme visual overrides: make backgrounds bright and text dark */
+.theme-light {
+  /* Base text and glass variables tuned for light UI */
+  color: rgba(17, 17, 17, 0.95);
+  --glass-bg: rgba(0, 0, 0, 0.06);
+  --glass-bg-strong: rgba(0, 0, 0, 0.08);
+  --glass-border: rgba(0, 0, 0, 0.12);
+  --glass-hover: rgba(0, 0, 0, 0.12);
+}
+
+/* Global background to bright white */
+.theme-light body {
+  background: #ffffff !important;
+}
+
+/* Top chrome elements: make translucent light instead of dark */
+.theme-light .app-header,
+.theme-light .pdf-top-rail,
+.theme-light .settings-top-rail {
+  background-color: rgba(255, 255, 255, 0.8) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  color: #111;
+}
+
+/* Settings scroller background */
+.theme-light .settings-scroll {
+  background: #ffffff !important;
+}
+
+/* PDF scroller background: ensure light surface in light theme */
+.theme-light .pdf-scroll {
+  background: #ffffff !important;
+}
+
+/* Liquid-glass placeholder text should be dark in light theme */
+.theme-light .liquid-glass-placeholder h2 {
+  color: rgba(17, 17, 17, 0.9) !important;
+  text-shadow: 0 0 0 rgba(0,0,0,0); /* remove dark glow */
+}
+
+.theme-light .liquid-glass-placeholder p {
+  color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* Buttons and controls: ensure dark text for readability */
+.theme-light .rail-btn,
+.theme-light .pdf-zoom-controls .zoom-btn,
+.theme-light .pdf-zoom-controls .zoom-toggle,
+.theme-light .app-nav button,
+.theme-light .glass-menu-item {
+  color: #111 !important;
+}
+
+/* Dropdown menu glass panel: switch to light */
+.theme-light .glass-menu {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+/* Selection toolbar: light treatment */
+.theme-light .selection-toolbar {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: #111;
+}
+
+/* Panels that previously relied on dark text color */
+.theme-light .no-document {
+  color: rgba(0, 0, 0, 0.75);
+}

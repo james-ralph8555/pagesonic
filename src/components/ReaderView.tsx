@@ -10,7 +10,7 @@ export const ReaderView: Component = () => {
   const [fontSize, setFontSize] = createSignal(16)
   const [lineHeight] = createSignal(1.6)
   const { theme } = useTheme()
-  const logoSrc = () => theme() === 'dark' ? '/pagesonic_full_logo_liquid_dark.svg' : '/pagesonic_full_logo_liquid.svg'
+  const logoSrc = () => theme() === 'dark' ? '/pagesonic_full_logo_liquid_dark.webp' : '/pagesonic_full_logo_liquid.webp'
   
   const handlePlay = () => {
     const text = getAllExtractedText()

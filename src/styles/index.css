@@ -4,3 +4,5 @@
 @import './components.css';
 /* Temporary: include legacy consolidated styles until fully split */
 @import '../index.css';
+/* Light theme overrides must come last to ensure precedence */
+@import './theme-overrides.css';

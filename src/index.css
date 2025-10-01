@@ -1048,6 +1048,8 @@ body {
 .placeholder-logo {
   display: inline-block;
   margin-bottom: 1.25rem;
+  /* Add gentle horizontal padding so the logo breathes */
+  padding: 0 12px;
 }
 
 .placeholder-logo img {
