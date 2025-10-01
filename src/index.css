@@ -491,31 +491,88 @@ body {
 
 /* Placeholder to reserve layout space before page renders */
 .pdf-page-placeholder {
+  /* sizing comes from inline width/height */
   display: block;
   max-width: 100%;
   height: auto;
   position: relative;
   z-index: 0;
   border-radius: 8px;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border);
   overflow: hidden;
+
+  /* liquid glass base (match rail/bubble tone) */
+  --border-width: clamp(1px, 0.09375em, 4px);
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.06)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 12px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
 }
 
+/* liquid glass glare */
 .pdf-page-placeholder::before {
   content: '';
   position: absolute;
-  inset: 0;
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
-  background: rgba(255, 255, 255, 0.06);
-  animation: pulseGlass 1.8s ease-in-out infinite;
+  z-index: 1;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  border-radius: inherit;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 40% 52%,
+    rgba(255, 255, 255, 0) 58%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  /* gentle idle motion to suggest loading */
+  animation: placeholderGlare 2.4s ease-in-out infinite;
 }
 
-@keyframes pulseGlass {
-  0%, 100% { background: rgba(255, 255, 255, 0.06); }
-  50% { background: rgba(255, 255, 255, 0.12); }
+@keyframes placeholderGlare {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 30% 45%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* subtle outline ring using conic gradient (like rail/bubble) */
+.pdf-page-placeholder::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background: conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.45);
+  pointer-events: none;
 }
 
 /* Text layer container overlay */
