@@ -70,35 +70,94 @@ export const playPCM = async (
 ): Promise<PlayHandle> => {
   const ctx = ensureAudioContext(opts?.audioContext || null)
   const pcm = sanitizeAndNormalize(pcmIn)
+  
+  // iOS-specific: Handle sample rate differences more gracefully
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  let targetSampleRate = sampleRate
+  
+  if (isIOS && Math.abs(sampleRate - ctx.sampleRate) > 100) {
+    // Resample to match AudioContext sample rate on iOS to avoid issues
+    targetSampleRate = ctx.sampleRate
+    console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz`)
+  }
+  
   const buffer = ctx.createBuffer(1, pcm.length, sampleRate)
   buffer.getChannelData(0).set(pcm)
+  
+  // If resampling is needed, create a new buffer at the target rate
+  let finalBuffer = buffer
+  if (targetSampleRate !== sampleRate) {
+    const ratio = targetSampleRate / sampleRate
+    const newLength = Math.floor(pcm.length * ratio)
+    finalBuffer = ctx.createBuffer(1, newLength, targetSampleRate)
+    
+    // Simple linear interpolation for resampling
+    const oldData = buffer.getChannelData(0)
+    const newData = finalBuffer.getChannelData(0)
+    for (let i = 0; i < newLength; i++) {
+      const srcIndex = i / ratio
+      const srcIndexInt = Math.floor(srcIndex)
+      const fraction = srcIndex - srcIndexInt
+      
+      if (srcIndexInt < oldData.length - 1) {
+        newData[i] = oldData[srcIndexInt] * (1 - fraction) + oldData[srcIndexInt + 1] * fraction
+      } else {
+        newData[i] = oldData[srcIndexInt] || 0
+      }
+    }
+  }
+  
   const src = ctx.createBufferSource()
-  src.buffer = buffer
+  src.buffer = finalBuffer
   if (opts?.playbackRate && opts.playbackRate > 0) {
     src.playbackRate.value = opts.playbackRate
   }
-  src.connect(ctx.destination)
+  
+  // iOS-specific: Add gain node for better volume control
+  if (isIOS) {
+    const gainNode = ctx.createGain()
+    gainNode.gain.value = 0.8 // Slightly reduce volume to prevent clipping
+    src.connect(gainNode)
+    gainNode.connect(ctx.destination as AudioDestinationNode)
+    console.log('[Audio] iOS: Added gain node for volume control')
+  } else {
+    src.connect(ctx.destination as AudioDestinationNode)
+  }
   
   // iOS-specific: Ensure context is resumed before starting playback
   if (ctx.state === 'suspended') {
-    await ctx.resume().catch(err => {
+    try {
+      console.log('[Audio] Resuming suspended AudioContext...')
+      await ctx.resume()
+      // Give iOS a moment to properly transition to running state
+      if (isIOS) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      console.log('[Audio] Context resumed successfully, state:', ctx.state)
+    } catch (err) {
       console.warn('[Audio] Failed to resume suspended context:', err)
-    })
+      throw err
+    }
   }
   
-  // Add a small delay for iOS to ensure context is fully ready
-  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-    await new Promise(resolve => setTimeout(resolve, 10))
+  // Additional delay for iOS to ensure context is fully ready
+  if (isIOS) {
+    await new Promise(resolve => setTimeout(resolve, 25))
   }
   
+  console.log(`[Audio] Starting playback - samples: ${finalBuffer.length}, sampleRate: ${finalBuffer.sampleRate}`)
   src.start()
+  
   src.onended = () => {
+    console.log('[Audio] Playback completed')
     try { opts?.onEnded?.() } catch {}
   }
+  
   const handle: PlayHandle = {
     context: ctx,
     source: src,
     stop: () => {
+      console.log('[Audio] Manual stop requested')
       try { src.onended = null } catch {}
       try { src.stop() } catch {}
     }
@@ -119,4 +178,97 @@ export const resume = async (ctx?: AudioContext | null) => {
 export const close = async (ctx?: AudioContext | null) => {
   if (!ctx) return
   try { if (ctx.state !== 'closed') await ctx.close() } catch {}
+}
+
+// Test tone generation for debugging audio pipeline
+export const generateTestTone = (frequency: number = 440, duration: number = 1.0, sampleRate: number = 22050): Float32Array => {
+  const samples = Math.floor(duration * sampleRate)
+  const tone = new Float32Array(samples)
+  
+  for (let i = 0; i < samples; i++) {
+    const t = i / sampleRate
+    // Generate sine wave with envelope to avoid clicks
+    const envelope = Math.sin(Math.PI * i / samples) * 0.5 // Smooth envelope
+    tone[i] = Math.sin(2 * Math.PI * frequency * t) * envelope * 0.3 // Low volume
+  }
+  
+  return tone
+}
+
+// Enhanced debug version of playPCM with detailed logging
+export const playPCMDebug = async (
+  pcmIn: Float32Array,
+  sampleRate: number,
+  label: string = 'audio',
+  opts?: { playbackRate?: number; onEnded?: () => void; audioContext?: AudioContext }
+): Promise<PlayHandle> => {
+  console.log(`[Audio Debug] 🎵 Starting playback of ${label}: ${pcmIn.length} samples at ${sampleRate}Hz`)
+  
+  const ctx = ensureAudioContext(opts?.audioContext || null)
+  console.log(`[Audio Debug] AudioContext state: ${ctx.state}, sampleRate: ${ctx.sampleRate}`)
+  
+  const pcm = sanitizeAndNormalize(pcmIn)
+  
+  // Analyze the audio data
+  const maxValue = Math.max(...pcm.map(Math.abs))
+  const avgValue = pcm.reduce((sum, val) => sum + Math.abs(val), 0) / pcm.length
+  console.log(`[Audio Debug] 📊 Audio analysis - max: ${maxValue.toFixed(4)}, avg: ${avgValue.toFixed(4)}`)
+  
+  if (maxValue < 0.0001) {
+    console.warn('[Audio Debug] ⚠️ WARNING: Audio data appears to be silent or near-silent')
+  }
+  
+  const buffer = ctx.createBuffer(1, pcm.length, sampleRate)
+  buffer.getChannelData(0).set(pcm)
+  const src = ctx.createBufferSource()
+  src.buffer = buffer
+  if (opts?.playbackRate && opts.playbackRate > 0) {
+    src.playbackRate.value = opts.playbackRate
+  }
+  src.connect(ctx.destination)
+  
+  console.log(`[Audio Debug] 🔗 Connected buffer source to AudioContext destination`)
+  
+  // iOS-specific: Ensure context is resumed before starting playback
+  if (ctx.state === 'suspended') {
+    console.log('[Audio Debug] Resuming suspended AudioContext...')
+    try {
+      await ctx.resume()
+      // Give iOS a moment to properly transition to running state
+      if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+      console.log('[Audio Debug] ✅ Context resumed successfully, state:', ctx.state)
+    } catch (err) {
+      console.warn('[Audio Debug] ❌ Failed to resume suspended context:', err)
+      throw err
+    }
+  }
+  
+  // Additional delay for iOS to ensure context is fully ready
+  if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
+    await new Promise(resolve => setTimeout(resolve, 10))
+  }
+  
+  const startTime = ctx.currentTime
+  src.start()
+  console.log(`[Audio Debug] ▶️ Started playback at context time: ${startTime}`)
+  
+  src.onended = () => {
+    const endTime = ctx.currentTime
+    const actualDuration = endTime - startTime
+    console.log(`[Audio Debug] ✅ Playback completed - actual duration: ${actualDuration.toFixed(3)}s`)
+    try { opts?.onEnded?.() } catch {}
+  }
+  
+  const handle: PlayHandle = {
+    context: ctx,
+    source: src,
+    stop: () => {
+      console.log(`[Audio Debug] ⏹️ Manual stop requested for ${label}`)
+      try { src.onended = null } catch {}
+      try { src.stop() } catch {}
+    }
+  }
+  return handle
 }

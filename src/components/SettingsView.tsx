@@ -25,9 +25,16 @@ export const SettingsView: Component = () => {
     filterVoicesByPitchRange,
     filterVoicesByRateRange,
     filterVoicesByBrightnessRange,
-    getVoiceMetadataById
+    // iOS-specific helpers
+    getAudioState,
+    unlockAudioIOS,
+    // Testing
+    playTestTone
   } = useTTS()
   const { theme, setTheme } = useTheme()
+  
+  // Helper to access debug log from global scope
+  const getDebugLog = () => (typeof window !== 'undefined' ? (window as any).__ios_debug_log || [] : [])
   
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   const [voiceMetadata, setVoiceMetadata] = createSignal<any>(null)
@@ -63,9 +70,9 @@ export const SettingsView: Component = () => {
       
       // Set initial ranges based on actual data
       if (metadata.length > 0) {
-        const pitches = metadata.map(s => s.pitch_mean).filter(p => p !== null && p !== undefined)
-        const rates = metadata.map(s => s.speaking_rate).filter(r => r !== null && r !== undefined)
-        const brightnesses = metadata.map(s => s.brightness).filter(b => b !== null && b !== undefined)
+        const pitches = metadata.map((s: any) => s.pitch_mean).filter((p: any) => p !== null && p !== undefined)
+        const rates = metadata.map((s: any) => s.speaking_rate).filter((r: any) => r !== null && r !== undefined)
+        const brightnesses = metadata.map((s: any) => s.brightness).filter((b: any) => b !== null && b !== undefined)
         
         if (pitches.length > 0) {
           setPitchRange({ min: Math.min(...pitches), max: Math.max(...pitches) })
@@ -129,9 +136,9 @@ export const SettingsView: Component = () => {
     // Reset ranges to full range
     const speakers = allSpeakers()
     if (speakers.length > 0) {
-      const pitches = speakers.map(s => s.pitch_mean).filter(p => p !== null && p !== undefined)
-      const rates = speakers.map(s => s.speaking_rate).filter(r => r !== null && r !== undefined)
-      const brightnesses = speakers.map(s => s.brightness).filter(b => b !== null && b !== undefined)
+      const pitches = speakers.map((s: any) => s.pitch_mean).filter((p: any) => p !== null && p !== undefined)
+      const rates = speakers.map((s: any) => s.speaking_rate).filter((r: any) => r !== null && r !== undefined)
+      const brightnesses = speakers.map((s: any) => s.brightness).filter((b: any) => b !== null && b !== undefined)
       
       if (pitches.length > 0) {
         setPitchRange({ min: Math.min(...pitches), max: Math.max(...pitches) })
@@ -534,13 +541,14 @@ export const SettingsView: Component = () => {
           {(() => {
             const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
             if (isiOS) {
-              const audioState = ttsState().audioState
+              const audioState = getAudioState()
               return (
                 <div style={{ 'margin-top': '1rem', 'padding': '0.75rem', 'background': '#f0f4f8', 'border-radius': '4px', 'font-size': '0.9em' }}>
                   <h4 style={{ 'margin-bottom': '0.5rem', 'color': '#2563eb' }}>📱 iOS Debug Information</h4>
                   <p><strong>User Agent:</strong> {navigator.userAgent}</p>
-                  <p><strong>Audio Context State:</strong> {audioState?.contextState || 'Unknown'}</p>
-                  <p><strong>Audio Unlocked:</strong> {audioState?.audioUnlocked ? 'Yes ✅' : 'No ❌'}</p>
+                  <p><strong>iOS Detected:</strong> {audioState?.isIOS ? 'Yes ✅' : 'No ❌'}</p>
+                  <p><strong>Audio Context State:</strong> {audioState?.audioContextState || 'Unknown'}</p>
+                  <p><strong>Audio Unlocked:</strong> {audioState?.isAudioUnlocked ? 'Yes ✅' : 'No ❌'}</p>
                   <p><strong>Current Engine:</strong> {ttsState().engine}</p>
                   <p><strong>Web Audio Support:</strong> {typeof window !== 'undefined' && 'AudioContext' in window ? 'Yes' : 'No'}</p>
                   <p><strong>Speech Synthesis Support:</strong> {typeof window !== 'undefined' && 'speechSynthesis' in window ? 'Yes' : 'No'}</p>
@@ -550,27 +558,97 @@ export const SettingsView: Component = () => {
                   {ttsState().lastError && (
                     <p style={{ 'color': '#dc2626' }}><strong>Last TTS Error:</strong> {ttsState().lastError}</p>
                   )}
-                  <button 
-                    onClick={() => {
-                      console.log('[iOS Debug] Manual audio unlock triggered')
-                      if (typeof window !== 'undefined' && (window as any).triggerAudioUnlock) {
-                        ;(window as any).triggerAudioUnlock()
-                      }
-                    }}
-                    style={{ 'margin-top': '0.5rem', 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
-                  >
-                    Manual Audio Unlock
-                  </button>
-                  <button 
-                    onClick={() => {
-                      console.log('[iOS Debug] Audio state check:', audioState)
-                      console.log('[iOS Debug] TTS state:', ttsState())
-                      alert(`Audio Context: ${audioState?.contextState || 'unknown'}\nAudio Unlocked: ${audioState?.audioUnlocked ? 'yes' : 'no'}\nEngine: ${ttsState().engine}`)
-                    }}
-                    style={{ 'margin-top': '0.5rem', 'margin-left': '0.5rem', 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
-                  >
-                    Check State
-                  </button>
+                  <div style={{ 'margin-top': '0.5rem', 'display': 'flex', 'gap': '0.5rem', 'flex-wrap': 'wrap' }}>
+                    <button 
+                      onClick={async () => {
+                        console.log('[iOS Debug] Manual audio unlock triggered')
+                        try {
+                          const success = await unlockAudioIOS()
+                          console.log('[iOS Debug] Manual unlock result:', success)
+                          alert(`Audio unlock ${success ? 'succeeded ✅' : 'failed ❌'}`)
+                        } catch (error) {
+                          console.error('[iOS Debug] Manual unlock error:', error)
+                          alert(`Audio unlock failed: ${error}`)
+                        }
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                    >
+                      Manual Audio Unlock
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        console.log('[iOS Debug] Playing test tone...')
+                        try {
+                          await playTestTone(440, 1.5) // 440Hz for 1.5 seconds
+                          alert('Test tone playback completed! 🎵')
+                        } catch (error) {
+                          console.error('[iOS Debug] Test tone failed:', error)
+                          alert(`Test tone failed: ${error}`)
+                        }
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em', 'background-color': '#4CAF50', 'color': 'white' }}
+                    >
+                      Play Test Tone (440Hz)
+                    </button>
+                    <button 
+                      onClick={() => {
+                        console.log('[iOS Debug] Audio state check:', audioState)
+                        console.log('[iOS Debug] TTS state:', ttsState())
+                        alert(`Audio Context: ${audioState?.audioContextState || 'unknown'}\nAudio Unlocked: ${audioState?.isAudioUnlocked ? 'yes' : 'no'}\nEngine: ${ttsState().engine}\niOS Detected: ${audioState?.isIOS ? 'yes' : 'no'}`)
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                    >
+                      Check State
+                    </button>
+                    <button 
+                      onClick={() => {
+                        console.log('[iOS Debug] Testing silent audio play...')
+                        // Test audio context creation and silent buffer playback
+                        if (typeof window !== 'undefined' && 'AudioContext' in window) {
+                          try {
+                            const ctx = new AudioContext()
+                            const silentBuffer = ctx.createBuffer(1, 1, ctx.sampleRate)
+                            const source = ctx.createBufferSource()
+                            source.buffer = silentBuffer
+                            source.connect(ctx.destination)
+                            source.start(0)
+                            console.log('[iOS Debug] Silent audio test successful')
+                            alert('Silent audio test successful ✅')
+                          } catch (error) {
+                            console.error('[iOS Debug] Silent audio test failed:', error)
+                            alert(`Silent audio test failed: ${error}`)
+                          }
+                        } else {
+                          alert('Web Audio API not supported')
+                        }
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                    >
+                      Test Silent Audio
+                    </button>
+                    <button 
+                      onClick={() => {
+                        const log = audioState?.debugLog || []
+                        const logText = log.length > 0 ? log.slice(-10).join('\n') : 'No debug log entries'
+                        alert(`Debug Log (last 10 entries):\n${logText}`)
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                    >
+                      Show Debug Log
+                    </button>
+                    <button 
+                      onClick={() => {
+                        if (confirm('Clear debug log?')) {
+                          const log = getDebugLog()
+                          log.length = 0
+                          alert('Debug log cleared')
+                        }
+                      }}
+                      style={{ 'padding': '0.25rem 0.5rem', 'font-size': '0.85em' }}
+                    >
+                      Clear Log
+                    </button>
+                  </div>
                 </div>
               )
             }
