@@ -913,6 +913,13 @@ export const useTTS = () => {
           addToDebugLog(`🎵 Starting WebAudio playback: ${f32.length} samples at ${sr}Hz`)
           addToDebugLog(`🎛️ Playback rate: ${playbackRate}, AudioContext state: ${audioCtx.state}`)
           
+          // Enhanced logging for iOS Safari debugging
+          if (isiOS) {
+            addToDebugLog('🍎 iOS Safari WebAudio playback initiated')
+            addToDebugLog(`📱 Context sampleRate: ${audioCtx.sampleRate}Hz, Audio sampleRate: ${sr}Hz`)
+            addToDebugLog(`🔄 Resampling needed: ${Math.abs(sr - audioCtx.sampleRate) > 100 ? 'Yes' : 'No'}`)
+          }
+          
           ;(async () => {
             try {
               // Final context state check for iOS
