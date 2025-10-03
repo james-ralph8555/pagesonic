@@ -21,8 +21,6 @@ const [state, setState] = createSignal<TTSState>({
   isWebGPUSupported: false,
   lastError: null,
   systemVoices: [],
-  phonemizer: 'auto',
-  espeakTimeoutMs: 4000,
   // Chunking/config params (tunable in Settings)
   chunkMaxChars: 280,
   chunkOverlapChars: 24,
@@ -31,17 +29,27 @@ const [state, setState] = createSignal<TTSState>({
   targetSampleRate: 22050
 })
 
-// Available TTS models
-const MODELS: TTSModel[] = [
-  {
-    name: 'Piper TTS',
-    size: 75, // 75MB
-    // Actual voices are loaded from voices.json at init time
-    voices: [],
-    requiresWebGPU: false,
-    url: '/tts-model/en_US-libritts_r-medium.onnx'
+// Available TTS models (filtered based on platform)
+const getAvailableModels = (): TTSModel[] => {
+  // On iOS Safari, exclude Piper TTS
+  if (isIOSDevice()) {
+    return []
   }
-]
+  
+  return [
+    {
+      name: 'Piper TTS',
+      size: 75, // 75MB
+      // Actual voices are loaded from voices.json at init time
+      voices: [],
+      requiresWebGPU: false,
+      url: '/tts-model/en_US-libritts_r-medium.onnx'
+    }
+  ]
+}
+
+// Legacy constant for compatibility
+const MODELS = getAvailableModels()
 
 export const useTTS = () => {
   // Make TTS store globally available for audio utilities
@@ -186,15 +194,7 @@ export const useTTS = () => {
     ensureSystemVoices()
   }
   
-  // Phonemizer preference setters
-  const setPhonemizer = async (mode: 'auto' | 'espeak' | 'text') => {
-    setState(prev => ({ ...prev, phonemizer: mode }))
-    try { await setPref('tts.phonemizer', mode) } catch {}
-  }
-  const setEspeakTimeoutMs = (ms: number) => {
-    setState(prev => ({ ...prev, espeakTimeoutMs: Math.max(500, Math.min(ms || 0, 10000)) }))
-  }
-
+  
   // --- Piper TTS Integration ---
   const initPiperTTS = async () => {
     if (isPiperInitialized()) return
@@ -593,9 +593,14 @@ export const useTTS = () => {
       }
       
       const pref = await getPref<any>('tts.selected')
-      const ph = await getPref<'auto' | 'espeak' | 'text'>('tts.phonemizer')
-      if (ph) setState(prev => ({ ...prev, phonemizer: ph }))
-      if (!pref) return
+      if (!pref) {
+        // Auto-load Piper TTS on non-iOS devices by default
+        const availableModels = getAvailableModels()
+        if (availableModels.length > 0) {
+          await loadModel(availableModels[0].name)
+        }
+        return
+      }
       if (pref.engine === 'browser') {
         await ensureBrowserEngine()
       } else if (pref.engine === 'local' && typeof pref.model === 'string' && pref.model) {
@@ -826,14 +831,12 @@ export const useTTS = () => {
       
       piperWorker.addEventListener('message', onMessage as any)
       
-      const phonemeType = state().phonemizer === 'auto' ? undefined : state().phonemizer
       const synthesisRequest = {
         type: 'generate',
         text: cleaned,
         speakerId,
         speed: state().rate,
-        phonemeType,
-        espeakTimeoutMs: state().espeakTimeoutMs
+        phonemeType: 'espeak'
       }
       
       console.log('[TTS] Sending synthesis request to worker')
@@ -1043,8 +1046,6 @@ export const useTTS = () => {
     state,
     models: MODELS,
     loadModel,
-    setPhonemizer,
-    setEspeakTimeoutMs,
     selectBrowserEngine,
     ensureBrowserEngine,
     primeSystemVoices,

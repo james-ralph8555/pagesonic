@@ -4,8 +4,8 @@ import { PiperLikeTTS, RawAudio } from "./core";
 let tts: PiperLikeTTS | null = null;
 
 type InitMsg = { type: "init"; modelURL: string; cfgURL: string };
-type GenMsg  = { type: "generate"; text: string; speakerId?: number; speed?: number; phonemeType?: 'espeak' | 'text'; espeakTimeoutMs?: number };
-type PrevMsg = { type: "preview"; text: string; speakerId?: number; speed?: number; phonemeType?: 'espeak' | 'text'; espeakTimeoutMs?: number };
+type GenMsg  = { type: "generate"; text: string; speakerId?: number; speed?: number };
+type PrevMsg = { type: "preview"; text: string; speakerId?: number; speed?: number };
 type Msg = InitMsg | GenMsg | PrevMsg;
 
 self.addEventListener("message", async (e: MessageEvent<any>) => {
@@ -31,7 +31,7 @@ self.addEventListener("message", async (e: MessageEvent<any>) => {
 
     if (mm.type === "preview") {
       let first: RawAudio | null = null;
-      for await (const { audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale, phonemeTypeOverride: (mm as any).phonemeType, espeakTimeoutMs: (mm as any).espeakTimeoutMs })) {
+      for await (const { audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale })) {
         first = audio; break;
       }
       if (first) (self as any).postMessage({ status: "preview", audio: first.toWavBlob() });
@@ -40,7 +40,7 @@ self.addEventListener("message", async (e: MessageEvent<any>) => {
 
     if (mm.type === "generate") {
       const chunks: RawAudio[] = [];
-      for await (const { text, audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale, phonemeTypeOverride: (mm as any).phonemeType, espeakTimeoutMs: (mm as any).espeakTimeoutMs })) {
+      for await (const { text, audio } of tts.stream(mm.text, { speakerId: (mm as any).speakerId, lengthScale })) {
         // Send both a WAV Blob (fallback) and a copy of Float32Array buffer for WebAudio consumers
         const wav = audio.toWavBlob();
         const f32Copy = new Float32Array(audio.audio); // copy to avoid detached ArrayBuffer

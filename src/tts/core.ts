@@ -2,7 +2,7 @@ import * as ort from "onnxruntime-web";
 import { cleanForTTS } from "./textCleaner";
 import { chunkText } from "./chunker";
 import { cachedFetchArrayBuffer, cachedFetchJSON } from "./modelCache";
-import { textToPhonemeSentencesEspeak, textToPhonemeSentencesText } from "./phonemes";
+import { textToPhonemeSentencesEspeak } from "./phonemes";
 import { mapPhonemesToIds } from "./ids";
 
 export type TTSConfig = {
@@ -63,30 +63,12 @@ export class PiperLikeTTS {
     return entries.map(([,id]) => ({ id, name: `Voice ${id+1}` }));
   }
 
-  async synthesizeChunk(text: string, opts?: { speakerId?: number; lengthScale?: number; noiseScale?: number; noiseWScale?: number; phonemeTypeOverride?: 'espeak' | 'text'; espeakTimeoutMs?: number }): Promise<RawAudio> {
+  async synthesizeChunk(text: string, opts?: { speakerId?: number; lengthScale?: number; noiseScale?: number; noiseWScale?: number }): Promise<RawAudio> {
     // Skip synthesis for empty or non-speakable chunks to avoid ORT shape {0}
     if (!text.trim()) return new RawAudio(new Float32Array(0), this.getSampleRate());
 
-    // Prefer espeak phonemization when configured, but add a safe timeout + fallback on iOS/Safari
-    const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-    const useEspeak = (opts?.phonemeTypeOverride ?? this.cfg.phoneme_type) === 'espeak'
-    let sentences: string[][]
-    if (useEspeak) {
-      try {
-        const timeoutMs = opts?.espeakTimeoutMs ?? (isiOS ? 1500 : 4000)
-        const res = await Promise.race([
-          textToPhonemeSentencesEspeak(text),
-          new Promise<never>((_, rej) => setTimeout(() => rej(new Error('phonemizer timeout')), timeoutMs))
-        ])
-        // If we got here, phonemizer returned successfully
-        sentences = res as unknown as string[][]
-      } catch {
-        // Fall back to simple text-based phonemes if espeak fails or times out
-        sentences = textToPhonemeSentencesText(text)
-      }
-    } else {
-      sentences = textToPhonemeSentencesText(text)
-    }
+    // Always use eSpeak phonemization (simplified flow)
+    const sentences = await textToPhonemeSentencesEspeak(text)
 
     const ids32 = mapPhonemesToIds(sentences, this.cfg.phoneme_id_map);
     // If cleaning/phonemization produced no tokens (e.g., punctuation-only), return silence
@@ -122,7 +104,7 @@ export class PiperLikeTTS {
     return new RawAudio(f32, this.getSampleRate());
   }
 
-  async *stream(text: string, opts?: { speakerId?: number; lengthScale?: number; noiseScale?: number; noiseWScale?: number; phonemeTypeOverride?: 'espeak' | 'text'; espeakTimeoutMs?: number }) {
+  async *stream(text: string, opts?: { speakerId?: number; lengthScale?: number; noiseScale?: number; noiseWScale?: number }) {
     const cleaned = cleanForTTS(text);
     for (const chunk of chunkText(cleaned)) {
       const audio = await this.synthesizeChunk(chunk, opts);

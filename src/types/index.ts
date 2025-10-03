@@ -40,10 +40,6 @@ export interface TTSState {
   lastError?: string | null
   // Available system voices for browser SpeechSynthesis
   systemVoices?: string[]
-  // Phonemizer preference: auto chooses model cfg with safe fallbacks on iOS
-  phonemizer?: 'auto' | 'espeak' | 'text'
-  // Optional timeout override for eSpeak phonemizer (ms)
-  espeakTimeoutMs?: number
   // Chunking / synthesis parameters
   chunkMaxChars?: number
   chunkOverlapChars?: number
