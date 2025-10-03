@@ -4,12 +4,16 @@ import { SettingsView } from './components/SettingsView'
 import { LibraryView } from './components/LibraryView'
 import { AppMode } from './types'
 import { useLibrary } from './stores/library'
+import { useTheme } from './stores/theme'
 
 export const App: Component = () => {
   const [currentMode, setCurrentMode] = createSignal<AppMode>('pdf')
   
   // Initialize library once at app level, not component level
   const { initialize } = useLibrary()
+  
+  // Initialize theme to ensure CSS variables are set
+  const { theme } = useTheme()
   
   onMount(() => {
     const handler = (e: Event) => {

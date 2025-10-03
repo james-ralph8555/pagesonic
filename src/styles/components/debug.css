@@ -2,8 +2,8 @@
 
 /* Main Debug Panel */
 .debug-panel {
-  background: #f8f9fa;
-  border: 1px solid #e9ecef;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
@@ -13,22 +13,22 @@
   margin: 0 0 0.75rem 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #495057;
-  border-bottom: 1px solid #dee2e6;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--glass-border);
   padding-bottom: 0.5rem;
 }
 
 /* Debug Labels and Values */
 .debug-label {
   font-weight: 500;
-  color: #495057;
+  color: var(--text-primary);
   font-size: 0.85rem;
 }
 
 .debug-value {
   font-family: monospace;
   font-size: 0.8rem;
-  color: #6c757d;
+  color: var(--text-secondary);
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -85,40 +85,40 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem;
-  background: white;
+  background: var(--glass-bg);
   border-radius: 4px;
-  border: 1px solid #e9ecef;
+  border: 1px solid var(--glass-border);
 }
 
 .debug-item .label {
   font-weight: 500;
-  color: #495057;
+  color: var(--text-primary);
   font-size: 0.85rem;
 }
 
 .debug-item .value {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
   font-size: 0.8rem;
-  color: #212529;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
 /* Settings Panel - Base style for all settings sections */
 .settings-panel {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
   border-radius: 8px;
   padding: 1rem;
   margin-bottom: 1rem;
-  color: #e2e8f0;
+  color: var(--text-primary);
 }
 
 .settings-panel h4 {
   margin: 0 0 0.75rem 0;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #e2e8f0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--glass-border);
   padding-bottom: 0.5rem;
 }
 

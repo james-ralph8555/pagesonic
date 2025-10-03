@@ -52,7 +52,7 @@
   display: block; 
   font-size: 0.9rem; 
   font-weight: 500; 
-  color: rgba(255, 255, 255, 0.9); 
+  color: var(--text-primary); 
   margin-bottom: 0.25rem;
 }
 
@@ -65,7 +65,7 @@
   border-radius: 6px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg);
-  color: #fff;
+  color: var(--text-primary);
   font-size: 0.9rem;
   backdrop-filter: blur(10px) saturate(160%);
   -webkit-backdrop-filter: blur(10px) saturate(160%);
@@ -76,12 +76,12 @@
 .dropdown input:focus {
   outline: none;
   border-color: var(--brand);
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--glass-bg-strong);
 }
 
 .dropdown select option {
-  background: rgba(17, 17, 24, 0.95);
-  color: #fff;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 /* Checkboxes */
@@ -104,7 +104,7 @@
 /* Dropdown Spans */
 .dropdown span {
   font-size: 0.85rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-left: 0.5rem;
 }
 
@@ -117,8 +117,8 @@
   border-radius: 10px; 
   backdrop-filter: blur(12px) saturate(160%); 
   -webkit-backdrop-filter: blur(12px) saturate(160%); 
-  background-color: rgba(17, 17, 24, 0.85); 
-  border: 1px solid rgba(255, 255, 255, 0.12); 
+  background-color: var(--glass-bg-strong); 
+  border: 1px solid var(--glass-border); 
   box-shadow: 0 8px 24px rgba(0,0,0,0.35); 
   z-index: 60; 
 }
@@ -140,7 +140,7 @@
   border-radius: 8px; 
   border: 1px solid transparent; 
   background: transparent; 
-  color: #fff; 
+  color: var(--text-primary); 
   cursor: pointer; 
 }
 
@@ -158,27 +158,27 @@
 /* Error variant: selected item shows red when dropdown flagged */
 .dropdown.error-select .glass-menu-item.active,
 .dropdown.error-select .glass-menu-item:hover.active {
-  background: rgba(239, 68, 68, 0.28);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #fecaca;
+  background: var(--error-bg);
+  border-color: var(--error-border);
+  color: var(--error);
 }
 
 /* Individual item error state */
 .glass-menu-item.error {
-  background: rgba(239, 68, 68, 0.15);
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #fca5a5;
+  background: var(--error-bg);
+  border-color: var(--error-border);
+  color: var(--error);
 }
 
 .glass-menu-item.error.active {
-  background: rgba(239, 68, 68, 0.35);
-  border-color: rgba(239, 68, 68, 0.6);
-  color: #fecaca;
+  background: var(--error-bg);
+  border-color: var(--error);
+  color: var(--error);
 }
 
 .glass-menu-item.error:hover:not(.disabled):not(:disabled) {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.5);
+  background: var(--error-bg);
+  border-color: var(--error-border);
 }
 
 /* Glass Menu Alignment and Variants */
@@ -192,7 +192,7 @@
   padding: 4px 8px;
   font-size: 12px;
   line-height: 1.2;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   cursor: default;
   user-select: none;
   text-align: left;
@@ -201,7 +201,7 @@
 
 .glass-menu-separator {
   height: 1px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--glass-border);
   margin: 6px 4px;
   border-radius: 1px;
 }
@@ -249,8 +249,8 @@
   border-radius: 12px;
   backdrop-filter: blur(12px) saturate(160%);
   -webkit-backdrop-filter: blur(12px) saturate(160%);
-  background-color: rgba(17, 17, 24, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
   box-shadow: 0 8px 24px rgba(0,0,0,0.35);
 }
 
@@ -338,16 +338,16 @@
   padding: 0.5rem 2.2rem 0.5rem 0.9rem;
   min-height: 34px;
   border-radius: 1vw;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
   --border-width: 2px;
   background:
     var(--select-arrow) no-repeat right 0.8rem center / 12px 12px,
     linear-gradient(
       -75deg,
-      rgba(255, 255, 255, 0.06),
-      rgba(255, 255, 255, 0.18),
-      rgba(255, 255, 255, 0.06)
+      var(--glass-bg),
+      var(--glass-bg-strong),
+      var(--glass-bg)
     ) padding-box,
     conic-gradient(
       from var(--angle-1) at 50% 50%,
@@ -395,11 +395,11 @@
   --border-width: clamp(1px, 0.0625em, 2px);
   background: linear-gradient(
     -75deg,
-    rgba(255, 255, 255, 0.08),
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.08)
+    var(--glass-bg),
+    var(--glass-bg-strong),
+    var(--glass-bg)
   );
-  color: rgba(255,255,255,0.95);
+  color: var(--text-primary);
   box-shadow:
     inset 0 0.08em 0.08em rgba(0, 0, 0, 0.04),
     inset 0 -0.08em 0.08em rgba(255, 255, 255, 0.3),
@@ -416,9 +416,9 @@
   outline: none;
   background: linear-gradient(
     -75deg,
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0.18),
-    rgba(255, 255, 255, 0.12)
+    var(--glass-bg-strong),
+    var(--glass-bg-strong),
+    var(--glass-bg-strong)
   );
   box-shadow:
     inset 0 0.08em 0.08em rgba(0, 0, 0, 0.04),

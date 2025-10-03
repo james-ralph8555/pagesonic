@@ -366,19 +366,19 @@ export const SettingsView: Component = () => {
           <div class="model-item">
             <div class="model-info">
               <h4>Browser TTS (System)</h4>
-              <div class="settings-panel" style="margin-top: 0.5rem;">
-                <div class="settings-grid compact">
-                  <div class="settings-item">
+              <div class="debug-panel" style="margin-top: 0.5rem;">
+                <div class="debug-grid compact">
+                  <div class="debug-item">
                     <span class="label">Engine:</span>
                     <span class="value">System SpeechSynthesis</span>
                   </div>
-                  <div class="settings-item">
+                  <div class="debug-item">
                     <span class="label">Available Voices:</span>
                     <span class={`value ${(ttsState().systemVoices || []).length > 0 ? 'status-success' : 'status-error'}`}>
                       {(ttsState().systemVoices || []).length}
                     </span>
                   </div>
-                  <div class="settings-item">
+                  <div class="debug-item">
                     <span class="label">Status:</span>
                     <span class={`value ${ttsState().engine === 'browser' ? 'status-success' : ((ttsState().systemVoices || []).length > 0 ? 'status-info' : 'status-error')}`}>
                       {ttsState().engine === 'browser' ? 'Active' : (
@@ -387,7 +387,7 @@ export const SettingsView: Component = () => {
                     </span>
                   </div>
                   {(ttsState().systemVoices || []).length > 0 && (
-                    <div class="settings-item" style="grid-column: 1 / -1;">
+                    <div class="debug-item" style="grid-column: 1 / -1;">
                       <span class="label">Voices:</span>
                       <span style="font-family: monospace; font-size: 0.7rem; color: #94a3b8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                         {(ttsState().systemVoices || []).join(', ')}
@@ -428,30 +428,30 @@ export const SettingsView: Component = () => {
               <div class="model-item">
                 <div class="model-info">
                   <h4>{model.name}</h4>
-                  <div class="settings-panel" style="margin-top: 0.5rem;">
-                    <div class="settings-grid compact">
-                      <div class="settings-item">
+                  <div class="debug-panel" style="margin-top: 0.5rem;">
+                    <div class="debug-grid compact">
+                      <div class="debug-item">
                         <span class="label">Size:</span>
                         <span class="value">{model.size} MB</span>
                       </div>
-                      <div class="settings-item">
+                      <div class="debug-item">
                         <span class="label">Voices:</span>
                         <span class="value">{model.voices.length}</span>
                       </div>
-                      <div class="settings-item">
+                      <div class="debug-item">
                         <span class="label">WebGPU:</span>
                         <span class={`value ${model.requiresWebGPU ? (ttsState().isWebGPUSupported ? 'status-success' : 'status-error') : 'status-info'}`}>
                           {model.requiresWebGPU ? 'Required' : 'Optional'}
                         </span>
                       </div>
-                      <div class="settings-item">
+                      <div class="debug-item">
                         <span class="label">Status:</span>
                         <span class={`value ${modelStatus.status === 'loaded' ? 'status-success' : modelStatus.status === 'available' ? 'status-info' : 'status-error'}`}>
                           {modelStatus.message}
                         </span>
                       </div>
                       {model.voices.length > 0 && (
-                        <div class="settings-item" style="grid-column: 1 / -1;">
+                        <div class="debug-item" style="grid-column: 1 / -1;">
                           <span class="label">Available Voices:</span>
                           <span style="font-family: monospace; font-size: 0.7rem; color: #94a3b8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                             {model.voices.join(', ')}
@@ -646,10 +646,10 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>TTS Chunking</h3>
-        <div class="settings-panel">
+        <div class="debug-panel">
           <h4>Chunk Configuration</h4>
-          <div class="settings-grid compact">
-            <div class="settings-item">
+          <div class="debug-grid compact">
+            <div class="debug-item">
               <span class="label">Max chunk size:</span>
               <div class="settings-input-group">
                 <input
@@ -664,7 +664,7 @@ export const SettingsView: Component = () => {
                 <span class="settings-input-label">chars</span>
               </div>
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Overlap:</span>
               <div class="settings-input-group">
                 <input
@@ -679,7 +679,7 @@ export const SettingsView: Component = () => {
                 <span class="settings-input-label">chars</span>
               </div>
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Split by sentence:</span>
               <input
                 type="checkbox"
@@ -688,7 +688,7 @@ export const SettingsView: Component = () => {
                 style="margin: 0; accent-color: #6366f1;"
               />
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Pause between chunks:</span>
               <div class="settings-input-group">
                 <input
@@ -715,22 +715,22 @@ export const SettingsView: Component = () => {
       
       <div class="settings-section">
         <h3>System Information</h3>
-        <div class="settings-panel">
+        <div class="debug-panel">
           <h4>System Status</h4>
-          <div class="settings-grid">
-            <div class="settings-item">
+          <div class="debug-grid">
+            <div class="debug-item">
               <span class="label">WebGPU Status:</span>
               <span class={`value ${ttsState().isWebGPUSupported ? 'status-success' : 'status-error'}`}>
                 {ttsState().isWebGPUSupported ? 'Supported' : 'Not Supported'}
               </span>
             </div>
             {ttsState().model && (
-              <div class="settings-item">
+              <div class="debug-item">
                 <span class="label">Loaded Model:</span>
                 <span class="value status-info">{ttsState().model!.name}</span>
               </div>
             )}
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Current Voice:</span>
               <span class="value">{(() => {
                 if (ttsState().engine === 'browser' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -743,11 +743,11 @@ export const SettingsView: Component = () => {
                 return ttsState().voice
               })()}</span>
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Speech Rate:</span>
               <span class="value">{ttsState().rate.toFixed(1)}x</span>
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Speech Pitch:</span>
               <span class="value">{ttsState().pitch.toFixed(1)}</span>
             </div>
@@ -758,37 +758,37 @@ export const SettingsView: Component = () => {
           
           {/* Voice metadata for LibriTTS speakers */}
           {ttsState().engine !== 'browser' && getCurrentSpeakerInfo() && (
-            <div class="settings-panel" style={{ 'margin-top': '1rem' }}>
+            <div class="debug-panel" style={{ 'margin-top': '1rem' }}>
               <h4>Voice Details</h4>
-              <div class="settings-grid">
-                <div class="settings-item">
+              <div class="debug-grid">
+                <div class="debug-item">
                   <span class="label">Display Name:</span>
                   <span class="value">{getCurrentSpeakerInfo()?.display_name || 'N/A'}</span>
                 </div>
-                <div class="settings-item">
+                <div class="debug-item">
                   <span class="label">Description:</span>
                   <span class="value">{getCurrentSpeakerInfo()?.description || 'N/A'}</span>
                 </div>
-                <div class="settings-item">
+                <div class="debug-item">
                   <span class="label">Gender:</span>
                   <span class={`value ${getCurrentSpeakerInfo()?.gender === 'F' ? 'status-info' : getCurrentSpeakerInfo()?.gender === 'M' ? 'status-success' : 'status-warning'}`}>
                     {getCurrentSpeakerInfo()?.gender === 'F' ? 'Female' : getCurrentSpeakerInfo()?.gender === 'M' ? 'Male' : 'Unknown'}
                   </span>
                 </div>
                 {getCurrentSpeakerInfo()?.pitch_mean && (
-                  <div class="settings-item">
+                  <div class="debug-item">
                     <span class="label">Avg Pitch:</span>
                     <span class="value">{Math.round(getCurrentSpeakerInfo().pitch_mean)} Hz</span>
                   </div>
                 )}
                 {getCurrentSpeakerInfo()?.speaking_rate && (
-                  <div class="settings-item">
+                  <div class="debug-item">
                     <span class="label">Speaking Rate:</span>
                     <span class="value">{Math.round(getCurrentSpeakerInfo().speaking_rate)} wpm</span>
                   </div>
                 )}
                 {getCurrentSpeakerInfo()?.brightness && (
-                  <div class="settings-item">
+                  <div class="debug-item">
                     <span class="label">Brightness:</span>
                     <span class="value">{getCurrentSpeakerInfo().brightness.toFixed(2)}</span>
                   </div>
@@ -974,10 +974,10 @@ export const SettingsView: Component = () => {
       
       <div class="settings-section">
         <h3>Audio</h3>
-        <div class="settings-panel">
+        <div class="debug-panel">
           <h4>Audio Configuration</h4>
-          <div class="settings-grid compact">
-            <div class="settings-item">
+          <div class="debug-grid compact">
+            <div class="debug-item">
               <span class="label">Target sample rate:</span>
               <div class="settings-input-group">
                 <input
@@ -992,7 +992,7 @@ export const SettingsView: Component = () => {
                 <span class="settings-input-label">Hz</span>
               </div>
             </div>
-            <div class="settings-item">
+            <div class="debug-item">
               <span class="label">Quality Level:</span>
               <span class={`value ${(ttsState().targetSampleRate || 24000) >= 48000 ? 'status-success' : (ttsState().targetSampleRate || 24000) >= 24000 ? 'status-info' : 'status-warning'}`}>
                 {(ttsState().targetSampleRate || 24000) >= 48000 ? 'High' : (ttsState().targetSampleRate || 24000) >= 24000 ? 'Standard' : 'Basic'}

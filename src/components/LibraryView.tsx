@@ -1,5 +1,6 @@
 import { Component, createSignal, For, Show, onMount } from 'solid-js'
 import { useLibrary } from '@/stores/library'
+import { useTheme } from '@/stores/theme'
 import { LibraryIndexItem } from '@/types/library'
 import { GlassDropdownButton } from './GlassDropdownButton'
 
@@ -18,6 +19,9 @@ export const LibraryView: Component = () => {
     synchronizeLeaderState,
     ensureLeadership
   } = useLibrary()
+
+  // Initialize theme to ensure CSS variables are set
+  const { theme } = useTheme()
 
   const [sortBy, setSortBy] = createSignal<'title' | 'author' | 'date' | 'size'>('title')
   const [sortOrder, setSortOrder] = createSignal<'asc' | 'desc'>('asc')

@@ -10,8 +10,8 @@
   border-radius: 10px; 
   backdrop-filter: blur(12px) saturate(160%); 
   -webkit-backdrop-filter: blur(12px) saturate(160%); 
-  background-color: rgba(17, 17, 24, 0.75); 
-  border: 1px solid rgba(255, 255, 255, 0.12); 
+  background-color: var(--glass-bg-strong); 
+  border: 1px solid var(--glass-border); 
   box-shadow: 0 8px 24px rgba(0,0,0,0.35); 
   z-index: 70; 
   transition: opacity 120ms ease; 
@@ -40,7 +40,7 @@
   border-radius: 8px; 
   border: 1px solid var(--glass-border); 
   background: var(--glass-bg); 
-  color: #fff; 
+  color: var(--text-primary); 
   cursor: pointer; 
 }
 
