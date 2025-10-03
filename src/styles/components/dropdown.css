@@ -7,8 +7,7 @@
 
 /* Full-width column layout for content areas */
 .settings-view .dropdown,
-.settings-section .dropdown,
-.reader-view .dropdown {
+.settings-section .dropdown {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;

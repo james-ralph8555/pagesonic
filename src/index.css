@@ -3,7 +3,6 @@
 @import './styles/tokens.css';
 @import './styles/components/common.css';
 @import './styles/components/pdf-viewer.css';
-@import './styles/components/reader.css';
 @import './styles/components/settings.css';
 @import './styles/components/voice-filters.css';
 @import './styles/components/library.css';
