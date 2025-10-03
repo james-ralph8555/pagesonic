@@ -3,9 +3,13 @@ import { PDFViewer } from './components/PDFViewer'
 import { SettingsView } from './components/SettingsView'
 import { LibraryView } from './components/LibraryView'
 import { AppMode } from './types'
+import { useLibrary } from './stores/library'
 
 export const App: Component = () => {
   const [currentMode, setCurrentMode] = createSignal<AppMode>('pdf')
+  
+  // Initialize library once at app level, not component level
+  const { initialize } = useLibrary()
   
   onMount(() => {
     const handler = (e: Event) => {
@@ -16,6 +20,29 @@ export const App: Component = () => {
     }
     window.addEventListener('app:set-mode', handler as EventListener)
     onCleanup(() => window.removeEventListener('app:set-mode', handler as EventListener))
+    
+    // Initialize library once when app starts
+    initialize()
+    
+    // Add page unload cleanup for proper resource cleanup
+    const beforeUnloadHandler = () => {
+      // This will be called when the tab is actually closing
+      console.log('[App] Page unloading - this should trigger proper cleanup')
+    }
+    
+    const visibilityChangeHandler = () => {
+      if (document.visibilityState === 'hidden') {
+        console.log('[App] Page hidden - this might be tab close')
+      }
+    }
+    
+    window.addEventListener('beforeunload', beforeUnloadHandler)
+    document.addEventListener('visibilitychange', visibilityChangeHandler)
+    
+    onCleanup(() => {
+      window.removeEventListener('beforeunload', beforeUnloadHandler)
+      document.removeEventListener('visibilitychange', visibilityChangeHandler)
+    })
   })
   
   return (

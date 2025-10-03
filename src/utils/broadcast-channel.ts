@@ -26,7 +26,7 @@ export interface MessageHandlers {
 
 export class BroadcastChannelManager {
   private static instance: BroadcastChannelManager
-  private channel: BroadcastChannel
+  private channel: BroadcastChannel | null = null
   private handlers: Map<LibraryMessageType, MessageHandler[]> = new Map()
   private pendingRequests: Map<MessageId, {
     resolve: (value: LibraryResponse) => void
@@ -35,11 +35,20 @@ export class BroadcastChannelManager {
   }> = new Map()
   private tabId: TabId
   private messageIdCounter = 0
+  private _isReady = false
+  private messageQueue: LibraryMessage[] = []
+  private initializationError: Error | null = null
 
   private constructor() {
-    this.channel = new BroadcastChannel('library-channel')
     this.tabId = this.generateTabId()
-    this.setupChannelListener()
+    try {
+      this.channel = new BroadcastChannel('library-channel')
+      this.setupChannelListener()
+      this._isReady = true
+    } catch (error) {
+      this.initializationError = error instanceof Error ? error : new Error(String(error))
+      console.warn('BroadcastChannel initialization failed, running in single-tab mode', this.initializationError)
+    }
   }
 
   static getInstance(): BroadcastChannelManager {
@@ -74,6 +83,8 @@ export class BroadcastChannelManager {
    * Setup channel message listener
    */
   private setupChannelListener(): void {
+    if (!this.channel) return
+
     this.channel.addEventListener('message', (event) => {
       const message = event.data as LibraryMessage
       
@@ -84,6 +95,24 @@ export class BroadcastChannelManager {
 
       this.handleMessage(message)
     })
+
+    // Process any queued messages once handlers are set up
+    setTimeout(() => {
+      this.processMessageQueue()
+    }, 100)
+  }
+
+  /**
+   * Process queued messages
+   */
+  private processMessageQueue(): void {
+    const queue = this.messageQueue.splice(0)
+    queue.forEach(message => {
+      this.handleMessage(message)
+    })
+    if (queue.length > 0) {
+      console.log(`[BroadcastChannel] Processed ${queue.length} queued messages`)
+    }
   }
 
   /**
@@ -104,10 +133,16 @@ export class BroadcastChannelManager {
       return
     }
 
-    // Process the message through registered handlers
+    // If no handlers are registered yet, queue the message
     const handlers = this.handlers.get(message.type) || []
     if (handlers.length === 0) {
-      console.warn(`No handlers registered for message type: ${message.type}`)
+      // Queue the message for later processing
+      if (this.messageQueue.length < 50) { // Prevent unlimited queue growth
+        this.messageQueue.push(message)
+        console.debug(`[BroadcastChannel] Queued message type: ${message.type} (queue size: ${this.messageQueue.length})`)
+      } else {
+        console.warn(`[BroadcastChannel] Message queue full, dropping message type: ${message.type}`)
+      }
       return
     }
 
@@ -166,6 +201,11 @@ export class BroadcastChannelManager {
    * Broadcast a message without expecting a response
    */
   broadcast(type: LibraryMessageType, payload: unknown): void {
+    if (!this._isReady || !this.channel) {
+      console.warn('[BroadcastChannel] Cannot broadcast - channel not ready')
+      return
+    }
+
     const message: LibraryMessage = {
       id: this.generateMessageId(),
       type,
@@ -174,7 +214,11 @@ export class BroadcastChannelManager {
       senderId: this.tabId
     }
 
-    this.channel.postMessage(message)
+    try {
+      this.channel.postMessage(message)
+    } catch (error) {
+      console.error('[BroadcastChannel] Failed to broadcast message:', error)
+    }
   }
 
   /**
@@ -185,6 +229,10 @@ export class BroadcastChannelManager {
     payload: unknown,
     timeoutMs = 30000
   ): Promise<LibraryResponse<T>> {
+    if (!this._isReady || !this.channel) {
+      throw new Error('Broadcast channel not available - running in single-tab mode')
+    }
+
     const messageId = this.generateMessageId()
     const message: LibraryMessage = {
       id: messageId,
@@ -209,7 +257,13 @@ export class BroadcastChannelManager {
       })
 
       // Send the message
-      this.channel.postMessage(message)
+      try {
+        this.channel!.postMessage(message)
+      } catch (error) {
+        this.pendingRequests.delete(messageId)
+        clearTimeout(timeoutId)
+        reject(new Error(`Failed to send request: ${error instanceof Error ? error.message : 'Unknown error'}`))
+      }
     })
   }
 
@@ -217,6 +271,8 @@ export class BroadcastChannelManager {
    * Send a success response
    */
   private respond(originalMessage: LibraryMessage, data: unknown): void {
+    if (!this.channel) return
+
     const response: LibraryMessage = {
       id: originalMessage.id,
       type: 'SUCCESS',
@@ -236,6 +292,8 @@ export class BroadcastChannelManager {
    * Send an error response
    */
   private respondError(originalMessage: LibraryMessage, error: string): void {
+    if (!this.channel) return
+
     const response: LibraryMessage = {
       id: originalMessage.id,
       type: 'ERROR',
@@ -358,6 +416,20 @@ export class BroadcastChannelManager {
   }
 
   /**
+   * Check if broadcast channel is ready
+   */
+  isReady(): boolean {
+    return this._isReady && this.channel !== null
+  }
+
+  /**
+   * Get initialization error
+   */
+  getInitializationError(): Error | null {
+    return this.initializationError
+  }
+
+  /**
    * Get debug information
    */
   getDebugInfo(): {
@@ -365,6 +437,9 @@ export class BroadcastChannelManager {
     handlersCount: number
     pendingRequestsCount: number
     messagesSent: number
+    isReady: boolean
+    queuedMessagesCount: number
+    hasError: boolean
   } {
     let handlersCount = 0
     for (const handlers of this.handlers.values()) {
@@ -375,7 +450,10 @@ export class BroadcastChannelManager {
       tabId: this.tabId,
       handlersCount,
       pendingRequestsCount: this.pendingRequests.size,
-      messagesSent: this.messageIdCounter
+      messagesSent: this.messageIdCounter,
+      isReady: this._isReady,
+      queuedMessagesCount: this.messageQueue.length,
+      hasError: this.initializationError !== null
     }
   }
 
@@ -394,7 +472,9 @@ export class BroadcastChannelManager {
     this.handlers.clear()
 
     // Close the channel
-    this.channel.close()
+    if (this.channel) {
+      this.channel.close()
+    }
   }
 }
 
@@ -413,6 +493,8 @@ if (typeof window !== 'undefined') {
   // Add debugging functions using the singleton instance
   (window as any).__libraryBroadcastDebug = {
     getDebugInfo: () => broadcastChannel.getDebugInfo(),
+    isReady: () => broadcastChannel.isReady(),
+    getError: () => broadcastChannel.getInitializationError()?.message || 'No error',
     broadcast: (type: any, payload: unknown) => {
       try {
         broadcastChannel.broadcast(type, payload)
@@ -423,8 +505,35 @@ if (typeof window !== 'undefined') {
     },
     getHandlers: () => Array.from((broadcastChannel as any).handlers.keys()),
     getPendingRequests: () => Array.from((broadcastChannel as any).pendingRequests.keys()),
-    getTabId: () => broadcastChannel.getTabId()
+    getQueuedMessages: () => (broadcastChannel as any).messageQueue.length,
+    getTabId: () => broadcastChannel.getTabId(),
+    // Comprehensive diagnostic
+    diagnose: () => {
+      const info = broadcastChannel.getDebugInfo()
+      return {
+        currentTab: {
+          tabId: info.tabId,
+          isReady: info.isReady,
+          hasError: info.hasError,
+          errorMessage: broadcastChannel.getInitializationError()?.message
+        },
+        handlers: {
+          registeredTypes: Array.from((broadcastChannel as any).handlers.keys()),
+          totalHandlers: info.handlersCount,
+          pendingRequests: info.pendingRequestsCount,
+          queuedMessages: info.queuedMessagesCount
+        },
+        suggestions: [
+          !info.isReady ? 'Broadcast channel not ready - single-tab mode' : null,
+          info.hasError ? 'Initialization error occurred - check browser support' : null,
+          info.handlersCount === 0 ? 'No handlers registered - messages will be queued' : null,
+          info.queuedMessagesCount > 0 ? `${info.queuedMessagesCount} messages queued` : null,
+          info.pendingRequestsCount > 0 ? `${info.pendingRequestsCount} pending requests` : null
+        ].filter(Boolean)
+      }
+    }
   }
   
   console.log('[BroadcastChannel] Debug utilities available at window.__libraryBroadcastDebug')
+  console.log('[BroadcastChannel] Try: window.__libraryBroadcastDebug.diagnose() for a full check')
 }

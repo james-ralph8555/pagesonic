@@ -97,12 +97,36 @@ const [state, setState] = createSignal<LibraryState>({
 // Global initialization promise to prevent concurrent initializations
 let initializationPromise: Promise<void> | null = null
 let initializationInProgress = false
+let hasCleanedUp = false // Track if library has been cleaned up to prevent re-initialization
+let componentInstances = 0 // Track how many component instances are active
 
 export const useLibrary = () => {
   let cleanupFunctions: (() => void)[] = []
 
+  // Track component instance
+  componentInstances++
+  const instanceId = Math.random().toString(36).substr(2, 9)
+  logLibraryStore.debug('Library component instance created', { 
+    totalInstances: componentInstances,
+    instanceId
+  })
+
   // Initialize the library
   const initialize = async () => {
+    // If we have multiple instances and one is already initialized, just return
+    if (state().isInitialized && componentInstances > 1) {
+      logLibraryStore.debug('Library already initialized for another instance, reusing')
+      return
+    }
+
+    // Additional check to prevent re-initialization when component re-mounts after cleanup
+    if (state().isInitialized && hasCleanedUp) {
+      logLibraryStore.info('Library was cleaned up, re-initializing for new component instance')
+      // Reset state for fresh initialization
+      setState(prev => ({ ...prev, isInitialized: false, isLeader: false, leaderInfo: null }))
+      hasCleanedUp = false
+    }
+
     if (state().isInitialized) {
       logLibraryStore.debug('Library already initialized, skipping')
       return
@@ -136,33 +160,86 @@ export const useLibrary = () => {
     
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
+    let opfsInitialized = false
+    let leaderElectionSetup = false
+    let fallbackMode = false
+
     try {
-      // Initialize OPFS
+      // Initialize OPFS with fallback handling
       logLibraryStore.debug('Initializing OPFS')
-      await opfsManager.initialize()
+      try {
+        await opfsManager.initialize()
+        opfsInitialized = true
+      } catch (opfsError) {
+        logLibraryStore.error('OPFS initialization failed, attempting fallback mode', opfsError instanceof Error ? opfsError : new Error(String(opfsError)))
+        
+        // Try to reset and retry once
+        if (opfsManager.hasFailed()) {
+          logLibraryStore.info('OPFS failed, attempting reset and retry')
+          opfsManager.resetInitialization()
+          
+          try {
+            await opfsManager.initialize()
+            opfsInitialized = true
+            logLibraryStore.info('OPFS initialization succeeded after reset')
+          } catch (retryError) {
+            logLibraryStore.error('OPFS retry also failed, entering limited mode', retryError instanceof Error ? retryError : new Error(String(retryError)))
+            fallbackMode = true
+          }
+        } else {
+          fallbackMode = true
+        }
+      }
 
-      // Load initial data
-      logLibraryStore.debug('Loading initial data from OPFS')
-      const [index, userSettings, readerSettings] = await Promise.all([
-        opfsManager.readIndex(),
-        opfsManager.readUserSettings(),
-        opfsManager.readReaderSettings()
-      ])
+      // Load initial data (only if OPFS is available)
+      let index: LibraryIndex = {}
+      let userSettings: UserSettings = state().userSettings
+      let readerSettings: ReaderSettings = state().readerSettings
+      
+      if (opfsInitialized) {
+        try {
+          logLibraryStore.debug('Loading initial data from OPFS')
+          const loadedData = await Promise.all([
+            opfsManager.readIndex(),
+            opfsManager.readUserSettings(),
+            opfsManager.readReaderSettings()
+          ])
+          
+          index = loadedData[0]
+          userSettings = loadedData[1]
+          readerSettings = loadedData[2]
 
-      logLibraryStore.info('Data loaded successfully', { 
-        documentCount: Object.keys(index).length,
-        userSettingsLoaded: !!userSettings,
-        readerSettingsLoaded: !!readerSettings
-      })
+          logLibraryStore.info('Data loaded successfully', { 
+            documentCount: Object.keys(index).length,
+            userSettingsLoaded: !!userSettings,
+            readerSettingsLoaded: !!readerSettings
+          })
+        } catch (dataError) {
+          logLibraryStore.warn('Failed to load some data, using defaults', dataError instanceof Error ? dataError : new Error(String(dataError)))
+          // Continue with defaults
+        }
+      } else {
+        logLibraryStore.info('OPFS not available, using default settings in offline mode')
+      }
 
-      // Setup broadcast channel handlers before leader election
+      // Setup broadcast channel handlers
       logLibraryStore.debug('Setting up broadcast channel handlers')
-      setupBroadcastHandlers()
+      try {
+        setupBroadcastHandlers()
+      } catch (broadcastError) {
+        logLibraryStore.warn('Failed to setup broadcast handlers, continuing in single-tab mode', broadcastError instanceof Error ? broadcastError : new Error(String(broadcastError)))
+      }
 
       // Start leader election
       logLibraryStore.debug('Setting up leader election')
-      await setupLeaderElection()
+      try {
+        await setupLeaderElection()
+        leaderElectionSetup = true
+      } catch (leaderError) {
+        logLibraryStore.warn('Leader election failed, continuing in single-tab mode', leaderError instanceof Error ? leaderError : new Error(String(leaderError)))
+      }
 
+      // Update state with whatever we successfully loaded
       batch(() => {
         setState(prev => ({
           ...prev,
@@ -173,30 +250,31 @@ export const useLibrary = () => {
           sortBy: userSettings.sortBy,
           sortOrder: userSettings.sortOrder,
           isInitialized: true,
-          isLoading: false
+          isLoading: false,
+          error: fallbackMode ? 'Library running in limited mode - some features may be unavailable' : null
         }))
       })
 
-      logLibraryStore.endTimer('initialize', 'Library initialization completed successfully')
+      logLibraryStore.endTimer('initialize', `Library initialization completed${fallbackMode ? ' in fallback mode' : ' successfully'}`)
       
       // Log final state for debugging
       logLibraryStore.info('Library initialization complete', {
         documentCount: Object.keys(index).length,
         isLeader: state().isLeader,
         leaderInfo: state().leaderInfo,
-        tabId: leaderElection.getTabId()
+        tabId: leaderElection.getTabId(),
+        opfsInitialized,
+        leaderElectionSetup,
+        fallbackMode
       })
       
     } catch (error) {
-      logLibraryStore.error('Failed to initialize library', error instanceof Error ? error : new Error(String(error)))
+      logLibraryStore.error('Critical error in library initialization', error instanceof Error ? error : new Error(String(error)))
       setState(prev => ({
         ...prev,
-        error: error instanceof Error ? error.message : 'Failed to initialize library',
+        error: 'Library initialization failed. Please refresh the page.',
         isLoading: false
       }))
-      
-      // Don't throw - allow the library to function in follower mode
-      logLibraryStore.warn('Library initialization failed, but continuing in limited mode')
     }
   }
 
@@ -240,13 +318,45 @@ export const useLibrary = () => {
     }
 
     leaderElection.setCallbacks(callbacks)
-    logLibraryStore.info('Starting leader election process')
+    
+    // Check if any leader currently exists
+    logLibraryStore.info('Checking for existing leadership')
     try {
-      await leaderElection.startElection()
-      logLibraryStore.info('Leader election process started successfully')
+      // Check if leader election is already ready
+      if (leaderElection.isReady()) {
+        logLibraryStore.info('Leader election already ready, checking status')
+        const info = leaderElection.getDebugInfo()
+        if (info.isLeader) {
+          logLibraryStore.info('This tab is already the leader')
+          return
+        }
+      }
+      
+      const hasLeader = await leaderElection.checkLeaderStatus()
+      logLibraryStore.info('Existing leadership check completed', { hasLeader })
+      
+      if (hasLeader) {
+        logLibraryStore.info('Active leader found, entering follower mode and waiting for leadership')
+        // If there's already a leader, start the normal election process (will wait)
+        await leaderElection.startElection()
+      } else {
+        logLibraryStore.info('No active leader found, attempting to acquire leadership')
+        // If no leader exists, try to acquire leadership immediately
+        const acquired = await leaderElection.attemptLeadership()
+        if (!acquired) {
+          logLibraryStore.info('Leadership acquisition failed, another tab may have taken it')
+          // If immediate acquisition failed, start normal election process
+          await leaderElection.startElection()
+        } else {
+          logLibraryStore.info('🎉 Successfully acquired leadership on first attempt')
+        }
+      }
+      
+      logLibraryStore.info('Leader election process completed successfully')
     } catch (error) {
       logLibraryStore.error('Failed to start leader election', error instanceof Error ? error : new Error(String(error)))
-      throw error
+      // Don't throw - allow the library to function in follower mode
+      logLibraryStore.warn('Leader election failed, continuing in limited mode')
     }
   }
 
@@ -560,18 +670,53 @@ export const useLibrary = () => {
 
   // Lifecycle
   onMount(() => {
+    logLibraryStore.info('Library component mounted')
     initialize()
   })
 
   onCleanup(() => {
-    // Cleanup all broadcast handlers
-    cleanupFunctions.forEach(cleanup => cleanup())
+    componentInstances--
+    logLibraryStore.info('🧹 Library component cleanup called', { 
+      isLeader: state().isLeader,
+      tabId: leaderElection.getTabId(),
+      visibility: document.visibilityState,
+      remainingInstances: componentInstances,
+      hasCleanedUp
+    })
     
-    // Cleanup leader election
-    leaderElection.cleanup()
-    
-    // Cleanup broadcast channel
-    broadcastChannel.cleanup()
+    // Only perform full cleanup if this is the last instance and the page is hidden
+    // This prevents cleanup during view switching or component remounts
+    if (componentInstances === 0 && document.visibilityState === 'hidden') {
+      logLibraryStore.info('Last component instance and page hidden - performing full cleanup')
+      hasCleanedUp = true
+      
+      // Cleanup all broadcast handlers
+      cleanupFunctions.forEach(cleanup => cleanup())
+      
+      // Cleanup leader election
+      leaderElection.cleanup()
+      
+      // Cleanup broadcast channel
+      broadcastChannel.cleanup()
+      
+      // Reset initialization state for potential future re-initialization
+      initializationInProgress = false
+      initializationPromise = null
+      
+      logLibraryStore.info('Library cleanup completed')
+    } else if (componentInstances === 0) {
+      logLibraryStore.info('Last component instance, but page still visible - performing light cleanup')
+      
+      // Only cleanup handlers but keep systems running for potential re-mount
+      cleanupFunctions.forEach(cleanup => cleanup())
+      
+      // Reset initialization state but keep leader election running
+      setState(prev => ({ ...prev, isInitialized: false }))
+    } else {
+      logLibraryStore.info('Other component instances still active - deferring cleanup')
+      // Only cleanup this instance's handlers
+      cleanupFunctions.forEach(cleanup => cleanup())
+    }
   })
 
   return {
@@ -597,6 +742,28 @@ export const useLibrary = () => {
     
     // Leadership helpers
     isLeader: () => state().isLeader,
-    getLeaderInfo: () => state().leaderInfo
+    getLeaderInfo: () => state().leaderInfo,
+    
+    // Debug helpers
+    getInstanceInfo: () => ({
+      instanceId,
+      totalInstances: componentInstances,
+      hasCleanedUp
+    })
+  }
+}
+
+// Export debug functions for external access
+export const getLibraryStoreDebugInfo = () => {
+  const currentState = state()
+  return {
+    isInitialized: currentState.isInitialized,
+    isLeader: currentState.isLeader,
+    hasError: !!currentState.error,
+    errorMessage: currentState.error,
+    componentInstances,
+    hasCleanedUp,
+    documentCount: Object.keys(currentState.index).length,
+    isLoading: currentState.isLoading
   }
 }

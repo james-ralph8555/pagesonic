@@ -22,6 +22,11 @@ export class OPFSManager {
   private root: FileSystemDirectoryHandle | null = null
   private initialized = false
   private initializationPromise: Promise<void> | null = null
+  private initializationState: 'idle' | 'initializing' | 'ready' | 'failed' = 'idle'
+  private initializationError: Error | null = null
+  private retryCount = 0
+  private maxRetries = 3
+  private initializationQueue: Array<{ resolve: (value: void) => void; reject: (error: Error) => void }> = []
 
   private constructor() {}
 
@@ -37,26 +42,59 @@ export class OPFSManager {
    */
   async initialize(): Promise<void> {
     // If already initialized, return immediately
-    if (this.initialized) {
+    if (this.initialized && this.initializationState === 'ready') {
       logOPFS.debug('OPFS already initialized, skipping')
       return
     }
 
-    // If initialization is in progress, wait for it
-    if (this.initializationPromise) {
-      logOPFS.debug('OPFS initialization already in progress, waiting...')
-      await this.initializationPromise
-      return
+    // If initialization is in progress, queue this request
+    if (this.initializationState === 'initializing') {
+      logOPFS.debug('OPFS initialization already in progress, queuing request...')
+      return new Promise<void>((resolve, reject) => {
+        this.initializationQueue.push({ resolve, reject })
+      })
+    }
+
+    // If initialization failed and we haven't exceeded retries, try again
+    if (this.initializationState === 'failed' && this.retryCount < this.maxRetries) {
+      logOPFS.info('Retrying OPFS initialization', { retryCount: this.retryCount + 1 })
+      this.initializationState = 'idle'
+      this.initializationError = null
     }
 
     // Start initialization process
+    this.initializationState = 'initializing'
     this.initializationPromise = this.performInitialization()
 
     try {
       await this.initializationPromise
+      // Resolve all queued requests
+      this.resolveQueuedRequests()
+    } catch (error) {
+      // Reject all queued requests
+      this.rejectQueuedRequests(error instanceof Error ? error : new Error(String(error)))
+      throw error
     } finally {
       this.initializationPromise = null
     }
+  }
+
+  /**
+   * Resolve all queued initialization requests
+   */
+  private resolveQueuedRequests(): void {
+    const queue = this.initializationQueue.splice(0)
+    queue.forEach(({ resolve }) => resolve())
+    logOPFS.debug(`Resolved ${queue.length} queued initialization requests`)
+  }
+
+  /**
+   * Reject all queued initialization requests
+   */
+  private rejectQueuedRequests(error: Error): void {
+    const queue = this.initializationQueue.splice(0)
+    queue.forEach(({ reject }) => reject(error))
+    logOPFS.debug(`Rejected ${queue.length} queued initialization requests`)
   }
 
   /**
@@ -64,7 +102,7 @@ export class OPFSManager {
    */
   private async performInitialization(): Promise<void> {
     logOPFS.startTimer('initialize', 'OPFS initialization')
-    logOPFS.info('Starting OPFS initialization')
+    logOPFS.info('Starting OPFS initialization', { retryCount: this.retryCount })
 
     try {
       logOPFS.debug('Getting OPFS root directory')
@@ -86,14 +124,34 @@ export class OPFSManager {
       logOPFS.info('Library index initialized')
 
       this.initialized = true
-      logOPFS.endTimer('initialize', 'OPFS initialization completed')
+      this.initializationState = 'ready'
+      this.initializationError = null
+      this.retryCount = 0
+      logOPFS.endTimer('initialize', 'OPFS initialization completed successfully')
     } catch (error) {
       logOPFS.error('OPFS initialization failed', error instanceof Error ? error : new Error(String(error)))
+      this.initializationState = 'failed'
+      this.initializationError = error instanceof Error ? error : new Error(String(error))
+      
+      // Attempt retry if we haven't exceeded max retries
+      if (this.retryCount < this.maxRetries) {
+        this.retryCount++
+        logOPFS.info(`Retrying OPFS initialization (attempt ${this.retryCount} of ${this.maxRetries})`)
+        
+        // Wait before retrying with exponential backoff
+        const delay = Math.min(1000 * Math.pow(2, this.retryCount - 1), 5000)
+        await new Promise(resolve => setTimeout(resolve, delay))
+        
+        // Reset state and try again
+        this.initializationState = 'idle'
+        return this.performInitialization()
+      }
+      
       throw new LibraryError(
-        'Failed to initialize OPFS',
+        'Failed to initialize OPFS after maximum retries',
         LibraryErrorCodes.PERMISSION_DENIED,
         undefined,
-        error instanceof Error ? error : new Error(String(error))
+        this.initializationError
       )
     }
   }
@@ -633,6 +691,49 @@ export class OPFSManager {
    */
   async writeReaderSettings(settings: ReaderSettings): Promise<void> {
     await this.writeTextFile(OPFS_STRUCTURE.READER_SETTINGS, JSON.stringify(settings, null, 2))
+  }
+
+  /**
+   * Check if OPFS is ready
+   */
+  isReady(): boolean {
+    return this.initializationState === 'ready' && this.initialized
+  }
+
+  /**
+   * Check if OPFS has failed
+   */
+  hasFailed(): boolean {
+    return this.initializationState === 'failed'
+  }
+
+  /**
+   * Get initialization error
+   */
+  getInitializationError(): Error | null {
+    return this.initializationError
+  }
+
+  /**
+   * Reset initialization state (for recovery)
+   */
+  resetInitialization(): void {
+    this.initializationState = 'idle'
+    this.initialized = false
+    this.initializationError = null
+    this.retryCount = 0
+    this.initializationPromise = null
+    this.initializationQueue.length = 0
+    logOPFS.info('OPFS state reset')
+  }
+
+  /**
+   * Force re-initialization
+   */
+  async forceReinitialize(): Promise<void> {
+    logOPFS.info('Force re-initializing OPFS')
+    this.resetInitialization()
+    return this.initialize()
   }
 
   /**

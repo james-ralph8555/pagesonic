@@ -145,12 +145,19 @@ export const SettingsView: Component = () => {
 
   // Force leadership transfer
   const forceLeadershipTransfer = async () => {
-    if (confirm('This will force a leadership transfer and may temporarily disrupt cross-tab synchronization. Continue?')) {
+    const currentStatus = libraryState().isLeader ? 'current leader' : 'not currently leader'
+    if (confirm(`This will force a leadership transfer (${currentStatus}) and may temporarily disrupt cross-tab synchronization. Continue?`)) {
       try {
+        logOPFS.info('User initiated force leadership transfer')
         await leaderElection.forceLeadershipTransfer()
         setTimeout(refreshDebugInfo, 1000) // Refresh after a delay
+        
+        // Show success feedback
+        const newStatus = libraryState().isLeader ? 'Leadership transferred and re-acquired' : 'Leadership transfer initiated'
+        logOPFS.info(`Force leadership transfer completed: ${newStatus}`)
       } catch (error) {
         console.error('Failed to force leadership transfer:', error)
+        logOPFS.error('Force leadership transfer failed', error instanceof Error ? error : new Error(String(error)))
         alert('Failed to force leadership transfer. Check console for details.')
       }
     }
@@ -785,8 +792,9 @@ export const SettingsView: Component = () => {
             <button 
               onClick={forceLeadershipTransfer}
               style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #4ecdc4; color: white; border: none; border-radius: 4px;"
+              title={!libraryState().isLeader ? "Attempt to acquire leadership (may transfer from other tab)" : "Step down and re-acquire leadership"}
             >
-              Force Leadership Transfer
+              {!libraryState().isLeader ? 'Take Leadership' : 'Force Transfer'}
             </button>
           </div>
         </div>
