@@ -279,27 +279,29 @@ export const LibrarySettings: Component = () => {
       <div class="settings-section">
         <h4>Library Information</h4>
         
-        <div class="library-info">
-          <div class="info-item">
-            <span class="info-label">Total Documents:</span>
-            <span class="info-value">{Object.keys(state().index).length}</span>
-          </div>
-          
-          <div class="info-item">
-            <span class="info-label">Storage Used:</span>
-            <span class="info-value">{storageUsage() ? `${(storageUsage()!.used / 1024 / 1024).toFixed(1)} MB` : 'Unknown'}</span>
-          </div>
-          
-          <div class="info-item">
-            <span class="info-label">Sync Status:</span>
-            <span class={`status-indicator ${state().isLeader ? 'status-active' : 'status-inactive'}`}>
-              {state().isLeader ? 'Leader (Active)' : 'Follower (Syncing)'}
-            </span>
-          </div>
+        <div class="debug-panel">
+          <div class="debug-grid">
+            <div class="debug-item">
+              <span class="label">Total Documents:</span>
+              <span class="value">{Object.keys(state().index).length}</span>
+            </div>
+            
+            <div class="debug-item">
+              <span class="label">Storage Used:</span>
+              <span class="value">{storageUsage() ? `${(storageUsage()!.used / 1024 / 1024).toFixed(1)} MB` : 'Unknown'}</span>
+            </div>
+            
+            <div class="debug-item">
+              <span class="label">Sync Status:</span>
+              <span class={`value ${state().isLeader ? 'status-success' : 'status-warning'}`}>
+                {state().isLeader ? 'Leader (Active)' : 'Follower (Syncing)'}
+              </span>
+            </div>
 
-          <div class="info-item">
-            <span class="info-label">Library Version:</span>
-            <span class="info-value">1.0</span>
+            <div class="debug-item">
+              <span class="label">Library Version:</span>
+              <span class="value">1.0</span>
+            </div>
           </div>
         </div>
       </div>
