@@ -427,7 +427,7 @@ export const PDFViewer: Component = () => {
                 <span>{pdfState().document?.title || 'Untitled Document'}</span>
                 <div class="page-selector" role="status" aria-live="polite">
                   <div
-                    class="rail-btn page-bubble"
+                    class="page-bubble"
                     style={{ width: pageBubbleWidth() ? `${pageBubbleWidth()}px` : undefined }}
                     aria-label="Current page"
                   >
@@ -464,7 +464,7 @@ export const PDFViewer: Component = () => {
                   </div>
                   <span class="slash">/</span>
                   <div
-                    class="rail-btn page-bubble page-bubble--static"
+                    class="page-bubble page-bubble--static"
                     ref={el => (staticBubbleEl = el)}
                     aria-label="Total pages"
                     title="Total pages"

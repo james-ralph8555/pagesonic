@@ -46,7 +46,7 @@ const applyThemeClass = (t: Theme) => {
     root.style.setProperty('--text-tertiary', '#9ca3af')
     root.style.setProperty('--text-inverse', '#111111')
     root.style.setProperty('--glass-bg', 'rgba(255, 255, 255, 0.08)')
-    root.style.setProperty('--glass-bg-strong', 'rgba(0, 0, 0, 0.3)')
+    root.style.setProperty('--glass-bg-strong', 'rgba(0, 0, 0, 0.7)')
     root.style.setProperty('--glass-bg-hover', 'rgba(255, 255, 255, 0.16)')
     root.style.setProperty('--glass-border', 'rgba(255, 255, 255, 0.18)')
     root.style.setProperty('--glass-border-strong', 'rgba(255, 255, 255, 0.25)')
