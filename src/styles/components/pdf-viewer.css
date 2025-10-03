@@ -51,7 +51,7 @@
   height: 36px;
   line-height: 1;
   padding: 0 1.1em;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   --border-width: clamp(1px, 0.09375em, 4px);
 
   /* glass base */
@@ -101,7 +101,7 @@
   height: calc(100% - var(--border-width));
   top: calc(0% + var(--border-width) / 2);
   left: calc(0% + var(--border-width) / 2);
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: linear-gradient(
     var(--angle-2),
     rgba(255, 255, 255, 0) 0%,
@@ -140,7 +140,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   width: calc(100% + var(--border-width));
   height: calc(100% + var(--border-width));
   top: calc(0% - var(--border-width) / 2);
@@ -239,7 +239,7 @@
   height: 36px;
   min-width: 56px;
   padding: 0 10px;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -351,7 +351,7 @@
   height: 36px;
   line-height: 1;
   padding: 0 1.1em;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: rgba(239, 68, 68, 0.18);
   border: 1px solid rgba(239, 68, 68, 0.5);
   color: #fecaca;
@@ -374,7 +374,7 @@
   gap: 0.5rem;
   padding: 0.5rem 2.2rem 0.5rem 0.9rem;
   min-height: 34px;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   color: var(--text-primary);
   cursor: pointer;
   --border-width: 2px;
@@ -605,7 +605,7 @@
   min-width: 56px;
   text-align: center;
   padding: 0.5rem 0.8rem;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   --border-width: clamp(1px, 0.09375em, 4px);
   color: var(--text-primary);
   user-select: none;
@@ -634,7 +634,7 @@
   height: calc(100% - var(--border-width));
   top: calc(0% + var(--border-width) / 2);
   left: calc(0% + var(--border-width) / 2);
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: linear-gradient(
     var(--angle-2),
     rgba(255, 255, 255, 0) 0%,
@@ -655,7 +655,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   width: calc(100% + var(--border-width));
   height: calc(100% + var(--border-width));
   top: calc(0% - var(--border-width) / 2);

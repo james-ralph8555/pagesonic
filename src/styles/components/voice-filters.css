@@ -109,7 +109,7 @@
   height: 32px;
   line-height: 1;
   padding: 0 0.9em;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   --border-width: clamp(1px, 0.0625em, 3px);
   background: linear-gradient(
     -75deg,
@@ -149,7 +149,7 @@
   height: calc(100% - var(--border-width));
   top: calc(0% + var(--border-width) / 2);
   left: calc(0% + var(--border-width) / 2);
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: linear-gradient(
     var(--angle-2),
     rgba(255, 255, 255, 0) 0%,
@@ -178,7 +178,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   width: calc(100% + var(--border-width));
   height: calc(100% + var(--border-width));
   top: calc(0% - var(--border-width) / 2);
@@ -327,7 +327,7 @@
   height: 28px;
   line-height: 1;
   padding: 0 0.7em;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   --border-width: clamp(1px, 0.0625em, 3px);
   background: linear-gradient(
     -75deg,
@@ -367,7 +367,7 @@
   height: calc(100% - var(--border-width));
   top: calc(0% + var(--border-width) / 2);
   left: calc(0% + var(--border-width) / 2);
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: linear-gradient(
     var(--angle-2),
     rgba(255, 255, 255, 0) 0%,
@@ -396,7 +396,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   width: calc(100% + var(--border-width));
   height: calc(100% + var(--border-width));
   top: calc(0% - var(--border-width) / 2);
@@ -469,7 +469,7 @@
   height: 32px;
   line-height: 1;
   padding: 0 0.9em;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   --border-width: clamp(1px, 0.0625em, 3px);
   background: linear-gradient(
     -75deg,
@@ -509,7 +509,7 @@
   height: calc(100% - var(--border-width));
   top: calc(0% + var(--border-width) / 2);
   left: calc(0% + var(--border-width) / 2);
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   background: linear-gradient(
     var(--angle-2),
     rgba(255, 255, 255, 0) 0%,
@@ -538,7 +538,7 @@
   position: absolute;
   z-index: 0;
   inset: 0;
-  border-radius: 1vw;
+  border-radius: 0.25rem;
   width: calc(100% + var(--border-width));
   height: calc(100% + var(--border-width));
   top: calc(0% - var(--border-width) / 2);
