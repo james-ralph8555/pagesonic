@@ -15,7 +15,7 @@
   
   /* Glass morphism variables - will be set by theme store */
   --glass-bg: rgba(255, 255, 255, 0.08);
-  --glass-bg-strong: rgba(255, 255, 255, 0.12);
+  --glass-bg-strong: rgba(0, 0, 0, 0.3);
   --glass-bg-hover: rgba(255, 255, 255, 0.16);
   --glass-border: rgba(255, 255, 255, 0.18);
   --glass-border-strong: rgba(255, 255, 255, 0.25);
