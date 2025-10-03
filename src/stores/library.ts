@@ -94,6 +94,10 @@ const [state, setState] = createSignal<LibraryState>({
   error: null
 })
 
+// Global initialization promise to prevent concurrent initializations
+let initializationPromise: Promise<void> | null = null
+let initializationInProgress = false
+
 export const useLibrary = () => {
   let cleanupFunctions: (() => void)[] = []
 
@@ -104,6 +108,29 @@ export const useLibrary = () => {
       return
     }
 
+    // If initialization is already in progress, wait for it
+    if (initializationPromise) {
+      logLibraryStore.debug('Library initialization already in progress, waiting...')
+      await initializationPromise
+      return
+    }
+
+    // Start initialization if not already in progress
+    if (!initializationInProgress) {
+      initializationInProgress = true
+      initializationPromise = performInitialization()
+    }
+
+    try {
+      await initializationPromise
+    } finally {
+      initializationInProgress = false
+      initializationPromise = null
+    }
+  }
+
+  // Separate function for the actual initialization logic
+  const performInitialization = async () => {
     logLibraryStore.startTimer('initialize', 'Library initialization')
     logLibraryStore.info('Starting library initialization')
     

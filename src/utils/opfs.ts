@@ -21,6 +21,7 @@ export class OPFSManager {
   private static instance: OPFSManager
   private root: FileSystemDirectoryHandle | null = null
   private initialized = false
+  private initializationPromise: Promise<void> | null = null
 
   private constructor() {}
 
@@ -35,11 +36,33 @@ export class OPFSManager {
    * Initialize OPFS and create directory structure
    */
   async initialize(): Promise<void> {
+    // If already initialized, return immediately
     if (this.initialized) {
       logOPFS.debug('OPFS already initialized, skipping')
       return
     }
 
+    // If initialization is in progress, wait for it
+    if (this.initializationPromise) {
+      logOPFS.debug('OPFS initialization already in progress, waiting...')
+      await this.initializationPromise
+      return
+    }
+
+    // Start initialization process
+    this.initializationPromise = this.performInitialization()
+
+    try {
+      await this.initializationPromise
+    } finally {
+      this.initializationPromise = null
+    }
+  }
+
+  /**
+   * Perform the actual initialization
+   */
+  private async performInitialization(): Promise<void> {
     logOPFS.startTimer('initialize', 'OPFS initialization')
     logOPFS.info('Starting OPFS initialization')
 
