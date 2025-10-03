@@ -231,10 +231,16 @@
 /* FAB (Floating Action Button) Components */
 .pdf-fab {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
+  right: 0px;
+  bottom: 0px;
+  width: 156px;
+  height: 156px;
   z-index: 70;
   transition: transform 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  padding: 0 16px 16px 0;
 }
 
 .pdf-fab.hidden {

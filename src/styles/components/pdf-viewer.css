@@ -18,14 +18,21 @@
   pointer-events: auto;
 }
 
-.fab-hover-zone {
-  position: fixed;
-  bottom: 0;
-  right: 0;
-  width: 100px;
-  height: 100px;
-  z-index: 65;
-  pointer-events: auto;
+/* Remove separate hover zone - use expanded button hover area instead */
+.fab-trigger {
+  position: relative;
+  z-index: 85;
+}
+
+/* Create large invisible hover area container */
+.fab-hover-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 60;
+  pointer-events: none;
 }
 
 /* PDF Top Rail */

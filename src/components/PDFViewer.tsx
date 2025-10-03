@@ -543,15 +543,16 @@ export const PDFViewer: Component = () => {
           const isPaused = () => ttsState().isPaused
 
           return (
-            <div ref={el => (rootEl = el!)} class={"pdf-fab" + (showFAB() ? '' : ' hidden')}>
-              {/* FAB hover zone - invisible trigger area */}
-              <div 
-                class="fab-hover-zone"
-                onMouseEnter={() => setShowFAB(true)}
-                onMouseLeave={() => {
-                  // Don't hide immediately, let scroll behavior take over
-                }}
-              />
+            <div 
+              ref={el => (rootEl = el!)} 
+              class={"pdf-fab" + (showFAB() ? '' : ' hidden')}
+              onMouseEnter={() => setShowFAB(true)}
+              onMouseLeave={() => {
+                // Don't hide immediately, let scroll behavior take over
+              }}
+            >
+              {/* Large invisible hover area - visual only */}
+              <div class="fab-hover-area" />
               
               <button
                 type="button"
