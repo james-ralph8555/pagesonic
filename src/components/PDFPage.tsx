@@ -72,13 +72,31 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       const context = canvas.getContext('2d')
       if (!context) return
 
+      // Get device pixel ratio for high DPI rendering
+      const devicePixelRatio = window.devicePixelRatio || 1
+      
+      // Create viewport with normal scale for responsive layout
       const viewport = page.getViewport({ scale: props.scale })
 
-      canvas.height = viewport.height
-      canvas.width = viewport.width
+      // Calculate CSS dimensions (responsive)
+      const cssWidth = viewport.width
+      const cssHeight = viewport.height
+      
+      // Set canvas internal resolution to device pixel ratio for crisp rendering
+      // but cap it to avoid excessive memory usage on very high DPI displays
+      const maxPixelRatio = Math.min(devicePixelRatio, 2) // Cap at 2x for performance
+      canvas.width = cssWidth * maxPixelRatio
+      canvas.height = cssHeight * maxPixelRatio
+      
+      // Set CSS dimensions to maintain responsive layout
+      canvas.style.width = `${cssWidth}px`
+      canvas.style.height = `${cssHeight}px`
 
-      // Clear canvas before rendering
-      context.clearRect(0, 0, canvas.width, canvas.height)
+      // Scale context to match the internal resolution
+      context.scale(maxPixelRatio, maxPixelRatio)
+
+      // Clear canvas before rendering (use CSS dimensions)
+      context.clearRect(0, 0, cssWidth, cssHeight)
 
       // Cancel any existing render task
       if (renderTask) {
@@ -110,13 +128,18 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
         const viewerMod: any = await import('pdfjs-dist/web/pdf_viewer')
         const { TextLayerBuilder } = viewerMod
+        // Calculate the actual pixel ratio used for rendering
+        const devicePixelRatio = window.devicePixelRatio || 1
+        const actualPixelRatio = Math.min(devicePixelRatio, 2)
+        
         textLayerBuilder = new TextLayerBuilder({
           pdfPage: page,
           onAppend: (div: HTMLDivElement) => {
             // Important: PDF.js text layer relies on CSS var --total-scale-factor
             // to position/size its absolutely positioned text nodes. Keep it
             // in sync with the viewport scale so it aligns with the canvas.
-            div.style.setProperty('--total-scale-factor', String(props.scale))
+            // Use the actual pixel ratio for proper text layer alignment.
+            div.style.setProperty('--total-scale-factor', String(props.scale * actualPixelRatio))
             container.appendChild(div)
           }
         })
@@ -240,6 +263,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
           display: (error() || !hasRendered()) ? 'none' : 'block',
           'max-width': props.fitWidth ? '100%' : 'none',
           height: 'auto'
+          // Note: width and height will be set programmatically for DPI scaling
         }}
       />
       <div
