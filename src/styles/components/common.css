@@ -496,7 +496,7 @@
   padding: 3rem 2rem;
   max-width: 600px;
   text-align: center;
-  border-radius: 999vw;
+  border-radius: 1vw;
   background: transparent;
   pointer-events: none;
   transition: all var(--anim--hover-time) var(--anim--hover-ease);
