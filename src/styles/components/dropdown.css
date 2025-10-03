@@ -1,0 +1,442 @@
+/* Dropdown Component Styles */
+
+/* Base Dropdown */
+.dropdown { 
+  position: relative; 
+}
+
+/* Full-width column layout for content areas */
+.settings-view .dropdown,
+.settings-section .dropdown,
+.reader-view .dropdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+/* Single-line dropdown layout */
+.dropdown.single-line {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dropdown.single-line label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.dropdown.single-line select,
+.dropdown.single-line input[type="number"],
+.dropdown.single-line input[type="text"] {
+  flex-shrink: 0;
+  width: auto;
+  min-width: 120px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.dropdown.single-line span {
+  margin-left: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dropdown.single-line input[type="checkbox"] {
+  margin-left: 0.5rem;
+}
+
+/* Dropdown Labels */
+.dropdown label { 
+  display: block; 
+  font-size: 0.9rem; 
+  font-weight: 500; 
+  color: rgba(255, 255, 255, 0.9); 
+  margin-bottom: 0.25rem;
+}
+
+/* Dropdown Inputs */
+.dropdown select,
+.dropdown input[type="number"],
+.dropdown input[type="text"] {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: #fff;
+  font-size: 0.9rem;
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  transition: border-color 0.2s, background-color 0.2s;
+}
+
+.dropdown select:focus,
+.dropdown input:focus {
+  outline: none;
+  border-color: var(--brand);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.dropdown select option {
+  background: rgba(17, 17, 24, 0.95);
+  color: #fff;
+}
+
+/* Checkboxes */
+.dropdown input[type="checkbox"] {
+  width: auto;
+  margin-right: 0.5rem;
+  height: 1rem;
+  min-width: 1rem;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-appearance: auto;
+  appearance: auto;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  accent-color: var(--brand);
+  vertical-align: middle;
+}
+
+/* Dropdown Spans */
+.dropdown span {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+  margin-left: 0.5rem;
+}
+
+/* Glass Menu */
+.glass-menu { 
+  position: absolute; 
+  top: calc(100% + 6px); 
+  min-width: 180px; 
+  padding: 6px; 
+  border-radius: 10px; 
+  backdrop-filter: blur(12px) saturate(160%); 
+  -webkit-backdrop-filter: blur(12px) saturate(160%); 
+  background-color: rgba(17, 17, 24, 0.85); 
+  border: 1px solid rgba(255, 255, 255, 0.12); 
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35); 
+  z-index: 60; 
+}
+
+.glass-menu.align-start { 
+  left: 0; 
+}
+
+.glass-menu.align-end { 
+  right: 0; 
+}
+
+/* Glass Menu Items */
+.glass-menu-item { 
+  display: block; 
+  width: 100%; 
+  text-align: left; 
+  padding: 0.5rem 0.75rem; 
+  border-radius: 8px; 
+  border: 1px solid transparent; 
+  background: transparent; 
+  color: #fff; 
+  cursor: pointer; 
+}
+
+.glass-menu-item:hover { 
+  background: var(--glass-hover); 
+  border-color: var(--glass-border); 
+}
+
+.glass-menu-item.disabled, 
+.glass-menu-item:disabled { 
+  opacity: 0.55; 
+  cursor: not-allowed; 
+}
+
+/* Error variant: selected item shows red when dropdown flagged */
+.dropdown.error-select .glass-menu-item.active,
+.dropdown.error-select .glass-menu-item:hover.active {
+  background: rgba(239, 68, 68, 0.28);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+/* Individual item error state */
+.glass-menu-item.error {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.glass-menu-item.error.active {
+  background: rgba(239, 68, 68, 0.35);
+  border-color: rgba(239, 68, 68, 0.6);
+  color: #fecaca;
+}
+
+.glass-menu-item.error:hover:not(.disabled):not(:disabled) {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.5);
+}
+
+/* Glass Menu Alignment and Variants */
+.glass-menu.from-bottom { 
+  bottom: calc(100% + 6px); 
+  top: auto; 
+}
+
+/* Non-interactive header and separator inside dropdowns */
+.glass-menu-title {
+  padding: 4px 8px;
+  font-size: 12px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: default;
+  user-select: none;
+  text-align: left;
+  text-transform: capitalize;
+}
+
+.glass-menu-separator {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 6px 4px;
+  border-radius: 1px;
+}
+
+.glass-menu-item.active {
+  background: var(--glass-hover);
+  border-color: var(--glass-border);
+}
+
+/* Grid variant for FAB dropdown: 3 rows layout */
+.glass-menu.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, auto));
+  gap: 6px;
+  min-width: 220px;
+}
+
+.glass-menu.menu-grid .glass-menu-item {
+  text-align: center;
+}
+
+/* Make row separators span all columns in grid menus */
+.glass-menu.menu-grid .glass-menu-separator {
+  grid-column: 1 / -1;
+}
+
+/* FAB (Floating Action Button) Components */
+.pdf-fab {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 70;
+}
+
+.fab-panel {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  min-width: 180px;
+  box-sizing: border-box;
+  border-radius: 12px;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+}
+
+.fab-row { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
+
+/* FAB Panel Layout Variants */
+.fab-panel > .fab-row:first-of-type {
+  gap: 4px;
+  padding: 4px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+}
+
+.fab-panel > .fab-row:first-of-type .icon-btn,
+.fab-panel > .fab-row:first-of-type .zoom-chip {
+  border: 0;
+  background: transparent;
+}
+
+.fab-panel > .fab-row:first-of-type .icon-btn:hover,
+.fab-panel > .fab-row:first-of-type .zoom-chip:hover {
+  background: var(--glass-hover);
+  border-radius: 8px;
+}
+
+/* Make pause/play fill available width equally */
+.fab-panel > .fab-row:last-of-type {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.fab-panel > .fab-row:last-of-type .icon-btn {
+  width: auto;            /* override fixed size */
+  height: 36px;
+  border-radius: 8px;
+}
+
+/* FAB Items */
+.fab-item {
+  all: unset;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.zoom-chip { 
+  all: unset; 
+  display: inline-flex; 
+  align-items: center; 
+  justify-content: center; 
+  cursor: pointer; 
+}
+
+.zoom-chip:hover { 
+  background: var(--glass-hover); 
+}
+
+/* Enhanced Dropdown Styling (for settings/controls) */
+.dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* Enhanced Dropdown Select Styling */
+.dropdown select {
+  /* Inherit rail select styling but optimized for settings */
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  outline: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 2.2rem 0.5rem 0.9rem;
+  min-height: 34px;
+  border-radius: 999vw;
+  color: #fff;
+  cursor: pointer;
+  --border-width: 2px;
+  background:
+    var(--select-arrow) no-repeat right 0.8rem center / 12px 12px,
+    linear-gradient(
+      -75deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.06)
+    ) padding-box,
+    conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ) border-box;
+  background-clip: content-box, padding-box, border-box;
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  transition: transform 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              background 400ms cubic-bezier(0.25, 1, 0.5, 1);
+  --select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+}
+
+.dropdown select:hover {
+  transform: none; /* keep size constant on hover */
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.45),
+    0 0.15em 0.05em -0.1em rgba(0, 0, 0, 0.3);
+}
+
+.dropdown select:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.6),
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35);
+}
+
+/* Enhanced Dropdown Input Styling */
+.dropdown input {
+  all: unset;
+  position: relative;
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  --border-width: clamp(1px, 0.0625em, 2px);
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.08),
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.08)
+  );
+  color: rgba(255,255,255,0.95);
+  box-shadow:
+    inset 0 0.08em 0.08em rgba(0, 0, 0, 0.04),
+    inset 0 -0.08em 0.08em rgba(255, 255, 255, 0.3),
+    0 0 0.1em 0.05em rgba(99, 102, 241, 0.3),
+    0 0 0.06em 0.12em inset rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
+  transition: all 300ms cubic-bezier(0.25, 1, 0.5, 1);
+  background-clip: padding-box;
+  box-sizing: border-box;
+}
+
+.dropdown input:focus {
+  outline: none;
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.12)
+  );
+  box-shadow:
+    inset 0 0.08em 0.08em rgba(0, 0, 0, 0.04),
+    inset 0 -0.08em 0.08em rgba(255, 255, 255, 0.3),
+    0 0 0.1em 0.05em rgba(99, 102, 241, 0.4),
+    0 0 0.06em 0.12em inset rgba(255, 255, 255, 0.3);
+}
+
+/* Mobile Responsive Dropdown */
+@media (max-width: 768px) {
+  .dropdown {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+  
+  .dropdown select {
+    min-height: 44px; /* iOS touch target minimum */
+  }
+}

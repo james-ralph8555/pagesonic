@@ -1,7 +1,18 @@
 /* Modular stylesheet entrypoint */
 @import './tokens.css';
 @import './base.css';
-@import './components.css';
+
+/* Component-specific styles */
+@import './components/pdf-viewer.css';
+@import './components/debug.css';
+@import './components/selection-toolbar.css';
+@import './components/reader.css';
+@import './components/dropdown.css';
+@import './components/settings.css';
+@import './components/library.css';
+@import './components/voice-filters.css';
+@import './components/common.css';
+
 /* Temporary: include legacy consolidated styles until fully split */
 @import '../index.css';
 /* Light theme overrides must come last to ensure precedence */

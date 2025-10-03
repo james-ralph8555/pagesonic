@@ -1,0 +1,738 @@
+/* PDF Viewer Component Styles */
+
+/* Main PDF Viewer */
+.pdf-viewer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* PDF Top Rail */
+.pdf-top-rail {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1rem;
+  z-index: 50;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.55);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  transition: opacity 200ms ease-in-out;
+}
+
+.pdf-top-rail.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Glass Buttons (comprehensive system for rail, zoom, and glass buttons) */
+.rail-btn,
+.pdf-zoom-controls .zoom-btn,
+.pdf-zoom-controls .zoom-toggle,
+.glass-btn {
+  /* reset and base layout */
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: rgba(0,0,0,0);
+
+  /* sizing: fixed height to match selectors */
+  height: 36px;
+  line-height: 1;
+  padding: 0 1.1em;
+  border-radius: 999vw;
+  --border-width: clamp(1px, 0.09375em, 4px);
+
+  /* glass base */
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.06)
+  );
+  color: rgba(255,255,255,0.95);
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.28),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.18),
+    0 0 0 0 rgba(255, 255, 255, 1);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  transition: transform 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              background 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              color 400ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.rail-btn:hover,
+.pdf-zoom-controls .zoom-btn:hover,
+.pdf-zoom-controls .zoom-toggle:hover,
+.glass-btn:hover {
+  transform: none; /* keep size constant on hover */
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.45),
+    0 0.15em 0.05em -0.1em rgba(0, 0, 0, 0.3),
+    0 0 0.05em 0.1em inset rgba(255, 255, 255, 0.45),
+    0 0 0 0 rgba(255, 255, 255, 1);
+}
+
+/* Glare overlay */
+.rail-btn::before,
+.pdf-zoom-controls .zoom-btn::before,
+.pdf-zoom-controls .zoom-toggle::before,
+.glass-btn::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  border-radius: 999vw;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 40% 52%,
+    rgba(255, 255, 255, 0) 58%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  transition: background-position 500ms cubic-bezier(0.25, 1, 0.5, 1),
+              --angle-2 500ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.rail-btn:hover::before,
+.pdf-zoom-controls .zoom-btn:hover::before,
+.pdf-zoom-controls .zoom-toggle:hover::before,
+.glass-btn:hover::before {
+  background-position: 25% 50%;
+}
+
+.rail-btn:active::before,
+.pdf-zoom-controls .zoom-btn:active::before,
+.pdf-zoom-controls .zoom-toggle:active::before,
+.glass-btn:active::before {
+  background-position: 50% 15%;
+  --angle-2: -15deg;
+}
+
+/* Outline gradient ring */
+.rail-btn::after,
+.pdf-zoom-controls .zoom-btn::after,
+.pdf-zoom-controls .zoom-toggle::after,
+.glass-btn::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 999vw;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background: conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  transition: --angle-1 500ms ease, box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1);
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+.rail-btn:hover::after,
+.pdf-zoom-controls .zoom-btn:hover::after,
+.pdf-zoom-controls .zoom-toggle:hover::after,
+.glass-btn:hover::after {
+  --angle-1: -125deg;
+}
+
+.rail-btn:active::after,
+.pdf-zoom-controls .zoom-btn:active::after,
+.pdf-zoom-controls .zoom-toggle:active::after,
+.glass-btn:active::after {
+  --angle-1: -75deg;
+}
+
+/* Touch device adaptations */
+@media (hover: none) and (pointer: coarse) {
+  .rail-btn::after,
+  .rail-btn:hover::after,
+  .rail-btn:active::after,
+  .pdf-zoom-controls .zoom-btn::after,
+  .pdf-zoom-controls .zoom-btn:hover::after,
+  .pdf-zoom-controls .zoom-btn:active::after,
+  .pdf-zoom-controls .zoom-toggle::after,
+  .pdf-zoom-controls .zoom-toggle:hover::after,
+  .pdf-zoom-controls .zoom-toggle:active::after,
+  .glass-btn::after,
+  .glass-btn:hover::after,
+  .glass-btn:active::after {
+    --angle-1: -75deg;
+  }
+  .rail-btn::before,
+  .rail-btn:active::before,
+  .pdf-zoom-controls .zoom-btn::before,
+  .pdf-zoom-controls .zoom-btn:active::before,
+  .pdf-zoom-controls .zoom-toggle::before,
+  .pdf-zoom-controls .zoom-toggle:active::before,
+  .glass-btn::before,
+  .glass-btn:active::before {
+    --angle-2: -45deg;
+  }
+}
+
+/* Glass button variants */
+.glass-btn--small {
+  height: 28px;
+  padding: 0 0.8em;
+  font-size: 0.85em;
+}
+
+.glass-btn--large {
+  height: 44px;
+  padding: 0 1.5em;
+  font-size: 1.1em;
+}
+
+.glass-btn--compact {
+  height: 32px;
+  padding: 0 0.9em;
+  font-size: 0.9em;
+}
+
+/* Page selector bubble */
+.page-selector { display: inline-flex; align-items: center; gap: 6px; }
+.page-selector .slash { opacity: 0.9; }
+
+.page-bubble {
+  height: 36px;
+  min-width: 56px;
+  padding: 0 10px;
+  border-radius: 999vw;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.page-bubble--static { cursor: default; user-select: none; }
+
+.page-bubble .bubble-input {
+  all: unset;
+  width: 100%;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: inherit;
+  line-height: 1;
+  cursor: text;
+}
+
+.page-bubble .maxpage { font-variant-numeric: tabular-nums; }
+
+/* Center the meta (title + page selector) over the rail */
+.rail-meta {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 70vw;
+}
+
+.rail-meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 40vw;
+}
+
+/* Mobile-specific adjustments */
+@media (max-width: 768px) {
+  .pdf-top-rail {
+    padding: 0 1rem;
+    min-width: 0;
+  }
+  
+  .rail-meta {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: calc(100vw - 200px);
+    min-width: 0;
+  }
+  
+  .rail-meta > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: min(40vw, calc(100vw - 280px));
+    min-width: 0;
+    font-size: 0.9rem;
+  }
+  
+  .page-selector {
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  
+  .page-bubble {
+    min-width: 44px;
+    height: 32px;
+    padding: 0 8px;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  
+  .rail-btn {
+    height: 32px;
+    padding: 0 0.8em;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  
+  @media (max-width: 480px) {
+    .rail-meta > span:first-child {
+      max-width: min(30vw, calc(100vw - 320px));
+    }
+    
+    .page-bubble {
+      min-width: 40px;
+      height: 30px;
+      padding: 0 6px;
+      font-size: 0.8rem;
+    }
+  }
+}
+
+/* Error state for rail buttons */
+.rail-btn.error {
+  all: unset;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  line-height: 1;
+  padding: 0 1.1em;
+  border-radius: 999vw;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fecaca;
+}
+
+.rail-btn.error::before,
+.rail-btn.error::after { content: none; }
+.rail-btn.error:hover { background: rgba(239, 68, 68, 0.28); }
+
+/* Rail Select */
+.rail-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  border: none;
+  outline: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 2.2rem 0.5rem 0.9rem;
+  min-height: 34px;
+  border-radius: 999vw;
+  color: #fff;
+  cursor: pointer;
+  --border-width: 2px;
+  background:
+    var(--select-arrow) no-repeat right 0.8rem center / 12px 12px,
+    linear-gradient(
+      -75deg,
+      rgba(255, 255, 255, 0.06),
+      rgba(255, 255, 255, 0.18),
+      rgba(255, 255, 255, 0.06)
+    ) padding-box,
+    conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ) border-box;
+  background-clip: content-box, padding-box, border-box;
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  transition: transform 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              box-shadow 400ms cubic-bezier(0.25, 1, 0.5, 1),
+              background 400ms cubic-bezier(0.25, 1, 0.5, 1);
+  --select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'/%3e%3c/svg%3e");
+}
+
+.rail-select:hover {
+  transform: none;
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.45),
+    0 0.15em 0.05em -0.1em rgba(0, 0, 0, 0.3);
+}
+
+.rail-select:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(99, 102, 241, 0.6),
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35);
+}
+
+/* Full-height scroll area with frosted ambiance */
+.pdf-scroll {
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: auto;
+  background: radial-gradient(1200px 600px at 50% -200px, rgba(255, 255, 255, 0.12), rgba(0,0,0,0) 60%),
+              linear-gradient(180deg, rgba(10, 10, 14, 0.85), rgba(10, 10, 14, 0.85));
+}
+
+/* Pages column, centered */
+.pdf-pages {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 72px 16px 24px;
+}
+
+.pdf-page-container {
+  position: relative;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  max-width: 100%;
+}
+
+.pdf-page-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  position: relative;
+  z-index: 0;
+  border-radius: 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+}
+
+/* PDF Page Placeholder with liquid glass */
+.pdf-page-placeholder {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  position: relative;
+  z-index: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  --border-width: clamp(1px, 0.09375em, 4px);
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.06)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 12px 28px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px)) saturate(160%);
+}
+
+/* liquid glass glare */
+.pdf-page-placeholder::before {
+  content: '';
+  position: absolute;
+  z-index: 1;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  border-radius: inherit;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 40% 52%,
+    rgba(255, 255, 255, 0) 58%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  animation: placeholderGlare 2.4s ease-in-out infinite;
+}
+
+@keyframes placeholderGlare {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 30% 45%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* subtle outline ring */
+.pdf-page-placeholder::after {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background: conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+/* Text layer container overlay */
+.pdf-text-layer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  z-index: 1;
+}
+
+/* PDF.js text layer */
+.textLayer {
+  position: absolute;
+  inset: 0;
+  overflow: clip;
+  line-height: 1;
+  transform-origin: 0 0;
+  z-index: 1;
+  --total-scale-factor: 1;
+}
+
+.textLayer span,
+.textLayer br {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 0, 255, 0.25);
+}
+
+/* Floating Zoom Controls */
+.pdf-zoom-controls {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  background-color: rgba(17, 17, 24, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 60;
+}
+
+.pdf-zoom-controls .zoom-toggle.active {
+  background: linear-gradient(
+    -75deg,
+    rgba(99, 102, 241, 0.35),
+    rgba(99, 102, 241, 0.55),
+    rgba(99, 102, 241, 0.25)
+  );
+}
+
+.pdf-zoom-controls .zoom-display,
+.rail-value {
+  all: unset;
+  position: relative;
+  min-width: 56px;
+  text-align: center;
+  padding: 0.5rem 0.8rem;
+  border-radius: 999vw;
+  --border-width: clamp(1px, 0.09375em, 4px);
+  color: rgba(255,255,255,0.95);
+  user-select: none;
+  cursor: pointer;
+  background: linear-gradient(
+    -75deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.18),
+    rgba(255, 255, 255, 0.06)
+  );
+  box-shadow:
+    inset 0 0.125em 0.125em rgba(0, 0, 0, 0.05),
+    inset 0 -0.125em 0.125em rgba(255, 255, 255, 0.35),
+    0 0.25em 0.125em -0.125em rgba(0, 0, 0, 0.28),
+    0 0 0.1em 0.25em inset rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+  -webkit-backdrop-filter: blur(clamp(1px, 0.125em, 6px));
+}
+
+.pdf-zoom-controls .zoom-display::before,
+.rail-value::before {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  width: calc(100% - var(--border-width));
+  height: calc(100% - var(--border-width));
+  top: calc(0% + var(--border-width) / 2);
+  left: calc(0% + var(--border-width) / 2);
+  border-radius: 999vw;
+  background: linear-gradient(
+    var(--angle-2),
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 40% 52%,
+    rgba(255, 255, 255, 0) 58%
+  );
+  mix-blend-mode: screen;
+  pointer-events: none;
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  transition: background-position 500ms cubic-bezier(0.25, 1, 0.5, 1),
+              --angle-2 500ms cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.pdf-zoom-controls .zoom-display::after,
+.rail-value::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: 999vw;
+  width: calc(100% + var(--border-width));
+  height: calc(100% + var(--border-width));
+  top: calc(0% - var(--border-width) / 2);
+  left: calc(0% - var(--border-width) / 2);
+  padding: var(--border-width);
+  box-sizing: border-box;
+  background: conic-gradient(
+      from var(--angle-1) at 50% 50%,
+      rgba(0, 0, 0, 0.45),
+      rgba(0, 0, 0, 0) 5% 40%,
+      rgba(0, 0, 0, 0.45) 50%,
+      rgba(0, 0, 0, 0) 60% 95%,
+      rgba(0, 0, 0, 0.45)
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45));
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  box-shadow: inset 0 0 0 calc(var(--border-width) / 2) rgba(255, 255, 255, 0.45);
+  pointer-events: none;
+}
+
+.pdf-zoom-controls .zoom-display:hover::before { background-position: 25% 50%; }
+.pdf-zoom-controls .zoom-display:hover::after { --angle-1: -125deg; }
+
+/* Rail value adjustments: match top-rail button height and non-clickable */
+.rail-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 0.8rem;
+  line-height: 1;
+  box-sizing: border-box;
+  cursor: default;
+}
+
+/* Page error */
+.page-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(239, 68, 68, 0.9);
+  color: white;
+  padding: 1rem;
+  border-radius: 4px;
+  text-align: center;
+}
+
+.pdf-info { display: none; }
+
+/* PDF Mode Styles */
+.app--pdf { 
+  max-width: 100%; 
+  padding: 0; 
+}
+
+.app--pdf .app-header { 
+  display: none; 
+}
+
+.app--pdf .app-main { 
+  gap: 0; 
+}
+
+/* Mobile Responsive for PDF */
+@media (max-width: 768px) {
+  .pdf-top-rail { 
+    height: 52px; 
+  }
+}
+
+/* PDF Mode Styles */
+.app--pdf { 
+  max-width: 100%; 
+  padding: 0; 
+}
+
+.app--pdf .app-header { 
+  display: none; 
+}
+
+.app--pdf .app-main { 
+  gap: 0; 
+}

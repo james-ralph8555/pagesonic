@@ -10,6 +10,9 @@
   --glass-border: rgba(255, 255, 255, 0.18);
   --glass-hover: rgba(255, 255, 255, 0.16);
   --brand: #6366f1;
+  /* Liquid glass animation timing (used by placeholder + buttons) */
+  --anim--hover-time: 400ms;
+  --anim--hover-ease: cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 /* Inspired glass button custom properties */
