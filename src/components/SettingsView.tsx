@@ -601,14 +601,13 @@ export const SettingsView: Component = () => {
       <div class="settings-section">
         <h3>About</h3>
         <div class="about-info">
-          <p><strong>PageSonic</strong> - Privacy-preserving PDF viewer with text-to-speech</p>
-          <p>Running entirely in your browser for maximum privacy</p>
+          <p><strong>PageSonic</strong> - PDF viewer with text-to-speech</p>
+          <p>Running entirely in your browser for maximum security</p>
           <p>Features:</p>
           <ul>
             <li>Local PDF viewing with text extraction</li>
             <li>Browser-based text-to-speech</li>
             <li>No data sent to external servers</li>
-            <li>Works offline</li>
           </ul>
         </div>
       </div>

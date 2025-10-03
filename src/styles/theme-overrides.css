@@ -305,3 +305,19 @@ div[style*="background: #f0f4f8"] button:hover {
 .theme-light .hint {
   color: rgba(0, 0, 0, 0.6) !important;
 }
+
+/* Section dividers in light mode */
+.theme-light .section-divider {
+  background: linear-gradient(90deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.2)) !important;
+}
+
+/* Glass menu separators in light mode */
+.theme-light .glass-menu-separator {
+  background: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Top rail borders in light mode */
+.theme-light .settings-top-rail,
+.theme-light .pdf-top-rail {
+  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
