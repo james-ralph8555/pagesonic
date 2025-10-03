@@ -17,12 +17,17 @@ import {
   ReaderSettings,
   LibraryMessage,
   LeaderInfo,
-  DocumentId
+  DocumentId,
+  LibraryError,
+  LibraryErrorCodes,
+  ImportProgress as LibraryImportProgress
 } from '@/types/library'
+import type { LibraryState } from '@/types/library'
 import { opfsManager } from '@/utils/opfs'
 import { leaderElection } from '@/utils/leader-election'
 import { broadcastChannel } from '@/utils/broadcast-channel'
 import { logLibraryStore } from '@/utils/logger'
+import { importFile, importFiles, importFolder, ImportProgress, ImportResult } from '@/utils/import'
 
 interface LibraryState {
   // Data
@@ -41,6 +46,10 @@ interface LibraryState {
   sortBy: 'title' | 'author' | 'date' | 'size' | 'progress'
   sortOrder: 'asc' | 'desc'
   viewMode: 'grid' | 'list'
+  
+  // Import state
+  isImporting: boolean
+  importProgress: ImportProgress | null
   
   // Leadership state
   isLeader: boolean
@@ -87,6 +96,9 @@ const [state, setState] = createSignal<LibraryState>({
   sortBy: 'title',
   sortOrder: 'asc',
   viewMode: 'grid',
+  
+  isImporting: false,
+  importProgress: null,
   
   isLeader: false,
   leaderInfo: null,
@@ -353,10 +365,21 @@ export const useLibrary = () => {
       }
       
       logLibraryStore.info('Leader election process completed successfully')
+      
+      // Perform final state synchronization to ensure consistency
+      await synchronizeLeaderState()
+      
     } catch (error) {
       logLibraryStore.error('Failed to start leader election', error instanceof Error ? error : new Error(String(error)))
       // Don't throw - allow the library to function in follower mode
       logLibraryStore.warn('Leader election failed, continuing in limited mode')
+      
+      // Even if election failed, try to sync whatever state we have
+      try {
+        await synchronizeLeaderState()
+      } catch (syncError) {
+        logLibraryStore.warn('Failed to sync leader state after election failure', syncError instanceof Error ? syncError : new Error(String(syncError)))
+      }
     }
   }
 
@@ -668,6 +691,561 @@ export const useLibrary = () => {
     return await opfsManager.getStorageUsage()
   }
 
+  // Import methods
+
+  // Import a single file
+  const importSingleFile = async (file: File): Promise<ImportResult> => {
+    logLibraryStore.info(`Starting import of file: ${file.name}`)
+    
+    try {
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: true, 
+        error: null,
+        importProgress: { stage: 'validating', progress: 0, currentFile: file.name }
+      }))
+
+      // Ensure leadership with retry logic (simplified for single file)
+      let hasLeadership = false
+      try {
+        hasLeadership = await ensureLeadership()
+        if (!hasLeadership) {
+          setState(prev => ({ 
+            ...prev, 
+            importProgress: { 
+              ...prev.importProgress!, 
+              progress: 5,
+              error: 'Acquiring leadership...'
+            }
+          }))
+          
+          // Try once more with force fallback
+          await (window as any).__libraryDebug?.quickFix()
+          await new Promise(resolve => setTimeout(resolve, 500))
+          hasLeadership = await ensureLeadership()
+        }
+      } catch (leadershipError) {
+        logLibraryStore.warn('Leadership acquisition failed for single file import', leadershipError instanceof Error ? leadershipError : new Error(String(leadershipError)))
+        
+        // Check if we can proceed in single-tab mode
+        try {
+          const lockInfo = await leaderElection.getLockInfo()
+          const hasActiveLocks = lockInfo.held.length > 0 || lockInfo.pending.length > 0
+          if (!hasActiveLocks) {
+            logLibraryStore.info('No active locks, proceeding with single file import')
+            hasLeadership = true
+          }
+        } catch (lockError) {
+          // Leadership check failed
+        }
+      }
+
+      if (!hasLeadership) {
+        throw new LibraryError('Import requires leader tab. Please refresh the page and try again.', LibraryErrorCodes.LEADER_REQUIRED)
+      }
+
+      const result = await importFile(file, (progress) => {
+        setState(prev => ({ ...prev, importProgress: progress }))
+      })
+
+      if (result.success) {
+        // Refresh library index to show the new document
+        try {
+          await refreshLibrary()
+        } catch (refreshError) {
+          logLibraryStore.warn('Failed to refresh library after single file import', refreshError instanceof Error ? refreshError : new Error(String(refreshError)))
+        }
+        
+        setState(prev => ({ 
+          ...prev, 
+          isImporting: false, 
+          importProgress: { stage: 'complete', progress: 100, currentFile: file.name }
+        }))
+
+        logLibraryStore.info(`Successfully imported file: ${file.name}`, { documentId: result.documentId })
+      } else {
+        setState(prev => ({ 
+          ...prev, 
+          isImporting: false, 
+          error: result.error || 'Import failed',
+          importProgress: { 
+            stage: 'error', 
+            progress: 0, 
+            currentFile: file.name, 
+            error: result.error 
+          }
+        }))
+      }
+
+      return result
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown import error'
+      logLibraryStore.error(`Import failed for file: ${file.name}`, error instanceof Error ? error : new Error(String(error)))
+      
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: false, 
+        error: errorMessage,
+        importProgress: { 
+          stage: 'error', 
+          progress: 0, 
+          currentFile: file.name, 
+          error: errorMessage 
+        }
+      }))
+
+      return { success: false, error: errorMessage }
+    }
+  }
+
+  // Import multiple files
+  const importMultipleFiles = async (files: FileList | File[]): Promise<{ results: ImportResult[]; successful: number; failed: number }> => {
+    const fileArray = Array.from(files)
+    logLibraryStore.info(`Starting batch import of ${fileArray.length} files`)
+
+    try {
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: true, 
+        error: null,
+        importProgress: { 
+          stage: 'validating', 
+          progress: 0, 
+          totalFiles: fileArray.length 
+        }
+      }))
+
+      // Ensure leadership with retry logic
+      let hasLeadership = false
+      let leadershipAttempts = 0
+      const maxLeadershipAttempts = 3
+      
+      while (leadershipAttempts < maxLeadershipAttempts && !hasLeadership) {
+        leadershipAttempts++
+        
+        try {
+          hasLeadership = await ensureLeadership()
+          
+          if (!hasLeadership) {
+            logLibraryStore.warn(`Leadership attempt ${leadershipAttempts} failed, retrying...`)
+            
+            // Update progress to show leadership acquisition attempt
+            setState(prev => ({ 
+              ...prev, 
+              importProgress: { 
+                ...prev.importProgress!, 
+                progress: 5,
+                error: leadershipAttempts < maxLeadershipAttempts 
+                  ? `Acquiring leadership (attempt ${leadershipAttempts}/${maxLeadershipAttempts})...`
+                  : 'Failed to acquire leadership'
+              } as LibraryImportProgress
+            } as LibraryState))
+            
+            if (leadershipAttempts < maxLeadershipAttempts) {
+              // Wait and try again
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              
+              // Try to force leadership as last resort
+              if (leadershipAttempts === maxLeadershipAttempts - 1) {
+                logLibraryStore.warn('Final attempt: trying to force leadership')
+                try {
+                  await (window as any).__libraryDebug?.quickFix()
+                  await new Promise(resolve => setTimeout(resolve, 500))
+                  hasLeadership = await ensureLeadership()
+                } catch (forceError) {
+                  logLibraryStore.error('Force leadership attempt failed', forceError instanceof Error ? forceError : new Error(String(forceError)))
+                }
+              }
+            }
+          }
+        } catch (error) {
+          logLibraryStore.error(`Leadership attempt ${leadershipAttempts} threw error`, error instanceof Error ? error : new Error(String(error)))
+          
+          // Continue trying if leadership check throws
+          if (leadershipAttempts < maxLeadershipAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          }
+        }
+      }
+
+      // If still no leadership after all attempts, try to proceed anyway in single-tab mode
+      if (!hasLeadership) {
+        logLibraryStore.warn('Unable to acquire leadership, attempting to proceed in single-tab mode')
+        
+        // Check if we're likely in a single-tab scenario
+        try {
+          const lockInfo = await leaderElection.getLockInfo()
+          const hasActiveLocks = lockInfo.held.length > 0 || lockInfo.pending.length > 0
+          
+          if (!hasActiveLocks) {
+            logLibraryStore.info('No active locks detected, proceeding with import')
+            hasLeadership = true // Override for single-tab mode
+          } else {
+            throw new LibraryError(
+              `Import requires leader tab after ${maxLeadershipAttempts} attempts. Please try refreshing the page or closing other tabs.`, 
+              LibraryErrorCodes.LEADER_REQUIRED
+            )
+          }
+        } catch (lockError) {
+          throw new LibraryError(
+            `Import requires leader tab after ${maxLeadershipAttempts} attempts. Please refresh the page and try again.`, 
+            LibraryErrorCodes.LEADER_REQUIRED
+          )
+        }
+      }
+
+      // Now proceed with import
+      setState(prev => ({ 
+        ...prev, 
+        importProgress: { 
+          ...prev.importProgress!, 
+          stage: 'validating',
+          progress: 10,
+          error: undefined
+        } as LibraryImportProgress
+      } as LibraryState))
+
+      const results = await importFiles(fileArray, (progress) => {
+        setState(prev => ({ ...prev, importProgress: progress }))
+      })
+
+      // Refresh library index to show new documents
+      if (hasLeadership) {
+        try {
+          await refreshLibrary()
+        } catch (refreshError) {
+          logLibraryStore.warn('Failed to refresh library after import', refreshError instanceof Error ? refreshError : new Error(String(refreshError)))
+        }
+      }
+
+      const finalProgress = results.successful > 0 
+        ? { stage: 'complete' as const, progress: 100, totalFiles: fileArray.length }
+        : { 
+            stage: 'error' as const, 
+            progress: 0, 
+            totalFiles: fileArray.length,
+            error: results.failed > 0 ? 'Some files failed to import' : 'All files failed to import'
+          } as LibraryImportProgress
+
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: false, 
+        importProgress: finalProgress
+      } as LibraryState))
+
+      logLibraryStore.info(`Batch import completed`, { 
+        total: fileArray.length,
+        successful: results.successful,
+        failed: results.failed,
+        hasLeadership
+      })
+
+      return results
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown import error'
+      logLibraryStore.error(`Batch import failed`, error instanceof Error ? error : new Error(String(error)))
+      
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: false, 
+        error: errorMessage,
+        importProgress: { 
+          stage: 'error', 
+          progress: 0, 
+          totalFiles: fileArray.length,
+          error: errorMessage 
+        }
+      }))
+
+      return { 
+        results: [], 
+        successful: 0, 
+        failed: fileArray.length 
+      }
+    }
+  }
+
+  // Import folder
+  const importDirectory = async (directoryHandle: FileSystemDirectoryHandle): Promise<{ results: ImportResult[]; successful: number; failed: number }> => {
+    // Ensure leadership before proceeding with import
+    const hasLeadership = await ensureLeadership()
+    if (!hasLeadership) {
+      throw new LibraryError('Import requires leader tab. Please refresh the page and try again.', LibraryErrorCodes.LEADER_REQUIRED)
+    }
+
+    logLibraryStore.info(`Starting directory import: ${directoryHandle.name}`)
+
+    try {
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: true, 
+        error: null,
+        importProgress: { 
+          stage: 'validating', 
+          progress: 0,
+          currentFile: directoryHandle.name
+        }
+      }))
+
+      const results = await importFolder(directoryHandle, (progress) => {
+        setState(prev => ({ ...prev, importProgress: progress }))
+      })
+
+      // Refresh library index to show new documents
+      await refreshLibrary()
+
+      const finalProgress = results.successful > 0 
+        ? { stage: 'complete' as const, progress: 100 }
+        : { 
+            stage: 'error' as const, 
+            progress: 0,
+            error: 'No files were successfully imported'
+          } as LibraryImportProgress
+
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: false, 
+        importProgress: finalProgress
+      } as LibraryState))
+
+      logLibraryStore.info(`Directory import completed`, { 
+        directory: directoryHandle.name,
+        successful: results.successful,
+        failed: results.failed
+      })
+
+      return results
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown import error'
+      logLibraryStore.error(`Directory import failed`, error instanceof Error ? error : new Error(String(error)))
+      
+      setState(prev => ({ 
+        ...prev, 
+        isImporting: false, 
+        error: errorMessage,
+        importProgress: { 
+          stage: 'error', 
+          progress: 0,
+          error: errorMessage 
+        }
+      }))
+
+      return { 
+        results: [], 
+        successful: 0, 
+        failed: 0 
+      }
+    }
+  }
+
+  // Clear import progress
+  const clearImportProgress = () => {
+    setState(prev => ({ 
+      ...prev, 
+      isImporting: false, 
+      importProgress: null 
+    }))
+  }
+
+  // Synchronize leader state between election system and library store
+  const synchronizeLeaderState = async (): Promise<boolean> => {
+    logLibraryStore.info('Synchronizing leader state', { 
+      isLeaderElection: leaderElection.isCurrentLeader(),
+      isLeaderStore: state().isLeader,
+      tabId: leaderElection.getTabId()
+    })
+
+    // Wait a moment for any pending callbacks to propagate
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Check multiple times to ensure consistency
+    let isActuallyLeader = false
+    let attempts = 0
+    const maxAttempts = 3
+    
+    while (attempts < maxAttempts) {
+      attempts++
+      isActuallyLeader = leaderElection.isCurrentLeader()
+      
+      logLibraryStore.debug(`Leadership check attempt ${attempts}: ${isActuallyLeader}`)
+      
+      // If we get a consistent result, break early
+      if (attempts > 1 && isActuallyLeader === leaderElection.isCurrentLeader()) {
+        break
+      }
+      
+      // Wait between checks
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+    }
+
+    const storeThinksIsLeader = state().isLeader
+
+    if (isActuallyLeader !== storeThinksIsLeader) {
+      logLibraryStore.warn('Leader state mismatch detected, synchronizing', {
+        isActuallyLeader,
+        storeThinksIsLeader,
+        attempts
+      })
+
+      if (isActuallyLeader) {
+        const leaderInfo = leaderElection.getLeaderInfo()
+        if (leaderInfo) {
+          logLibraryStore.info('Setting library store to leader state', { leaderInfo })
+          batch(() => {
+            setState(prev => ({
+              ...prev,
+              isLeader: true,
+              leaderInfo
+            }))
+          })
+        } else {
+          logLibraryStore.warn('Leader election says we are leader but no leader info available')
+          // Create fallback leader info
+          const fallbackLeaderInfo = {
+            id: leaderElection.getTabId(),
+            timestamp: Date.now(),
+            tabId: leaderElection.getTabId()
+          }
+          batch(() => {
+            setState(prev => ({
+              ...prev,
+              isLeader: true,
+              leaderInfo: fallbackLeaderInfo
+            }))
+          })
+        }
+      } else {
+        logLibraryStore.info('Setting library store to follower state')
+        batch(() => {
+          setState(prev => ({
+            ...prev,
+            isLeader: false,
+            leaderInfo: null
+          }))
+        })
+      }
+
+      // Wait for state update to propagate
+      await new Promise(resolve => setTimeout(resolve, 50))
+      
+      // Verify the synchronization worked
+      const finalLeaderState = state().isLeader
+      if (finalLeaderState === isActuallyLeader) {
+        logLibraryStore.info('Leader state synchronization completed successfully', {
+          newIsLeader: finalLeaderState,
+          leaderInfo: state().leaderInfo
+        })
+      } else {
+        logLibraryStore.error('Leader state synchronization failed to update store', {
+          expected: isActuallyLeader,
+          actual: finalLeaderState
+        })
+      }
+      
+      return true
+    }
+
+    logLibraryStore.debug('Leader state already synchronized')
+    return false
+  }
+
+  // Ensure leadership with fallback recovery
+  const ensureLeadership = async (): Promise<boolean> => {
+    logLibraryStore.info('Ensuring leadership for import operation')
+
+    // First, synchronize current state
+    await synchronizeLeaderState()
+    
+    if (state().isLeader) {
+      logLibraryStore.info('Leadership confirmed after synchronization')
+      return true
+    }
+
+    logLibraryStore.warn('Not leader after sync, attempting to acquire leadership')
+    
+    // Try multiple approaches to acquire leadership
+    const attempts = [
+      { name: 'immediate acquisition', action: () => leaderElection.attemptLeadership() },
+      { name: 'election process', action: () => leaderElection.startElection() },
+      { name: 'force leadership', action: () => (window as any).__libraryDebug?.forceLeadership() }
+    ]
+
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i]
+      logLibraryStore.info(`Leadership attempt ${i + 1}: ${attempt.name}`)
+      
+      try {
+        if (i === 0) {
+          // Immediate acquisition
+          const acquired = await attempt.action()
+          if (acquired) {
+            logLibraryStore.info('Leadership acquired successfully')
+            // Wait a moment for callbacks to propagate
+            await new Promise(resolve => setTimeout(resolve, 200))
+            await synchronizeLeaderState()
+            if (state().isLeader) {
+              return true
+            }
+          }
+        } else if (i === 1) {
+          // Full election process
+          await attempt.action()
+          // Wait for election to complete
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          await synchronizeLeaderState()
+          if (state().isLeader) {
+            return true
+          }
+        } else if (i === 2) {
+          // Force leadership (emergency)
+          const result = await attempt.action()
+          logLibraryStore.warn('Emergency force leadership result:', result)
+          // Wait for force to take effect
+          await new Promise(resolve => setTimeout(resolve, 500))
+          await synchronizeLeaderState()
+          if (state().isLeader) {
+            logLibraryStore.warn('Leadership acquired via emergency override')
+            return true
+          }
+        }
+        
+        // Wait between attempts
+        if (i < attempts.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 800))
+        }
+        
+      } catch (error) {
+        logLibraryStore.error(`Leadership attempt ${i + 1} failed`, error instanceof Error ? error : new Error(String(error)))
+      }
+    }
+
+    logLibraryStore.error('Failed to ensure leadership after all attempts - import may not work')
+    
+    // Final state check and emergency fallback
+    await synchronizeLeaderState()
+    if (state().isLeader) {
+      logLibraryStore.info('Leadership finally available after all attempts')
+      return true
+    }
+    
+    // As a last resort, try bypassing leadership check for single-tab scenarios
+    try {
+      const lockInfo = await leaderElection.getLockInfo()
+      const hasActiveLocks = lockInfo.held.length > 0 || lockInfo.pending.length > 0
+      
+      if (!hasActiveLocks) {
+        logLibraryStore.warn('No active locks detected, allowing import in single-tab mode')
+        return true
+      }
+    } catch (error) {
+      logLibraryStore.warn('Could not check lock info for fallback', error instanceof Error ? error : new Error(String(error)))
+    }
+    
+    return false
+  }
+
   // Lifecycle
   onMount(() => {
     logLibraryStore.info('Library component mounted')
@@ -722,6 +1300,7 @@ export const useLibrary = () => {
   return {
     // State
     state,
+    setState,
     
     // Computed
     getLibraryItems,
@@ -740,9 +1319,17 @@ export const useLibrary = () => {
     clearError,
     getStorageUsage,
     
+    // Import actions
+    importSingleFile,
+    importMultipleFiles,
+    importDirectory,
+    clearImportProgress,
+    
     // Leadership helpers
     isLeader: () => state().isLeader,
     getLeaderInfo: () => state().leaderInfo,
+    synchronizeLeaderState,
+    ensureLeadership,
     
     // Debug helpers
     getInstanceInfo: () => ({

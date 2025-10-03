@@ -6,18 +6,27 @@ import { GlassDropdownButton } from './GlassDropdownButton'
 export const LibraryView: Component = () => {
   const {
     state,
+    setState,
     getLibraryItems,
     setSearchQuery,
     setSortOptions,
     setViewMode,
     clearError,
-    getStorageUsage
+    getStorageUsage,
+    importMultipleFiles,
+    clearImportProgress,
+    synchronizeLeaderState,
+    ensureLeadership
   } = useLibrary()
 
   const [sortBy, setSortBy] = createSignal<'title' | 'author' | 'date' | 'size'>('title')
   const [sortOrder, setSortOrder] = createSignal<'asc' | 'desc'>('asc')
   const [storageUsage, setStorageUsage] = createSignal<{ used: number; quota: number; available: number } | null>(null)
   const [showDebug, setShowDebug] = createSignal(false)
+  
+  // Refs for file inputs
+  let fileInputRef: HTMLInputElement | undefined
+  let directoryInputRef: HTMLInputElement | undefined
 
   // Update sort when controls change
   const handleSortChange = () => {
@@ -56,6 +65,52 @@ export const LibraryView: Component = () => {
   }
 
   const libraryItems = () => getLibraryItems()
+
+  // Import handlers
+  const handleImportFiles = () => {
+    fileInputRef?.click()
+  }
+
+  const handleImportFolder = () => {
+    directoryInputRef?.click()
+  }
+
+  const handleFileSelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) return
+
+    try {
+      await importMultipleFiles(files)
+    } catch (error) {
+      console.error('Import failed:', error)
+    } finally {
+      // Reset input
+      target.value = ''
+    }
+  }
+
+  const handleDirectorySelect = async (event: Event) => {
+    const target = event.target as HTMLInputElement
+    const files = target.files
+    if (!files || files.length === 0) return
+
+    try {
+      // For directory import, we'll handle it as multiple files for now
+      // In the future, we could enhance this to preserve directory structure
+      await importMultipleFiles(files)
+    } catch (error) {
+      console.error('Directory import failed:', error)
+    } finally {
+      // Reset input
+      target.value = ''
+    }
+  }
+
+  // Clear import progress when component unmounts or user dismisses
+  const handleDismissImportProgress = () => {
+    clearImportProgress()
+  }
 
   return (
     <>
@@ -181,8 +236,12 @@ export const LibraryView: Component = () => {
               <h3>No documents in library</h3>
               <p>Import documents to get started with your library.</p>
               <div class="import-actions">
-                <button disabled>Import Files</button>
-                <button disabled>Import Folder</button>
+                <button onClick={handleImportFiles} disabled={state().isImporting}>
+                  {state().isImporting ? 'Importing...' : 'Import Files'}
+                </button>
+                <button onClick={handleImportFolder} disabled={state().isImporting}>
+                  {state().isImporting ? 'Importing...' : 'Import Folder'}
+                </button>
               </div>
             </div>
           }
@@ -242,11 +301,169 @@ export const LibraryView: Component = () => {
               <button onClick={() => (window as any).__libraryDebug?.stepDown()}>
                 Step Down
               </button>
+              <button onClick={async () => {
+                console.log('🔄 Synchronizing leader state...')
+                try {
+                  const changed = await synchronizeLeaderState()
+                  console.log(`Leader state synchronization ${changed ? 'changed state' : 'no change needed'}`)
+                } catch (error) {
+                  console.error('Leader state sync failed:', error)
+                }
+              }}>
+                Sync Leader State
+              </button>
+              <button onClick={async () => {
+                console.log('🔧 Ensuring leadership...')
+                try {
+                  const hasLeadership = await ensureLeadership()
+                  console.log(`Leadership ensure result: ${hasLeadership ? '✅ Leader' : '❌ Not leader'}`)
+                } catch (error) {
+                  console.error('Leadership ensure failed:', error)
+                }
+              }}>
+                Ensure Leadership
+              </button>
+              <button onClick={async () => {
+                console.log('🚨 Running quick fix...')
+                try {
+                  const result = await (window as any).__libraryDebug?.quickFix()
+                  console.log('Quick fix result:', result)
+                  // Also sync state after quick fix
+                  await synchronizeLeaderState()
+                } catch (error) {
+                  console.error('Quick fix failed:', error)
+                }
+              }}>
+                Quick Fix
+              </button>
             </div>
           </div>
         </Show>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept=".pdf,.epub,.mobi,.txt,.html,.md"
+        style="display: none"
+        onChange={handleFileSelect}
+      />
+      <input
+        ref={directoryInputRef}
+        type="file"
+        multiple
+        {...({ webkitdirectory: "" } as any)}
+        style="display: none"
+        onChange={handleDirectorySelect}
+      />
+
+      {/* Import Progress Modal */}
+      <Show when={state().isImporting || state().importProgress}>
+        <div class="import-progress-overlay" onClick={handleDismissImportProgress}>
+          <div class="import-progress-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="import-progress-header">
+              <h3>Importing Documents</h3>
+              <button class="close-btn" onClick={handleDismissImportProgress}>×</button>
+            </div>
+            
+            <Show when={state().importProgress}>
+              {(progress) => (
+                <div class="import-progress-content">
+                  <div class="progress-stage">
+                    Stage: {progress().stage.charAt(0).toUpperCase() + progress().stage.slice(1)}
+                  </div>
+                  
+                  <div class="progress-bar-container">
+                    <div 
+                      class="progress-bar-fill" 
+                      style={`width: ${progress().progress}%`}
+                    ></div>
+                  </div>
+                  
+                  <div class="progress-details">
+                    <Show when={progress().currentFile}>
+                      <div class="current-file">
+                        {progress().currentFile}
+                      </div>
+                    </Show>
+                    
+                    <Show when={progress().totalFiles}>
+                      <div class="file-count">
+                        {progress().totalFiles} files
+                      </div>
+                    </Show>
+                    
+                    <div class="progress-percentage">
+                      {Math.round(progress().progress)}%
+                    </div>
+                  </div>
+                  
+                  <Show when={progress().error}>
+                    <div class="progress-error">
+                      Error: {progress().error}
+                      <Show when={progress().error?.includes('leader tab') || progress().error?.includes('leadership')}>
+                        <div class="progress-error-actions">
+                          <button 
+                            class="retry-leadership-btn"
+                            onClick={async () => {
+                              try {
+                                console.log('🔄 Manually fixing leadership issue...')
+                                const result = await (window as any).__libraryDebug?.quickFix()
+                                console.log('Leadership fix result:', result)
+                                
+                                // Try the import again by clearing error and re-triggering file selection
+                                clearError()
+                                
+                                // Show success message briefly
+                                setState(prev => ({ 
+                                  ...prev, 
+                                  error: 'Leadership issue resolved. Please try importing again.',
+                                  importProgress: null
+                                }))
+                                
+                                setTimeout(() => {
+                                  setState(prev => ({ ...prev, error: null }))
+                                }, 3000)
+                              } catch (error) {
+                                console.error('Manual leadership fix failed:', error)
+                                setState(prev => ({ 
+                                  ...prev, 
+                                  error: 'Leadership fix failed. Try refreshing the page or closing other browser tabs.'
+                                }))
+                              }
+                            }}
+                          >
+                            🔄 Fix Leadership
+                          </button>
+                          <button 
+                            class="refresh-page-btn"
+                            onClick={() => {
+                              window.location.reload()
+                            }}
+                          >
+                            🔄 Refresh Page
+                          </button>
+                        </div>
+                      </Show>
+                    </div>
+                  </Show>
+                </div>
+              )}
+            </Show>
+            
+            <div class="import-progress-footer">
+              <Show when={!state().isImporting}>
+                <button class="primary-btn" onClick={handleDismissImportProgress}>
+                  {state().importProgress?.stage === 'complete' ? 'Done' : 'Close'}
+                </button>
+              </Show>
+            </div>
+          </div>
+        </div>
+      </Show>
+        </div>
       </div>
-    </div>
     </>
   )
 }

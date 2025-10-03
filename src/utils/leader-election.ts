@@ -86,54 +86,59 @@ export class LeaderElection {
     logLeaderElection.startTimer('leadershipAttempt', 'Leadership acquisition attempt')
 
     try {
-      let acquired = false
-      
-      // Try to acquire the lock without waiting
-      await navigator.locks.request(
-        this.lockName,
-        {
-          ifAvailable: true // Only acquire if available, don't wait
-        },
-        async (lock) => {
-          if (!lock) {
-            // Lock not available, we're a follower
-            logLeaderElection.info('Leadership not available, another tab is leader')
-            acquired = false
-            return
-          }
+      return await new Promise<boolean>((resolve) => {
+        // Try to acquire the lock without waiting
+        navigator.locks
+          .request(
+            this.lockName,
+            {
+              ifAvailable: true // Only acquire if available, don't wait
+            },
+            async (lock) => {
+              if (!lock) {
+                // Lock not available, we're a follower
+                logLeaderElection.info('Leadership not available, another tab is leader')
+                logLeaderElection.endTimer('leadershipAttempt', 'Leadership acquisition failed')
+                resolve(false)
+                return
+              }
 
-          // We acquired the lock - we're the leader now
-          logLeaderElection.info('🎉 Acquired leadership immediately!', { tabId: this.tabId })
-          this.isLeader = true
-          this.isHoldingLock = true
-          this.leaderInfo = {
-            id: this.tabId,
-            timestamp: Date.now(),
-            tabId: this.tabId
-          }
-          acquired = true
+              // We acquired the lock - we're the leader now
+              logLeaderElection.info('🎉 Acquired leadership immediately!', { tabId: this.tabId })
+              this.isLeader = true
+              this.isHoldingLock = true
+              this.leaderInfo = {
+                id: this.tabId,
+                timestamp: Date.now(),
+                tabId: this.tabId
+              }
 
-          logLeaderElection.info('Leader elected', { leaderInfo: this.leaderInfo })
+              logLeaderElection.info('Leader elected', { leaderInfo: this.leaderInfo })
 
-          // Notify callbacks
-          if (this.callbacks.onLeaderElected) {
-            logLeaderElection.debug('Calling onLeaderElected callback')
-            this.callbacks.onLeaderElected(this.leaderInfo)
-          }
+              // Notify callbacks
+              if (this.callbacks.onLeaderElected) {
+                logLeaderElection.debug('Calling onLeaderElected callback')
+                this.callbacks.onLeaderElected(this.leaderInfo)
+              }
 
-          // Start heartbeat to maintain leadership
-          logLeaderElection.debug('Starting heartbeat mechanism')
-          this.startHeartbeat()
+              // Start heartbeat to maintain leadership
+              logLeaderElection.debug('Starting heartbeat mechanism')
+              this.startHeartbeat()
 
-          // The lock will be held until this function returns
-          // We'll keep it held until we lose leadership
-          await this.waitForLeadershipEnd()
-        }
-      )
+              logLeaderElection.endTimer('leadershipAttempt', 'Leadership acquisition succeeded')
+              resolve(true)
 
-      logLeaderElection.endTimer('leadershipAttempt', `Leadership acquisition ${acquired ? 'succeeded' : 'failed'}`)
-      return acquired
-
+              // The lock will be held until this function returns
+              // We'll keep it held until we lose leadership
+              await this.waitForLeadershipEnd()
+            }
+          )
+          .catch((error) => {
+            logLeaderElection.error('Error attempting leadership acquisition', error instanceof Error ? error : new Error(String(error)))
+            logLeaderElection.endTimer('leadershipAttempt', 'Leadership acquisition failed with error')
+            resolve(false)
+          })
+      })
     } catch (error) {
       logLeaderElection.error('Error attempting leadership acquisition', error instanceof Error ? error : new Error(String(error)))
       logLeaderElection.endTimer('leadershipAttempt', 'Leadership acquisition failed with error')
@@ -168,6 +173,7 @@ export class LeaderElection {
         logLeaderElection.info('Leadership acquired immediately, no need to wait')
         this.initializationState = 'ready'
         this.retryCount = 0
+        logLeaderElection.endTimer('election', 'Leader election completed immediately')
         return
       }
 
@@ -175,12 +181,14 @@ export class LeaderElection {
       logLeaderElection.info('Leadership not immediately available, entering election wait mode')
 
       await this.waitForLeadershipWithRetry()
+      logLeaderElection.endTimer('election', 'Leader election completed after waiting')
 
     } catch (error) {
       logLeaderElection.error('Error in leader election', error instanceof Error ? error : new Error(String(error)))
       this.initializationError = error instanceof Error ? error : new Error(String(error))
       this.initializationState = 'failed'
-      
+      logLeaderElection.endTimer('election', 'Leader election failed with error')
+
       // Attempt retry if we haven't exceeded max retries
       if (this.retryCount < this.maxRetries) {
         this.retryCount++
@@ -203,60 +211,199 @@ export class LeaderElection {
    * Wait for leadership with retry logic
    */
   private async waitForLeadershipWithRetry(): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      try {
+        this.lockAbortController = new AbortController()
+        logLeaderElection.debug('Requesting library lock (blocking mode)', { lockName: this.lockName })
+
+        // Set a timeout for single-tab fallback
+        const fallbackTimeout = setTimeout(() => {
+          logLeaderElection.warn('⏰ Lock acquisition timeout - possible single-tab scenario or stuck lock')
+          this.attemptSingleTabFallback()
+            .then(() => {
+              logLeaderElection.info('Single-tab fallback completed')
+              resolve()
+            })
+            .catch((error) => {
+              logLeaderElection.error('Single-tab fallback failed', error instanceof Error ? error : new Error(String(error)))
+              reject(error)
+            })
+        }, 10000) // 10 second timeout
+
+        // Request the named lock - this will block until we become the leader
+        navigator.locks
+          .request(
+            this.lockName,
+            {
+              signal: this.lockAbortController.signal,
+              ifAvailable: false // Must wait for the lock
+            },
+            async (lock) => {
+              // Clear the fallback timeout since we got the lock
+              clearTimeout(fallbackTimeout)
+
+              if (!lock) {
+                // Couldn't acquire lock, we're a follower
+                logLeaderElection.info('Could not acquire lock, acting as follower')
+                this.initializationState = 'ready'
+                this.retryCount = 0
+                resolve()
+                return
+              }
+
+              // We acquired the lock - we're the leader now
+              logLeaderElection.info('Acquired library lock after waiting, acting as leader', { tabId: this.tabId })
+              this.isLeader = true
+              this.isHoldingLock = true
+              this.leaderInfo = {
+                id: this.tabId,
+                timestamp: Date.now(),
+                tabId: this.tabId
+              }
+
+              logLeaderElection.info('Leader elected', { leaderInfo: this.leaderInfo })
+
+              // Notify callbacks
+              if (this.callbacks.onLeaderElected) {
+                logLeaderElection.debug('Calling onLeaderElected callback')
+                this.callbacks.onLeaderElected(this.leaderInfo)
+              }
+
+              // Start heartbeat to maintain leadership
+              logLeaderElection.debug('Starting heartbeat mechanism')
+              this.startHeartbeat()
+
+              this.initializationState = 'ready'
+              this.retryCount = 0
+              resolve()
+
+              // The lock will be held until this function returns
+              // We'll keep it held until we lose leadership
+              await this.waitForLeadershipEnd()
+            }
+          )
+          .catch((error) => {
+            // Clear the fallback timeout
+            clearTimeout(fallbackTimeout)
+
+            if (error instanceof DOMException && error.name === 'AbortError') {
+              logLeaderElection.info('Leader election aborted')
+              this.initializationState = 'ready'
+              resolve()
+            } else {
+              reject(error)
+            }
+          })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          logLeaderElection.info('Leader election aborted')
+          this.initializationState = 'ready'
+          resolve()
+        } else {
+          reject(error)
+        }
+      }
+    })
+  }
+
+  /**
+   * Fallback mechanism for single-tab scenarios or stuck locks
+   */
+  private async attemptSingleTabFallback(): Promise<void> {
+    logLeaderElection.info('🚨 Attempting single-tab fallback leadership acquisition')
+    
     try {
-      this.lockAbortController = new AbortController()
-      logLeaderElection.debug('Requesting library lock (blocking mode)', { lockName: this.lockName })
+      // Check if we're the only tab by trying to query locks
+      const locks = await navigator.locks.query()
+      const hasActiveLocks = locks.held && locks.held.length > 0
+      const hasPendingLocks = locks.pending && locks.pending.length > 0
       
-      // Request the named lock - this will block until we become the leader
-      await navigator.locks.request(
-        this.lockName,
-        {
-          signal: this.lockAbortController.signal,
-          ifAvailable: false // Must wait for the lock
-        },
-        async (lock) => {
-          if (!lock) {
-            // Couldn't acquire lock, we're a follower
-            logLeaderElection.info('Could not acquire lock, acting as follower')
+      logLeaderElection.debug('Lock query result', { 
+        hasActiveLocks, 
+        hasPendingLocks,
+        heldLocks: locks.held?.length || 0,
+        pendingLocks: locks.pending?.length || 0
+      })
+
+      // If there are no active or pending locks for our resource, we can assume single-tab
+      const ourLockHeld = locks.held?.some(lock => lock.name === this.lockName)
+      const ourLockPending = locks.pending?.some(lock => lock.name === this.lockName)
+      
+      if (!ourLockHeld && !ourLockPending) {
+        logLeaderElection.info('No locks found for our resource, assuming single-tab scenario')
+        
+        // For single-tab scenarios, we can bypass the lock mechanism
+        // and act as leader with a different lock name or approach
+        await this.bypassLockAndBecomeLeader()
+        return
+      }
+      
+      // If there are locks, we should respect the locking mechanism
+      logLeaderElection.info('Other locks detected, respecting locking mechanism')
+      this.initializationState = 'ready'
+      this.retryCount = 0
+      
+    } catch (error) {
+      logLeaderElection.error('Single-tab fallback failed', error instanceof Error ? error : new Error(String(error)))
+      throw error
+    }
+  }
+
+  /**
+   * Bypass normal locking and become leader (for single-tab scenarios)
+   */
+  private async bypassLockAndBecomeLeader(): Promise<void> {
+    logLeaderElection.info('👑 Bypassing lock mechanism for single-tab leadership')
+    
+    // Use a different lock name that includes timestamp to avoid conflicts
+    const fallbackLockName = `${this.lockName}-fallback-${Date.now()}`
+    
+    try {
+      await new Promise<void>((resolve, reject) => {
+        navigator.locks.request(
+          fallbackLockName,
+          async (lock) => {
+            if (!lock) {
+              reject(new Error('Failed to acquire fallback lock'))
+              return
+            }
+            
+            // We are now the leader
+            this.isLeader = true
+            this.isHoldingLock = true
+            this.leaderInfo = {
+              id: this.tabId,
+              timestamp: Date.now(),
+              tabId: this.tabId
+            }
+            
+            logLeaderElection.info('🎉 Acquired leadership via fallback mechanism', { 
+              tabId: this.tabId,
+              fallbackLockName 
+            })
+            
+            // Notify callbacks
+            if (this.callbacks.onLeaderElected) {
+              logLeaderElection.debug('Calling onLeaderElected callback (fallback)')
+              this.callbacks.onLeaderElected(this.leaderInfo)
+            }
+            
+            // Start heartbeat
+            this.startHeartbeat()
+            
             this.initializationState = 'ready'
             this.retryCount = 0
-            return
+            
+            resolve()
+            
+            // Keep the lock held
+            await this.waitForLeadershipEnd()
           }
-
-          // We acquired the lock - we're the leader now
-          logLeaderElection.info('Acquired library lock after waiting, acting as leader', { tabId: this.tabId })
-          this.isLeader = true
-          this.isHoldingLock = true
-          this.leaderInfo = {
-            id: this.tabId,
-            timestamp: Date.now(),
-            tabId: this.tabId
-          }
-
-          logLeaderElection.info('Leader elected', { leaderInfo: this.leaderInfo })
-
-          // Notify callbacks
-          if (this.callbacks.onLeaderElected) {
-            logLeaderElection.debug('Calling onLeaderElected callback')
-            this.callbacks.onLeaderElected(this.leaderInfo)
-          }
-
-          // Start heartbeat to maintain leadership
-          logLeaderElection.debug('Starting heartbeat mechanism')
-          this.startHeartbeat()
-
-          // The lock will be held until this function returns
-          // We'll keep it held until we lose leadership
-          await this.waitForLeadershipEnd()
-        }
-      )
+        ).catch(reject)
+      })
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        logLeaderElection.info('Leader election aborted')
-        this.initializationState = 'ready'
-      } else {
-        throw error
-      }
+      logLeaderElection.error('Fallback leadership acquisition failed', error instanceof Error ? error : new Error(String(error)))
+      throw error
     }
   }
 
@@ -657,10 +804,74 @@ if (typeof window !== 'undefined') {
       } catch (error) {
         return `Quick fix failed: ${error instanceof Error ? error.message : 'Unknown error'}`
       }
+    },
+    // Force leadership acquisition (emergency override)
+    forceLeadership: async () => {
+      try {
+        logLeaderElection.warn('🚨 FORCE LEADERSHIP ATTEMPT - Emergency override')
+        const info = leaderElection.getDebugInfo()
+        
+        // Step down first to clear any existing state
+        await leaderElection.stepDown('force-override')
+        
+        // Wait a moment
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+        // Reset state completely
+        leaderElection.resetInitialization()
+        
+        // Try multiple approaches
+        const attempts = [
+          'Direct leadership acquisition',
+          'Full election process',
+          'Emergency single-tab mode'
+        ]
+        
+        for (let i = 0; i < attempts.length; i++) {
+          logLeaderElection.info(`Force attempt ${i + 1}: ${attempts[i]}`)
+          
+          if (i === 0) {
+            // Direct attempt
+            const acquired = await leaderElection.attemptLeadership()
+            if (acquired) {
+              return `Leadership acquired via ${attempts[i]}`
+            }
+          } else if (i === 1) {
+            // Full election
+            await leaderElection.startElection()
+            if (leaderElection.isCurrentLeader()) {
+              return `Leadership acquired via ${attempts[i]}`
+            }
+          } else if (i === 2) {
+            // Emergency mode - bypass locks entirely
+            logLeaderElection.warn('🚨 EMERGENCY MODE - Bypassing all locks')
+            leaderElection.resetInitialization()
+            
+            // Set leader state directly (emergency only)
+            ;(leaderElection as any).isLeader = true
+            ;(leaderElection as any).leaderInfo = {
+              id: (leaderElection as any).tabId,
+              timestamp: Date.now(),
+              tabId: (leaderElection as any).tabId
+            }
+            
+            logLeaderElection.error('EMERGENCY: Set leadership without locks - this bypasses normal safety mechanisms')
+            return `Leadership acquired via ${attempts[i]} - LOCKS BYPASSED`
+          }
+          
+          // Wait between attempts
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        }
+        
+        return 'All force attempts failed - may need page refresh'
+      } catch (error) {
+        return `Force leadership failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
     }
   }
   
   console.log('[LeaderElection] Debug utilities available at window.__libraryDebug')
   console.log('[LeaderElection] Try: await window.__libraryDebug.diagnose() for a full check')
   console.log('[LeaderElection] Try: await window.__libraryDebug.quickFix() for automatic recovery')
+  console.log('[LeaderElection] Try: await window.__libraryDebug.forceLeadership() for emergency override')
 }

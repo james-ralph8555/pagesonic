@@ -2039,3 +2039,245 @@ button.loaded:hover { background-color: #22c55e; }
     gap: 0.5rem;
   }
 }
+
+/* Import Progress Modal Styles */
+.import-progress-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.import-progress-modal {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 1.5rem;
+  max-width: 500px;
+  width: 100%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.import-progress-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.import-progress-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #111;
+}
+
+.import-progress-header .close-btn {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  font-weight: 300;
+  color: rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.import-progress-header .close-btn:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #111;
+}
+
+.import-progress-content {
+  margin-bottom: 1rem;
+}
+
+.progress-stage {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #374151;
+  margin-bottom: 0.75rem;
+  text-transform: capitalize;
+}
+
+.progress-bar-container {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  height: 8px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progress-bar-fill {
+  background: linear-gradient(90deg, #3b82f6, #1d4ed8);
+  height: 100%;
+  border-radius: 8px;
+  transition: width 0.3s ease;
+  min-width: 2px;
+}
+
+.progress-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.current-file {
+  font-size: 0.9rem;
+  color: #374151;
+  word-break: break-word;
+}
+
+.file-count {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.progress-percentage {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.progress-error {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 0.75rem;
+  color: #dc2626;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.progress-error-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.retry-leadership-btn,
+.refresh-page-btn {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.retry-leadership-btn:hover,
+.refresh-page-btn:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.retry-leadership-btn:active,
+.refresh-page-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.refresh-page-btn {
+  background: #6b7280;
+}
+
+.refresh-page-btn:hover {
+  background: #4b5563;
+}
+
+.import-progress-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.import-progress-footer .primary-btn {
+  background: var(--brand);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.import-progress-footer .primary-btn:hover {
+  background: var(--brand-hover);
+}
+
+/* Dark theme support for import progress */
+@media (prefers-color-scheme: dark) {
+  .import-progress-modal {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .import-progress-header h3 {
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  .import-progress-header .close-btn {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .import-progress-header .close-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  .progress-stage {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .progress-bar-container {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .current-file {
+    color: rgba(255, 255, 255, 0.9);
+  }
+
+  .file-count {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  .progress-percentage {
+    color: rgba(255, 255, 255, 0.95);
+  }
+
+  .progress-error {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+  }
+
+  .import-progress-footer {
+    border-top-color: rgba(255, 255, 255, 0.1);
+  }
+}
