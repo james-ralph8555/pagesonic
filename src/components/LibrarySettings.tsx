@@ -101,11 +101,11 @@ export const LibrarySettings: Component = () => {
 
   return (
     <div class="library-settings">
-      <h3>📚 Library Settings</h3>
+      <h3>Library Settings</h3>
       
       {/* Storage Management */}
       <div class="settings-section">
-        <h4>💾 Storage Management</h4>
+        <h4>Storage Management</h4>
         
         <div class="storage-info">
           <div class="storage-usage-display">
@@ -141,14 +141,14 @@ export const LibrarySettings: Component = () => {
             onClick={handleRefreshLibrary}
             disabled={state().isLoading}
           >
-            🔄 Refresh Library
+            Refresh Library
           </button>
         </div>
       </div>
 
       {/* Import/Export */}
       <div class="settings-section">
-        <h4>📥 Import / Export</h4>
+        <h4>Import / Export</h4>
         
         <div class="import-export-controls">
           <div class="control-group">
@@ -159,7 +159,7 @@ export const LibrarySettings: Component = () => {
               onClick={handleImport}
               disabled={isImporting()}
             >
-              {isImporting() ? '⏳ Importing...' : '📥 Import Documents'}
+              {isImporting() ? 'Importing...' : 'Import Documents'}
             </button>
             {importMessage() && (
               <div class={`message ${importMessage().includes('failed') ? 'error' : 'info'}`}>
@@ -176,7 +176,7 @@ export const LibrarySettings: Component = () => {
               onClick={handleExport}
               disabled={isExporting()}
             >
-              {isExporting() ? '⏳ Exporting...' : '📤 Export Library'}
+              {isExporting() ? 'Exporting...' : 'Export Library'}
             </button>
             {exportMessage() && (
               <div class={`message ${exportMessage().includes('failed') ? 'error' : 'info'}`}>
@@ -189,7 +189,7 @@ export const LibrarySettings: Component = () => {
 
       {/* Display Settings */}
       <div class="settings-section">
-        <h4>🎨 Display Settings</h4>
+        <h4>Display Settings</h4>
         
         <div class="setting-item">
           <label class="setting-label">Default View</label>
@@ -233,7 +233,7 @@ export const LibrarySettings: Component = () => {
 
       {/* Advanced Settings */}
       <div class="settings-section">
-        <h4>⚙️ Advanced Settings</h4>
+        <h4>Advanced Settings</h4>
         
         <div class="setting-item">
           <label class="setting-label">Default Format</label>
@@ -277,7 +277,7 @@ export const LibrarySettings: Component = () => {
 
       {/* Library Information */}
       <div class="settings-section">
-        <h4>ℹ️ Library Information</h4>
+        <h4>Library Information</h4>
         
         <div class="library-info">
           <div class="info-item">
@@ -292,8 +292,8 @@ export const LibrarySettings: Component = () => {
           
           <div class="info-item">
             <span class="info-label">Sync Status:</span>
-            <span class="info-value">
-              {state().isLeader ? '🟢 Leader (Active)' : '🔄 Follower (Syncing)'}
+            <span class={`status-indicator ${state().isLeader ? 'status-active' : 'status-inactive'}`}>
+              {state().isLeader ? 'Leader (Active)' : 'Follower (Syncing)'}
             </span>
           </div>
 
@@ -306,7 +306,7 @@ export const LibrarySettings: Component = () => {
 
       {/* Danger Zone */}
       <div class="settings-section danger-zone">
-        <h4>⚠️ Danger Zone</h4>
+        <h4>Danger Zone</h4>
         
         <div class="danger-description">
           <p>These actions cannot be undone. Please be careful.</p>
@@ -322,7 +322,7 @@ export const LibrarySettings: Component = () => {
               }
             }}
           >
-            🗑️ Clear Library Data
+            Clear Library Data
           </button>
         </div>
       </div>
