@@ -554,24 +554,26 @@ export const PDFViewer: Component = () => {
               {/* Large invisible hover area - visual only */}
               <div class="fab-hover-area" />
               
-              <button
-                type="button"
-                class="rail-btn fab-trigger"
-                aria-haspopup="menu"
-                aria-expanded={open()}
-                aria-label="Viewer menu"
-                title="Viewer menu"
-                onClick={toggle}
-              >
-                {/* Hamburger icon */}
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <line x1="3" y1="6" x2="21" y2="6"/>
-                  <line x1="3" y1="12" x2="21" y2="12"/>
-                  <line x1="3" y1="18" x2="21" y2="18"/>
-                </svg>
-              </button>
-              {open() && (
-                <div class="glass-menu align-end from-bottom menu-grid" role="menu">
+              {/* Button and menu container - positioned at bottom right */}
+              <div class="fab-button-container">
+                <button
+                  type="button"
+                  class="rail-btn fab-trigger"
+                  aria-haspopup="menu"
+                  aria-expanded={open()}
+                  aria-label="Viewer menu"
+                  title="Viewer menu"
+                  onClick={toggle}
+                >
+                  {/* Hamburger icon */}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <line x1="3" y1="6" x2="21" y2="6"/>
+                    <line x1="3" y1="12" x2="21" y2="12"/>
+                    <line x1="3" y1="18" x2="21" y2="18"/>
+                  </svg>
+                </button>
+                {open() && (
+                  <div class="glass-menu align-end from-bottom fab-menu menu-grid" role="menu">
                   {/* Row 1: −, +, {current%} (click to reset) */}
                   <button
                     class="glass-menu-item"
@@ -677,6 +679,7 @@ export const PDFViewer: Component = () => {
                   </button>
                 </div>
               )}
+              </div>
             </div>
           )
         })()}
