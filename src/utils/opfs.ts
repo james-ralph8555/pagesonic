@@ -15,6 +15,7 @@ import {
   LibraryErrorCodes,
   DocumentId
 } from '@/types/library'
+import { logOPFS } from '@/utils/logger'
 
 export class OPFSManager {
   private static instance: OPFSManager
@@ -34,23 +35,37 @@ export class OPFSManager {
    * Initialize OPFS and create directory structure
    */
   async initialize(): Promise<void> {
-    if (this.initialized) return
+    if (this.initialized) {
+      logOPFS.debug('OPFS already initialized, skipping')
+      return
+    }
+
+    logOPFS.startTimer('initialize', 'OPFS initialization')
+    logOPFS.info('Starting OPFS initialization')
 
     try {
+      logOPFS.debug('Getting OPFS root directory')
       this.root = await navigator.storage.getDirectory()
+      logOPFS.debug('OPFS root directory obtained')
       
       // Create directory structure
+      logOPFS.debug('Creating directory structure')
       await this.ensureDirectory(OPFS_STRUCTURE.SETTINGS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.COVERS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.DOCS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.CONVERSIONS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.TEMP_DIR)
+      logOPFS.info('Directory structure created successfully')
 
       // Initialize index if it doesn't exist
+      logOPFS.debug('Initializing library index')
       await this.initializeIndex()
+      logOPFS.info('Library index initialized')
 
       this.initialized = true
+      logOPFS.endTimer('initialize', 'OPFS initialization completed')
     } catch (error) {
+      logOPFS.error('OPFS initialization failed', error instanceof Error ? error : new Error(String(error)))
       throw new LibraryError(
         'Failed to initialize OPFS',
         LibraryErrorCodes.PERMISSION_DENIED,
@@ -66,13 +81,16 @@ export class OPFSManager {
   private async ensureDirectory(path: string): Promise<FileSystemDirectoryHandle> {
     if (!this.root) throw new LibraryError('OPFS not initialized', LibraryErrorCodes.PERMISSION_DENIED)
     
+    logOPFS.debug(`Ensuring directory exists: ${path}`)
     const parts = path.split('/').filter(Boolean)
     let current = this.root
 
     for (const part of parts) {
       current = await current.getDirectoryHandle(part, { create: true })
+      logOPFS.debug(`Directory ensured: ${part}`)
     }
 
+    logOPFS.debug(`Directory path created/verified: ${path}`)
     return current
   }
 
@@ -112,23 +130,41 @@ export class OPFSManager {
    */
   async writeTextFile(path: string, content: string): Promise<void> {
     const tempPath = `${path}.tmp.${Date.now()}`
+    const contentSize = new Blob([content]).size
+    
+    logOPFS.startTimer(`write:${path}`, `Write text file: ${path}`)
+    logOPFS.info(`Starting atomic write to ${path}`, { size: contentSize })
     
     try {
       // Write to temporary file first
+      logOPFS.debug(`Creating temp file: ${tempPath}`)
       const tempFile = await this.getFileHandle(tempPath, true)
       const writable = await tempFile.createWritable()
       await writable.write(content)
       await writable.close()
+      logOPFS.debug(`Temp file written successfully: ${tempPath}`)
 
       // Rename to final path (atomic operation)
+      logOPFS.debug(`Renaming temp file to final path: ${tempPath} -> ${path}`)
       await this.renameFile(tempPath, path)
+      logOPFS.info(`File written successfully: ${path}`, { size: contentSize })
     } catch (error) {
+      logOPFS.error(`Failed to write file: ${path}`, error instanceof Error ? error : new Error(String(error)), { 
+        tempPath, 
+        contentSize 
+      })
+      
       // Clean up temp file if it exists
       try {
+        logOPFS.debug(`Cleaning up temp file: ${tempPath}`)
         await this.deleteFile(tempPath)
-      } catch {}
+        logOPFS.debug(`Temp file cleaned up: ${tempPath}`)
+      } catch (cleanupError) {
+        logOPFS.warn(`Failed to clean up temp file: ${tempPath}`, cleanupError)
+      }
       
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+        logOPFS.error('Storage quota exceeded during write', error as Error)
         throw new LibraryError(
           'Storage quota exceeded',
           LibraryErrorCodes.QUOTA_EXCEEDED,
@@ -143,6 +179,8 @@ export class OPFSManager {
         undefined,
         error instanceof Error ? error : new Error(String(error))
       )
+    } finally {
+      logOPFS.endTimer(`write:${path}`, `Write text file completed: ${path}`)
     }
   }
 
@@ -150,12 +188,26 @@ export class OPFSManager {
    * Read text from a file
    */
   async readTextFile(path: string): Promise<string> {
+    logOPFS.startTimer(`read:${path}`, `Read text file: ${path}`)
+    
     try {
+      logOPFS.debug(`Getting file handle for: ${path}`)
       const file = await this.getFileHandle(path)
       const fileObj = await file.getFile()
-      return await fileObj.text()
+      const size = fileObj.size
+      
+      logOPFS.debug(`Reading file content: ${path}`, { size })
+      const content = await fileObj.text()
+      
+      logOPFS.info(`File read successfully: ${path}`, { size, contentLength: content.length })
+      logOPFS.endTimer(`read:${path}`, `Read text file completed: ${path}`)
+      
+      return content
     } catch (error) {
+      logOPFS.error(`Failed to read file: ${path}`, error instanceof Error ? error : new Error(String(error)))
+      
       if (error instanceof DOMException && error.name === 'NotFoundError') {
+        logOPFS.warn(`File not found: ${path}`)
         throw new LibraryError(
           `File not found: ${path}`,
           LibraryErrorCodes.DOCUMENT_NOT_FOUND,
@@ -352,13 +404,19 @@ export class OPFSManager {
    * Initialize the library index file
    */
   private async initializeIndex(): Promise<void> {
+    logOPFS.debug('Checking if library index exists')
     const exists = await this.fileExists(OPFS_STRUCTURE.INDEX)
+    
     if (!exists) {
+      logOPFS.info('Creating new library index')
       const indexData: LibraryIndexVersion = {
         version: 1,
         index: {}
       }
       await this.writeTextFile(OPFS_STRUCTURE.INDEX, JSON.stringify(indexData, null, 2))
+      logOPFS.info('Library index created successfully')
+    } else {
+      logOPFS.debug('Library index already exists')
     }
   }
 
@@ -366,17 +424,25 @@ export class OPFSManager {
    * Read the library index
    */
   async readIndex(): Promise<LibraryIndex> {
+    logOPFS.startTimer('readIndex', 'Read library index')
+    
     try {
+      logOPFS.debug('Reading library index file')
       const content = await this.readTextFile(OPFS_STRUCTURE.INDEX)
       const data: LibraryIndexVersion = JSON.parse(content)
       
+      logOPFS.debug('Library index parsed', { version: data.version, documentCount: Object.keys(data.index).length })
+      
       // Handle version upgrades if needed
       if (data.version !== 1) {
+        logOPFS.warn(`Library index version ${data.version} detected, current version is 1`)
         // Future version upgrade logic would go here
       }
       
+      logOPFS.endTimer('readIndex', 'Library index read successfully')
       return data.index
     } catch (error) {
+      logOPFS.error('Failed to read library index', error instanceof Error ? error : new Error(String(error)))
       throw new LibraryError(
         'Failed to read library index',
         LibraryErrorCodes.CORRUPTION_DETECTED,
@@ -390,11 +456,17 @@ export class OPFSManager {
    * Write the library index
    */
   async writeIndex(index: LibraryIndex): Promise<void> {
+    logOPFS.startTimer('writeIndex', 'Write library index')
+    const documentCount = Object.keys(index).length
+    
     const indexData: LibraryIndexVersion = {
       version: 1,
       index
     }
+    
+    logOPFS.info('Writing library index', { documentCount })
     await this.writeTextFile(OPFS_STRUCTURE.INDEX, JSON.stringify(indexData, null, 2))
+    logOPFS.endTimer('writeIndex', 'Library index written successfully')
   }
 
   /**

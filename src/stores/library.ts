@@ -22,6 +22,7 @@ import {
 import { opfsManager } from '@/utils/opfs'
 import { leaderElection } from '@/utils/leader-election'
 import { broadcastChannel } from '@/utils/broadcast-channel'
+import { logLibraryStore } from '@/utils/logger'
 
 interface LibraryState {
   // Data
@@ -98,25 +99,41 @@ export const useLibrary = () => {
 
   // Initialize the library
   const initialize = async () => {
-    if (state().isInitialized) return
+    if (state().isInitialized) {
+      logLibraryStore.debug('Library already initialized, skipping')
+      return
+    }
 
+    logLibraryStore.startTimer('initialize', 'Library initialization')
+    logLibraryStore.info('Starting library initialization')
+    
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     try {
       // Initialize OPFS
+      logLibraryStore.debug('Initializing OPFS')
       await opfsManager.initialize()
 
       // Load initial data
+      logLibraryStore.debug('Loading initial data from OPFS')
       const [index, userSettings, readerSettings] = await Promise.all([
         opfsManager.readIndex(),
         opfsManager.readUserSettings(),
         opfsManager.readReaderSettings()
       ])
 
+      logLibraryStore.info('Data loaded successfully', { 
+        documentCount: Object.keys(index).length,
+        userSettingsLoaded: !!userSettings,
+        readerSettingsLoaded: !!readerSettings
+      })
+
       // Start leader election
+      logLibraryStore.debug('Setting up leader election')
       await setupLeaderElection()
 
       // Setup broadcast channel handlers
+      logLibraryStore.debug('Setting up broadcast channel handlers')
       setupBroadcastHandlers()
 
       batch(() => {
@@ -133,8 +150,9 @@ export const useLibrary = () => {
         }))
       })
 
+      logLibraryStore.endTimer('initialize', 'Library initialization completed successfully')
     } catch (error) {
-      console.error('Failed to initialize library:', error)
+      logLibraryStore.error('Failed to initialize library', error instanceof Error ? error : new Error(String(error)))
       setState(prev => ({
         ...prev,
         error: error instanceof Error ? error.message : 'Failed to initialize library',
@@ -145,9 +163,11 @@ export const useLibrary = () => {
 
   // Setup leader election
   const setupLeaderElection = async () => {
+    logLibraryStore.debug('Setting up leader election callbacks')
+    
     const callbacks = {
       onLeaderElected: (leaderInfo: LeaderInfo) => {
-        console.log('This tab became leader:', leaderInfo.tabId)
+        logLibraryStore.info('This tab became leader', { tabId: leaderInfo.tabId })
         batch(() => {
           setState(prev => ({
             ...prev,
@@ -155,11 +175,13 @@ export const useLibrary = () => {
             leaderInfo
           }))
         })
+        
+        logLibraryStore.debug('Broadcasting leader elected event')
         broadcastChannel.broadcastLeaderElected(leaderInfo)
       },
       
       onLeaderLost: () => {
-        console.log('This tab lost leadership')
+        logLibraryStore.info('This tab lost leadership')
         batch(() => {
           setState(prev => ({
             ...prev,
@@ -167,15 +189,19 @@ export const useLibrary = () => {
             leaderInfo: null
           }))
         })
+        
+        logLibraryStore.debug('Broadcasting leader lost event')
         broadcastChannel.broadcastLeaderLost()
       },
       
       onHeartbeat: (leaderInfo: LeaderInfo) => {
+        logLibraryStore.debug('Received leader heartbeat', { leaderId: leaderInfo.tabId })
         setState(prev => ({ ...prev, leaderInfo }))
       }
     }
 
     leaderElection.setCallbacks(callbacks)
+    logLibraryStore.debug('Starting leader election process')
     await leaderElection.startElection()
   }
 
@@ -372,14 +398,17 @@ export const useLibrary = () => {
 
   // Update user settings
   const updateUserSettings = async (settings: Partial<UserSettings>): Promise<void> => {
+    logLibraryStore.startTimer('updateUserSettings', 'Update user settings')
+    logLibraryStore.debug('Updating user settings', { settings })
+    
     try {
       const newSettings = { ...state().userSettings, ...settings }
       
       if (state().isLeader) {
-        // Leader writes directly to OPFS
+        logLibraryStore.debug('Writing user settings directly to OPFS (leader)')
         await opfsManager.writeUserSettings(newSettings)
       } else {
-        // Follower requests leader to update
+        logLibraryStore.debug('Requesting leader to update user settings (follower)')
         await broadcastChannel.requestUpdateSettings({
           settings,
           type: 'user'
@@ -387,8 +416,9 @@ export const useLibrary = () => {
       }
 
       setState(prev => ({ ...prev, userSettings: newSettings }))
+      logLibraryStore.endTimer('updateUserSettings', 'User settings updated successfully')
     } catch (error) {
-      console.error('Failed to update user settings:', error)
+      logLibraryStore.error('Failed to update user settings', error instanceof Error ? error : new Error(String(error)))
       throw error
     }
   }

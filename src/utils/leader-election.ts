@@ -4,6 +4,7 @@
  */
 
 import { LeaderInfo, TabId } from '@/types/library'
+import { logLeaderElection } from '@/utils/logger'
 
 export interface LeaderECallbacks {
   onLeaderElected?: (leaderInfo: LeaderInfo) => void
@@ -72,12 +73,16 @@ export class LeaderElection {
    */
   async startElection(): Promise<void> {
     if (this.isLeader) {
-      console.warn('Already acting as leader')
+      logLeaderElection.warn('Already acting as leader, skipping election')
       return
     }
 
+    logLeaderElection.info('Starting leader election process', { tabId: this.tabId })
+    logLeaderElection.startTimer('election', 'Leader election process')
+
     try {
       this.lockAbortController = new AbortController()
+      logLeaderElection.debug('Requesting library lock', { lockName: this.lockName })
       
       // Request the named lock - this will block until we become the leader
       await navigator.locks.request(
@@ -89,12 +94,12 @@ export class LeaderElection {
         async (lock) => {
           if (!lock) {
             // Couldn't acquire lock, we're a follower
-            console.log('Could not acquire lock, acting as follower')
+            logLeaderElection.info('Could not acquire lock, acting as follower')
             return
           }
 
           // We acquired the lock - we're the leader now
-          console.log('Acquired library lock, acting as leader')
+          logLeaderElection.info('Acquired library lock, acting as leader', { tabId: this.tabId })
           this.isLeader = true
           this.leaderInfo = {
             id: this.tabId,
@@ -102,12 +107,16 @@ export class LeaderElection {
             tabId: this.tabId
           }
 
+          logLeaderElection.info('Leader elected', { leaderInfo: this.leaderInfo })
+
           // Notify callbacks
           if (this.callbacks.onLeaderElected) {
+            logLeaderElection.debug('Calling onLeaderElected callback')
             this.callbacks.onLeaderElected(this.leaderInfo)
           }
 
           // Start heartbeat to maintain leadership
+          logLeaderElection.debug('Starting heartbeat mechanism')
           this.startHeartbeat()
 
           // The lock will be held until this function returns
@@ -117,9 +126,9 @@ export class LeaderElection {
       )
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') {
-        console.log('Leader election aborted')
+        logLeaderElection.info('Leader election aborted')
       } else {
-        console.error('Error in leader election:', error)
+        logLeaderElection.error('Error in leader election', error instanceof Error ? error : new Error(String(error)))
       }
     }
   }
@@ -150,12 +159,18 @@ export class LeaderElection {
    */
   private startHeartbeat(): void {
     if (this.heartbeatInterval) {
+      logLeaderElection.debug('Stopping existing heartbeat interval')
       clearInterval(this.heartbeatInterval)
     }
 
+    logLeaderElection.info('Starting heartbeat mechanism', { interval: 5000 })
     this.heartbeatInterval = setInterval(() => {
       if (this.isLeader && this.leaderInfo) {
         this.leaderInfo.timestamp = Date.now()
+        logLeaderElection.debug('Heartbeat sent', { 
+          leaderId: this.leaderInfo.id, 
+          timestamp: this.leaderInfo.timestamp 
+        })
         
         if (this.callbacks.onHeartbeat) {
           this.callbacks.onHeartbeat(this.leaderInfo)
@@ -179,10 +194,11 @@ export class LeaderElection {
    */
   async stepDown(): Promise<void> {
     if (!this.isLeader) {
+      logLeaderElection.warn('Not currently leader, cannot step down')
       return
     }
 
-    console.log('Stepping down from leadership')
+    logLeaderElection.info('Stepping down from leadership', { tabId: this.tabId })
     
     this.isLeader = false
     this.leaderInfo = null
@@ -190,14 +206,18 @@ export class LeaderElection {
 
     // Release the lock by aborting the operation
     if (this.lockAbortController) {
+      logLeaderElection.debug('Aborting lock controller to release leadership')
       this.lockAbortController.abort()
       this.lockAbortController = null
     }
 
     // Notify callbacks
     if (this.callbacks.onLeaderLost) {
+      logLeaderElection.debug('Calling onLeaderLost callback')
       this.callbacks.onLeaderLost()
     }
+    
+    logLeaderElection.info('Leadership step down completed')
   }
 
   /**
@@ -218,11 +238,20 @@ export class LeaderElection {
    */
   async checkLeaderStatus(): Promise<boolean> {
     try {
+      logLeaderElection.debug('Checking leader status')
       const locks = await navigator.locks.query()
       const libraryLock = locks.held?.find(lock => lock.name === this.lockName)
-      return libraryLock !== undefined
+      const hasLeader = libraryLock !== undefined
+      
+      logLeaderElection.debug('Leader status checked', { 
+        hasLeader, 
+        heldLocks: locks.held?.length || 0,
+        pendingLocks: locks.pending?.length || 0
+      })
+      
+      return hasLeader
     } catch (error) {
-      console.warn('Could not check leader status:', error)
+      logLeaderElection.warn('Could not check leader status', error instanceof Error ? error : new Error(String(error)))
       return false
     }
   }
@@ -232,13 +261,16 @@ export class LeaderElection {
    */
   async getLockInfo(): Promise<{ held: string[]; pending: string[] }> {
     try {
+      logLeaderElection.debug('Getting lock information')
       const locks = await navigator.locks.query()
-      return {
-        held: locks.held?.map(lock => lock.name || '').filter(Boolean) || [],
-        pending: locks.pending?.map(lock => lock.name || '').filter(Boolean) || []
-      }
+      const held = locks.held?.map(lock => lock.name || '').filter(Boolean) || []
+      const pending = locks.pending?.map(lock => lock.name || '').filter(Boolean) || []
+      
+      logLeaderElection.debug('Lock information retrieved', { held, pending })
+      
+      return { held, pending }
     } catch (error) {
-      console.warn('Could not get lock info:', error)
+      logLeaderElection.warn('Could not get lock info', error instanceof Error ? error : new Error(String(error)))
       return { held: [], pending: [] }
     }
   }

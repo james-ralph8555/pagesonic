@@ -1,7 +1,10 @@
 import { Component, createSignal, createEffect } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 import { useTheme } from '@/stores/theme'
+import { useLibrary } from '@/stores/library'
 import { GlassDropdownButton } from './GlassDropdownButton'
+import { logger, logOPFS } from '@/utils/logger'
+import { leaderElection } from '@/utils/leader-election'
 
 export const SettingsView: Component = () => {
   const { 
@@ -28,9 +31,18 @@ export const SettingsView: Component = () => {
     filterVoicesByBrightnessRange
   } = useTTS()
   const { theme, setTheme } = useTheme()
+  const { state: libraryState, getStorageUsage } = useLibrary()
   
   const [refreshingVoices, setRefreshingVoices] = createSignal(false)
   const [voiceMetadata, setVoiceMetadata] = createSignal<any>(null)
+  
+  // OPFS & Debug state
+  const [logLevel, setLogLevel] = createSignal<'debug' | 'info' | 'warn' | 'error'>('info')
+  const [debugInfo, setDebugInfo] = createSignal<any>(null)
+  const [storageInfo, setStorageInfo] = createSignal<any>(null)
+  const [lockInfo, setLockInfo] = createSignal<any>(null)
+  const [recentLogs, setRecentLogs] = createSignal<any[]>([])
+  const [refreshingDebug, setRefreshingDebug] = createSignal(false)
   
   // Voice filtering state
   const [availableTags, setAvailableTags] = createSignal<string[]>([])
@@ -48,6 +60,111 @@ export const SettingsView: Component = () => {
       await loadModel(modelName)
     } catch (error) {
       console.error('Failed to load model:', error)
+    }
+  }
+
+  // Refresh debug information
+  const refreshDebugInfo = async () => {
+    setRefreshingDebug(true)
+    try {
+      // Get logger debug info
+      const loggerDebug = logger.getDebugInfo()
+      setDebugInfo(loggerDebug)
+      
+      // Get storage usage
+      const storage = await getStorageUsage()
+      setStorageInfo(storage)
+      
+      // Get lock information
+      const locks = await leaderElection.getLockInfo()
+      const leaderStatus = await leaderElection.checkLeaderStatus()
+      const leaderDebug = leaderElection.getDebugInfo()
+      
+      setLockInfo({
+        locks,
+        leaderStatus,
+        leaderDebug
+      })
+      
+      // Get recent logs
+      const logs = logger.getRecentLogs(50)
+      setRecentLogs(logs)
+      
+    } catch (error) {
+      console.error('Failed to refresh debug info:', error)
+    } finally {
+      setRefreshingDebug(false)
+    }
+  }
+
+  // Auto-refresh debug info when component mounts
+  createEffect(() => {
+    refreshDebugInfo()
+  })
+
+  // Handle log level change
+  const handleLogLevelChange = (newLevel: 'debug' | 'info' | 'warn' | 'error') => {
+    setLogLevel(newLevel)
+    logger.configure({ logLevel: newLevel })
+    logOPFS.info(`Log level changed to: ${newLevel}`)
+  }
+
+  // Export debug information
+  const exportDebugInfo = () => {
+    const info = {
+      timestamp: new Date().toISOString(),
+      debugInfo: debugInfo(),
+      storageInfo: storageInfo(),
+      lockInfo: lockInfo(),
+      libraryState: {
+        isLeader: libraryState().isLeader,
+        leaderInfo: libraryState().leaderInfo,
+        isInitialized: libraryState().isInitialized,
+        documentCount: Object.keys(libraryState().index).length
+      },
+      logs: logger.exportLogs()
+    }
+    
+    const text = JSON.stringify(info, null, 2)
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Debug information copied to clipboard!')
+    }).catch(() => {
+      // Fallback: open in new window
+      const blob = new Blob([text], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `pagesonic-debug-${Date.now()}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+    })
+  }
+
+  // Force leadership transfer
+  const forceLeadershipTransfer = async () => {
+    if (confirm('This will force a leadership transfer and may temporarily disrupt cross-tab synchronization. Continue?')) {
+      try {
+        await leaderElection.forceLeadershipTransfer()
+        setTimeout(refreshDebugInfo, 1000) // Refresh after a delay
+      } catch (error) {
+        console.error('Failed to force leadership transfer:', error)
+        alert('Failed to force leadership transfer. Check console for details.')
+      }
+    }
+  }
+
+  // Step down from leadership
+  const stepDownFromLeadership = async () => {
+    if (confirm('Step down from leadership? Another tab will become the leader if available.')) {
+      try {
+        await leaderElection.stepDown()
+        setTimeout(refreshDebugInfo, 500) // Refresh after a delay
+      } catch (error) {
+        console.error('Failed to step down from leadership:', error)
+        alert('Failed to step down from leadership. Check console for details.')
+      }
     }
   }
 
@@ -580,6 +697,165 @@ export const SettingsView: Component = () => {
               )}
             </div>
           )}
+        </div>
+      </div>
+      <hr class="section-divider" />
+
+      {/* OPFS & Locking Status Section */}
+      <div class="settings-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+          <h3>OPFS & Cross-Tab Status</h3>
+          <button 
+            onClick={refreshDebugInfo}
+            disabled={refreshingDebug()}
+            style="font-size: 0.8rem; padding: 0.25rem 0.5rem;"
+          >
+            {refreshingDebug() ? 'Refreshing…' : 'Refresh'}
+          </button>
+        </div>
+
+        {/* Storage Information */}
+        <div class="debug-panel">
+          <h4>Storage Usage</h4>
+          {storageInfo() && (
+            <div class="debug-grid">
+              <div class="debug-item">
+                <span class="label">Used:</span>
+                <span class="value">{(storageInfo().used / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Quota:</span>
+                <span class="value">{(storageInfo().quota / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Available:</span>
+                <span class="value">{(storageInfo().available / 1024 / 1024).toFixed(2)} MB</span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Documents:</span>
+                <span class="value">{Object.keys(libraryState().index).length}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Leadership Status */}
+        <div class="debug-panel">
+          <h4>Leadership Status</h4>
+          {lockInfo() && (
+            <div class="debug-grid">
+              <div class="debug-item">
+                <span class="label">Is Leader:</span>
+                <span class={`value ${libraryState().isLeader ? 'leader' : 'follower'}`}>
+                  {libraryState().isLeader ? 'Leader' : 'Follower'}
+                </span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Tab ID:</span>
+                <span class="value" style="font-family: monospace; font-size: 0.8rem;">
+                  {lockInfo().leaderDebug?.tabId?.slice(0, 20)}...
+                </span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Active Locks:</span>
+                <span class="value">{lockInfo().locks?.held?.length || 0}</span>
+              </div>
+              <div class="debug-item">
+                <span class="label">Pending Locks:</span>
+                <span class="value">{lockInfo().locks?.pending?.length || 0}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Leadership Actions */}
+          <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            {libraryState().isLeader && (
+              <button 
+                onClick={stepDownFromLeadership}
+                style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #ff6b6b; color: white; border: none; border-radius: 4px;"
+              >
+                Step Down as Leader
+              </button>
+            )}
+            <button 
+              onClick={forceLeadershipTransfer}
+              style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #4ecdc4; color: white; border: none; border-radius: 4px;"
+            >
+              Force Leadership Transfer
+            </button>
+          </div>
+        </div>
+
+        {/* Logging Configuration */}
+        <div class="debug-panel">
+          <h4>Logging Configuration</h4>
+          <div class="debug-grid">
+            <div class="debug-item">
+              <span class="label">Log Level:</span>
+              <select 
+                value={logLevel()} 
+                onChange={(e) => handleLogLevelChange((e.target as HTMLSelectElement).value as any)}
+                style="padding: 0.25rem; border-radius: 4px; border: 1px solid #ccc;"
+              >
+                <option value="debug">Debug</option>
+                <option value="info">Info</option>
+                <option value="warn">Warning</option>
+                <option value="error">Error</option>
+              </select>
+            </div>
+            <div class="debug-item">
+              <span class="label">Total Logs:</span>
+              <span class="value">{debugInfo()?.totalLogs || 0}</span>
+            </div>
+            <div class="debug-item">
+              <span class="label">Active Timers:</span>
+              <span class="value">{debugInfo()?.activeTimers?.length || 0}</span>
+            </div>
+          </div>
+
+          {/* Export Actions */}
+          <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+            <button 
+              onClick={exportDebugInfo}
+              style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #95a5a6; color: white; border: none; border-radius: 4px;"
+            >
+              Export Debug Info
+            </button>
+            <button 
+              onClick={() => logger.clearLogs()}
+              style="font-size: 0.8rem; padding: 0.25rem 0.5rem; background: #e74c3c; color: white; border: none; border-radius: 4px;"
+            >
+              Clear Logs
+            </button>
+          </div>
+        </div>
+
+        {/* Recent Logs */}
+        <div class="debug-panel">
+          <h4>Recent Logs (Last 50)</h4>
+          <div style="max-height: 200px; overflow-y: auto; background: #f8f9fa; padding: 0.5rem; border-radius: 4px; font-family: monospace; font-size: 0.7rem; line-height: 1.3;">
+            {recentLogs().length > 0 ? (
+              recentLogs().map((log) => (
+                <div 
+                  style={`margin-bottom: 0.25rem; padding: 0.25rem; border-radius: 2px; ${
+                    log.level === 'error' ? 'background: #ffebee; color: #c62828;' :
+                    log.level === 'warn' ? 'background: #fff3e0; color: #ef6c00;' :
+                    log.level === 'info' ? 'background: #e8f5e8; color: #2e7d32;' :
+                    'background: #f5f5f5; color: #666;'
+                  }`}
+                >
+                  <span style="opacity: 0.7;">{log.timestamp?.slice(11, 19)}</span>
+                  <span style="font-weight: bold; margin-left: 0.5rem;">[{log.context.toUpperCase()}]</span>
+                  <span style="margin-left: 0.5rem;">{log.message}</span>
+                  {log.duration && <span style="color: #666;"> ({log.duration}ms)</span>}
+                </div>
+              ))
+            ) : (
+              <div style="color: #666; text-align: center; padding: 1rem;">
+                No logs available. Try performing some actions to generate logs.
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <hr class="section-divider" />

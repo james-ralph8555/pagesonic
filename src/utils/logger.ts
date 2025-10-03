@@ -119,7 +119,7 @@ class Logger {
     }
 
     if (error) {
-      args.push('\nError:', error)
+      args.push('\nError:', error.message, error.stack || '')
     }
 
     // Use appropriate console method
@@ -236,7 +236,7 @@ class Logger {
         parts.push('\n  Data:', JSON.stringify(entry.data, null, 2))
       }
       if (entry.error) {
-        parts.push('\n  Error:', entry.error.message, entry.error.stack)
+        parts.push('\n  Error:', entry.error.message, entry.error.stack || 'No stack trace available')
       }
       return parts.join(' ')
     }).join('\n')
