@@ -317,6 +317,11 @@ div[style*="background: #f0f4f8"] button:hover {
   background: rgba(0, 0, 0, 0.2) !important;
 }
 
+/* Glass menu titles in light mode */
+.theme-light .glass-menu-title {
+  color: rgba(0, 0, 0, 0.8) !important;
+}
+
 /* Top rail borders in light mode */
 .theme-light .settings-top-rail,
 .theme-light .pdf-top-rail {
