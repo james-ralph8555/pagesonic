@@ -43,12 +43,35 @@
 }
 
 /* Buttons and controls: ensure dark text for readability */
-.theme-light .rail-btn,
 .theme-light .pdf-zoom-controls .zoom-btn,
 .theme-light .pdf-zoom-controls .zoom-toggle,
 .theme-light .app-nav button,
 .theme-light .glass-menu-item {
   color: #111 !important;
+}
+
+/* Rail buttons in top rails maintain purple background with white icons in light theme */
+.theme-light .pdf-top-rail .rail-btn,
+.theme-light .library-top-rail .rail-btn,
+.theme-light .settings-top-rail .rail-btn {
+  background: linear-gradient(
+    -75deg,
+    var(--brand),
+    var(--brand-hover),
+    var(--brand)
+  ) !important;
+  color: #ffffff !important;
+}
+
+.theme-light .pdf-top-rail .rail-btn svg,
+.theme-light .library-top-rail .rail-btn svg,
+.theme-light .settings-top-rail .rail-btn svg {
+  stroke: #ffffff !important;
+}
+
+/* FAB button icon is black in light mode */
+.theme-light .fab-trigger svg {
+  stroke: #000000 !important;
 }
 
 /* Dropdown menu glass panel: switch to light */
