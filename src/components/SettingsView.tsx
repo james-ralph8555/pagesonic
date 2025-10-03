@@ -366,13 +366,36 @@ export const SettingsView: Component = () => {
           <div class="model-item">
             <div class="model-info">
               <h4>Browser TTS (System)</h4>
-              <p>Uses built-in SpeechSynthesis voices</p>
-              <p>Voices: {(ttsState().systemVoices || []).length > 0 ? (ttsState().systemVoices || []).join(', ') : 'none detected'}</p>
-              <p class={`status ${ttsState().engine === 'browser' ? 'loaded' : ((ttsState().systemVoices || []).length > 0 ? 'available' : 'incompatible')}`}>
-                {ttsState().engine === 'browser' ? 'Currently in use' : (
-                  (ttsState().systemVoices || []).length > 0 ? 'Available' : 'Unavailable (no voices). A system speech backend must be installed.'
-                )}
-              </p>
+              <div class="settings-panel" style="margin-top: 0.5rem;">
+                <div class="settings-grid compact">
+                  <div class="settings-item">
+                    <span class="label">Engine:</span>
+                    <span class="value">System SpeechSynthesis</span>
+                  </div>
+                  <div class="settings-item">
+                    <span class="label">Available Voices:</span>
+                    <span class={`value ${(ttsState().systemVoices || []).length > 0 ? 'status-success' : 'status-error'}`}>
+                      {(ttsState().systemVoices || []).length}
+                    </span>
+                  </div>
+                  <div class="settings-item">
+                    <span class="label">Status:</span>
+                    <span class={`value ${ttsState().engine === 'browser' ? 'status-success' : ((ttsState().systemVoices || []).length > 0 ? 'status-info' : 'status-error')}`}>
+                      {ttsState().engine === 'browser' ? 'Active' : (
+                        (ttsState().systemVoices || []).length > 0 ? 'Available' : 'Unavailable'
+                      )}
+                    </span>
+                  </div>
+                  {(ttsState().systemVoices || []).length > 0 && (
+                    <div class="settings-item" style="grid-column: 1 / -1;">
+                      <span class="label">Voices:</span>
+                      <span style="font-family: monospace; font-size: 0.7rem; color: #94a3b8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                        {(ttsState().systemVoices || []).join(', ')}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
               <button
@@ -405,12 +428,38 @@ export const SettingsView: Component = () => {
               <div class="model-item">
                 <div class="model-info">
                   <h4>{model.name}</h4>
-                  <p>Size: {model.size}MB</p>
-                  <p>Voices: {model.voices.join(', ')}</p>
-                  <p>WebGPU Required: {model.requiresWebGPU ? 'Yes' : 'No'}</p>
-                  <p class={`status ${modelStatus.status}`}>
-                    {modelStatus.message}
-                  </p>
+                  <div class="settings-panel" style="margin-top: 0.5rem;">
+                    <div class="settings-grid compact">
+                      <div class="settings-item">
+                        <span class="label">Size:</span>
+                        <span class="value">{model.size} MB</span>
+                      </div>
+                      <div class="settings-item">
+                        <span class="label">Voices:</span>
+                        <span class="value">{model.voices.length}</span>
+                      </div>
+                      <div class="settings-item">
+                        <span class="label">WebGPU:</span>
+                        <span class={`value ${model.requiresWebGPU ? (ttsState().isWebGPUSupported ? 'status-success' : 'status-error') : 'status-info'}`}>
+                          {model.requiresWebGPU ? 'Required' : 'Optional'}
+                        </span>
+                      </div>
+                      <div class="settings-item">
+                        <span class="label">Status:</span>
+                        <span class={`value ${modelStatus.status === 'loaded' ? 'status-success' : modelStatus.status === 'available' ? 'status-info' : 'status-error'}`}>
+                          {modelStatus.message}
+                        </span>
+                      </div>
+                      {model.voices.length > 0 && (
+                        <div class="settings-item" style="grid-column: 1 / -1;">
+                          <span class="label">Available Voices:</span>
+                          <span style="font-family: monospace; font-size: 0.7rem; color: #94a3b8; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            {model.voices.join(', ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 <button
                   onClick={() => handleModelLoad(model.name)}
@@ -597,112 +646,162 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>TTS Chunking</h3>
-        <p class="hint">Controls how input text is split for inference/playback. Console logs include chunk indices and timing.</p>
-        <div class="dropdown single-line">
-          <label>Max chunk size:</label>
-          <input
-            type="number"
-            min="64"
-            max="2000"
-            step="10"
-            value={ttsState().chunkMaxChars}
-            onInput={(e) => setChunkMaxChars(parseInt((e.target as HTMLInputElement).value || '280'))}
-          />
-          <span>chars</span>
-        </div>
-        <div class="dropdown single-line">
-          <label>Overlap:</label>
-          <input
-            type="number"
-            min="0"
-            max="200"
-            step="1"
-            value={ttsState().chunkOverlapChars}
-            onInput={(e) => setChunkOverlapChars(parseInt((e.target as HTMLInputElement).value || '0'))}
-          />
-          <span>chars</span>
-        </div>
-        <div class="dropdown single-line">
-          <label>Split by sentence:</label>
-          <input
-            type="checkbox"
-            checked={!!ttsState().sentenceSplit}
-            onChange={(e) => setSentenceSplit((e.target as HTMLInputElement).checked)}
-          />
-        </div>
-        <div class="dropdown single-line">
-          <label>Pause between chunks:</label>
-          <input
-            type="number"
-            min="0"
-            max="2000"
-            step="20"
-            value={ttsState().interChunkPauseMs}
-            onInput={(e) => setInterChunkPauseMs(parseInt((e.target as HTMLInputElement).value || '0'))}
-          />
-          <span>ms</span>
+        <div class="settings-panel">
+          <h4>Chunk Configuration</h4>
+          <div class="settings-grid compact">
+            <div class="settings-item">
+              <span class="label">Max chunk size:</span>
+              <div class="settings-input-group">
+                <input
+                  type="number"
+                  min="64"
+                  max="2000"
+                  step="10"
+                  value={ttsState().chunkMaxChars}
+                  onInput={(e) => setChunkMaxChars(parseInt((e.target as HTMLInputElement).value || '280'))}
+                  class="settings-input"
+                />
+                <span class="settings-input-label">chars</span>
+              </div>
+            </div>
+            <div class="settings-item">
+              <span class="label">Overlap:</span>
+              <div class="settings-input-group">
+                <input
+                  type="number"
+                  min="0"
+                  max="200"
+                  step="1"
+                  value={ttsState().chunkOverlapChars}
+                  onInput={(e) => setChunkOverlapChars(parseInt((e.target as HTMLInputElement).value || '0'))}
+                  class="settings-input"
+                />
+                <span class="settings-input-label">chars</span>
+              </div>
+            </div>
+            <div class="settings-item">
+              <span class="label">Split by sentence:</span>
+              <input
+                type="checkbox"
+                checked={!!ttsState().sentenceSplit}
+                onChange={(e) => setSentenceSplit((e.target as HTMLInputElement).checked)}
+                style="margin: 0; accent-color: #6366f1;"
+              />
+            </div>
+            <div class="settings-item">
+              <span class="label">Pause between chunks:</span>
+              <div class="settings-input-group">
+                <input
+                  type="number"
+                  min="0"
+                  max="2000"
+                  step="20"
+                  value={ttsState().interChunkPauseMs}
+                  onInput={(e) => setInterChunkPauseMs(parseInt((e.target as HTMLInputElement).value || '0'))}
+                  class="settings-input"
+                />
+                <span class="settings-input-label">ms</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-info">
+            <div class="settings-info-content">
+              <strong>💡 Tip:</strong> Console logs include chunk indices and timing information. Smaller chunks reduce latency but may affect speech flow.
+            </div>
+          </div>
         </div>
       </div>
       <hr class="section-divider" />
       
       <div class="settings-section">
         <h3>System Information</h3>
-        <div class="system-info">
-          <p><strong>WebGPU Status:</strong> {ttsState().isWebGPUSupported ? 'Supported' : 'Not Supported'}</p>
-          {ttsState().model && (
-            <p><strong>Loaded Model:</strong> {ttsState().model!.name}</p>
-          )}
-          <p><strong>Current Voice:</strong> {(() => {
-            if (ttsState().engine === 'browser' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
-              const voices = window.speechSynthesis.getVoices()
-              const requested = (ttsState().voice || '').toLowerCase()
-              const selected = voices.find(v => v.name.toLowerCase() === requested) ||
-                               voices.find(v => v.name.toLowerCase().includes(requested))
-              return selected?.name || ttsState().voice
-            }
-            return ttsState().voice
-          })()}</p>
-          <p><strong>Speech Rate:</strong> {ttsState().rate.toFixed(1)}x</p>
-          <p><strong>Speech Pitch:</strong> {ttsState().pitch.toFixed(1)}</p>
+        <div class="settings-panel">
+          <h4>System Status</h4>
+          <div class="settings-grid">
+            <div class="settings-item">
+              <span class="label">WebGPU Status:</span>
+              <span class={`value ${ttsState().isWebGPUSupported ? 'status-success' : 'status-error'}`}>
+                {ttsState().isWebGPUSupported ? 'Supported' : 'Not Supported'}
+              </span>
+            </div>
+            {ttsState().model && (
+              <div class="settings-item">
+                <span class="label">Loaded Model:</span>
+                <span class="value status-info">{ttsState().model!.name}</span>
+              </div>
+            )}
+            <div class="settings-item">
+              <span class="label">Current Voice:</span>
+              <span class="value">{(() => {
+                if (ttsState().engine === 'browser' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+                  const voices = window.speechSynthesis.getVoices()
+                  const requested = (ttsState().voice || '').toLowerCase()
+                  const selected = voices.find(v => v.name.toLowerCase() === requested) ||
+                                   voices.find(v => v.name.toLowerCase().includes(requested))
+                  return selected?.name || ttsState().voice
+                }
+                return ttsState().voice
+              })()}</span>
+            </div>
+            <div class="settings-item">
+              <span class="label">Speech Rate:</span>
+              <span class="value">{ttsState().rate.toFixed(1)}x</span>
+            </div>
+            <div class="settings-item">
+              <span class="label">Speech Pitch:</span>
+              <span class="value">{ttsState().pitch.toFixed(1)}</span>
+            </div>
+          </div>
           
                     
+          
+          
           {/* Voice metadata for LibriTTS speakers */}
           {ttsState().engine !== 'browser' && getCurrentSpeakerInfo() && (
-            <div class="voice-metadata" style={{ 'margin-top': '1rem', 'padding-top': '1rem', 'border-top': '1px solid #ccc' }}>
-              <h4 style={{ 'margin-bottom': '0.5rem' }}>Voice Details</h4>
-              <p><strong>Display Name:</strong> {getCurrentSpeakerInfo()?.display_name || 'N/A'}</p>
-              <p><strong>Description:</strong> {getCurrentSpeakerInfo()?.description || 'N/A'}</p>
-              <p><strong>Gender:</strong> {getCurrentSpeakerInfo()?.gender === 'F' ? 'Female' : getCurrentSpeakerInfo()?.gender === 'M' ? 'Male' : 'Unknown'}</p>
-              
-              {/* Numeric characteristics */}
-              <div class="voice-characteristics">
+            <div class="settings-panel" style={{ 'margin-top': '1rem' }}>
+              <h4>Voice Details</h4>
+              <div class="settings-grid">
+                <div class="settings-item">
+                  <span class="label">Display Name:</span>
+                  <span class="value">{getCurrentSpeakerInfo()?.display_name || 'N/A'}</span>
+                </div>
+                <div class="settings-item">
+                  <span class="label">Description:</span>
+                  <span class="value">{getCurrentSpeakerInfo()?.description || 'N/A'}</span>
+                </div>
+                <div class="settings-item">
+                  <span class="label">Gender:</span>
+                  <span class={`value ${getCurrentSpeakerInfo()?.gender === 'F' ? 'status-info' : getCurrentSpeakerInfo()?.gender === 'M' ? 'status-success' : 'status-warning'}`}>
+                    {getCurrentSpeakerInfo()?.gender === 'F' ? 'Female' : getCurrentSpeakerInfo()?.gender === 'M' ? 'Male' : 'Unknown'}
+                  </span>
+                </div>
                 {getCurrentSpeakerInfo()?.pitch_mean && (
-                  <div class="characteristic">
+                  <div class="settings-item">
                     <span class="label">Avg Pitch:</span>
                     <span class="value">{Math.round(getCurrentSpeakerInfo().pitch_mean)} Hz</span>
                   </div>
                 )}
                 {getCurrentSpeakerInfo()?.speaking_rate && (
-                  <div class="characteristic">
+                  <div class="settings-item">
                     <span class="label">Speaking Rate:</span>
                     <span class="value">{Math.round(getCurrentSpeakerInfo().speaking_rate)} wpm</span>
                   </div>
                 )}
                 {getCurrentSpeakerInfo()?.brightness && (
-                  <div class="characteristic">
+                  <div class="settings-item">
                     <span class="label">Brightness:</span>
                     <span class="value">{getCurrentSpeakerInfo().brightness.toFixed(2)}</span>
                   </div>
                 )}
               </div>
               
-              {/* Rich tags display */}
+              {/* Voice traits display */}
               {getCurrentSpeakerInfo()?.tags && getCurrentSpeakerInfo()?.tags.length > 0 && (
-                <div class="voice-tags">
-                  <p><strong>Voice Traits:</strong></p>
-                  <div class="tags-list">
+                <div style="margin-top: 0.75rem;">
+                  <div style="font-size: 0.85rem; font-weight: 500; color: #94a3b8; margin-bottom: 0.5rem;">Voice Traits:</div>
+                  <div class="settings-traits">
                     {getCurrentSpeakerInfo().tags.map((tag: string) => (
-                      <span class="voice-tag">{tag}</span>
+                      <span class="settings-trait">{tag}</span>
                     ))}
                   </div>
                 </div>
@@ -875,17 +974,36 @@ export const SettingsView: Component = () => {
       
       <div class="settings-section">
         <h3>Audio</h3>
-        <div class="dropdown single-line">
-          <label>Target sample rate:</label>
-          <input
-            type="number"
-            min="8000"
-            max="192000"
-            step="1000"
-            value={ttsState().targetSampleRate}
-            onChange={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
-          />
-          <span>Hz</span>
+        <div class="settings-panel">
+          <h4>Audio Configuration</h4>
+          <div class="settings-grid compact">
+            <div class="settings-item">
+              <span class="label">Target sample rate:</span>
+              <div class="settings-input-group">
+                <input
+                  type="number"
+                  min="8000"
+                  max="192000"
+                  step="1000"
+                  value={ttsState().targetSampleRate}
+                  onChange={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
+                  class="settings-input settings-input-large"
+                />
+                <span class="settings-input-label">Hz</span>
+              </div>
+            </div>
+            <div class="settings-item">
+              <span class="label">Quality Level:</span>
+              <span class={`value ${(ttsState().targetSampleRate || 24000) >= 48000 ? 'status-success' : (ttsState().targetSampleRate || 24000) >= 24000 ? 'status-info' : 'status-warning'}`}>
+                {(ttsState().targetSampleRate || 24000) >= 48000 ? 'High' : (ttsState().targetSampleRate || 24000) >= 24000 ? 'Standard' : 'Basic'}
+              </span>
+            </div>
+          </div>
+          <div class="settings-info success">
+            <div class="settings-info-content">
+              <strong>🎵 Quality Guide:</strong> 48kHz+ for high-quality output, 24kHz for standard use, 16-22kHz for bandwidth saving
+            </div>
+          </div>
         </div>
       </div>
       
