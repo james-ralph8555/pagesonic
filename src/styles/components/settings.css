@@ -18,7 +18,6 @@
 
 .settings-section h3 {
   margin-bottom: 1rem;
-  color: rgba(255, 255, 255, 0.9);
   font-weight: 600;
   font-size: 1.1rem;
 }
@@ -62,7 +61,6 @@
 .model-info p {
   margin-bottom: 0.25rem;
   font-size: 0.9em;
-  opacity: 0.8;
 }
 
 /* Status Indicators */

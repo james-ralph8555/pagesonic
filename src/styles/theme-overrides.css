@@ -69,7 +69,8 @@
   color: rgba(0, 0, 0, 0.75);
 }
 
-/* Settings view model info text */
+/* Settings view text elements */
+.theme-light .settings-section h3,
 .theme-light .model-info h4,
 .theme-light .model-info p {
   color: #111 !important;
@@ -320,4 +321,16 @@ div[style*="background: #f0f4f8"] button:hover {
 .theme-light .settings-top-rail,
 .theme-light .pdf-top-rail {
   border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* PDF rail meta text (document title and page selector) */
+.theme-light .rail-meta {
+  color: #111 !important;
+}
+
+.theme-light .page-bubble,
+.theme-light .page-bubble .bubble-input,
+.theme-light .page-bubble .maxpage,
+.theme-light .page-selector .slash {
+  color: #111 !important;
 }
