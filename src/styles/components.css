@@ -212,6 +212,17 @@
 .dropdown input[type="checkbox"] {
   width: auto;
   margin-right: 0.5rem;
+  height: 1rem;
+  min-width: 1rem;
+  cursor: pointer;
+  pointer-events: auto;
+  -webkit-appearance: auto;
+  appearance: auto;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 3px;
+  accent-color: var(--brand);
+  vertical-align: middle;
 }
 .dropdown span {
   font-size: 0.85rem;

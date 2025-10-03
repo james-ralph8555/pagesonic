@@ -2,6 +2,7 @@ import { Component, createSignal, createEffect } from 'solid-js'
 import { useTTS } from '@/stores/tts'
 import { useTheme } from '@/stores/theme'
 import { GlassDropdownButton } from './GlassDropdownButton'
+import { getIOSInfo } from '@/utils/iosDetection'
 
 export const SettingsView: Component = () => {
   const { 
@@ -34,6 +35,20 @@ export const SettingsView: Component = () => {
     // iOS-specific helpers
     getAudioState,
     unlockAudioIOS,
+    // iOS Audio Settings setters
+    setIOSPreferredSampleRate,
+    setIOSForceResample,
+    setIOSFadeDuration,
+    setIOSGainLevel,
+    setIOSMaxChunkSize,
+    setIOSMaxResamplingFrames,
+    setIOSMaxRetries,
+    setIOSBaseRetryDelay,
+    setIOSUseWebAudio,
+    setIOSHighQualityResampling,
+    setIOSCrossfadeChunkSize,
+    setIOSNormalizationHeadroom,
+    resetIOSAudioSettings,
     // Testing
     playTestTone
   } = useTTS()
@@ -55,6 +70,10 @@ export const SettingsView: Component = () => {
   const [rateRange, setRateRange] = createSignal({ min: 0, max: 300 })
   const [brightnessRange, setBrightnessRange] = createSignal({ min: 0, max: 1 })
   const [searchQuery, setSearchQuery] = createSignal('')
+  
+  // iOS detection and audio settings
+  const [iosInfo] = createSignal(getIOSInfo())
+  const [showAdvancedIOS, setShowAdvancedIOS] = createSignal(false)
   
   const handleModelLoad = async (modelName: string) => {
     try {
@@ -561,14 +580,14 @@ export const SettingsView: Component = () => {
           
           {/* iOS Debugging Information */}
           {(() => {
-            const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
-            if (isiOS) {
+            const isiosDebug = /iPad|iPhone|iPod/.test(navigator.userAgent)
+            if (isiosDebug) {
               const audioState = getAudioState()
               return (
                 <div style={{ 'margin-top': '1rem', 'padding': '0.75rem', 'background': '#f0f4f8', 'border-radius': '4px', 'font-size': '0.9em' }}>
                   <h4 style={{ 'margin-bottom': '0.5rem', 'color': '#2563eb' }}>📱 iOS Debug Information</h4>
                   <p><strong>User Agent:</strong> {navigator.userAgent}</p>
-                  <p><strong>iOS Detected:</strong> {audioState?.isIOS ? 'Yes ✅' : 'No ❌'}</p>
+                  <p><strong>iOS Detected:</strong> {isiosDebug ? 'Yes ✅' : 'No ❌'}</p>
                   <p><strong>Audio Context State:</strong> {audioState?.audioContextState || 'Unknown'}</p>
                   <p><strong>Audio Unlocked:</strong> {audioState?.isAudioUnlocked ? 'Yes ✅' : 'No ❌'}</p>
                   <p><strong>Current Engine:</strong> {ttsState().engine}</p>
@@ -756,6 +775,258 @@ export const SettingsView: Component = () => {
         */}
       </div>
       <hr class="section-divider" />
+      
+      {/* iOS Audio Settings Section */}
+      {iosInfo().isIOS && (
+        <div class="settings-section">
+          <div style={{ display: 'flex', 'justify-content': 'space-between', 'align-items': 'center' }}>
+            <h3>iOS Audio Settings 🍎</h3>
+            <button 
+              onClick={() => setShowAdvancedIOS(!showAdvancedIOS())}
+              style={{ 
+                'font-size': '0.85em', 
+                'padding': '0.25rem 0.5rem', 
+                'background': showAdvancedIOS() ? '#2563eb' : '#64748b', 
+                'color': 'white', 
+                'border': 'none', 
+                'border-radius': '4px',
+                'cursor': 'pointer'
+              }}
+            >
+              {showAdvancedIOS() ? 'Hide Advanced' : 'Show Advanced'}
+            </button>
+          </div>
+          
+          <p class="hint">
+            Fine-tune audio playback specifically for iOS Safari to reduce aliasing and improve quality.
+          </p>
+          
+          {/* Basic Settings */}
+          <div class="dropdown">
+            <label>Preferred Sample Rate:</label>
+            <select
+              value={ttsState().iosAudioSettings?.preferredSampleRate || 44100}
+              onChange={(e) => setIOSPreferredSampleRate(parseInt((e.target as HTMLSelectElement).value))}
+            >
+              <option value={null as any}>Auto (browser default)</option>
+              <option value={22050}>22050 Hz (Lower quality, less memory)</option>
+              <option value={44100}>44100 Hz (Recommended for iOS)</option>
+              <option value={48000}>48000 Hz (Higher quality)</option>
+            </select>
+            <p class="hint">Most iOS devices work best with 44100Hz. Choose Auto to let the browser decide.</p>
+            
+            <div style={{ display: 'flex', 'align-items': 'center', 'gap': '0.5rem', 'margin-top': '1rem' }}>
+              <input
+                type="checkbox"
+                id="forceResample"
+                checked={!!ttsState().iosAudioSettings?.forceResampleToPreferred}
+                onChange={(e) => setIOSForceResample((e.target as HTMLInputElement).checked)}
+              />
+              <label for="forceResample" style={{ margin: 0 }}>Force resampling to preferred rate</label>
+            </div>
+            <p class="hint">May improve quality but uses more processing power.</p>
+          </div>
+          
+          <div class="dropdown">
+            <label>Audio Fade Duration: {ttsState().iosAudioSettings?.fadeDurationMs || 10}ms</label>
+            <input
+              type="range"
+              min="0"
+              max="50"
+              value={ttsState().iosAudioSettings?.fadeDurationMs || 10}
+              onInput={(e) => setIOSFadeDuration(parseInt((e.target as HTMLInputElement).value))}
+              style={{ width: '100%' }}
+            />
+            <p class="hint">Longer fades prevent audio clicks but may make transitions less responsive.</p>
+          </div>
+          
+          <div class="dropdown">
+            <label>Audio Gain Level: {ttsState().iosAudioSettings?.gainLevel?.toFixed(2) || '0.80'}</label>
+            <input
+              type="range"
+              min="0.1"
+              max="2.0"
+              step="0.05"
+              value={ttsState().iosAudioSettings?.gainLevel || 0.8}
+              onInput={(e) => setIOSGainLevel(parseFloat((e.target as HTMLInputElement).value))}
+              style={{ width: '100%' }}
+            />
+            <p class="hint">Higher values increase volume but may cause clipping. Lower values prevent distortion.</p>
+          </div>
+          
+          <div class="dropdown">
+            <label>Max Chunk Size: {ttsState().iosAudioSettings?.maxChunkSizeSeconds || 5} seconds</label>
+            <input
+              type="range"
+              min="1"
+              max="30"
+              value={ttsState().iosAudioSettings?.maxChunkSizeSeconds || 5}
+              onInput={(e) => setIOSMaxChunkSize(parseInt((e.target as HTMLInputElement).value))}
+              style={{ width: '100%' }}
+            />
+            <p class="hint">Smaller chunks use less memory but may cause more frequent processing pauses.</p>
+          </div>
+          
+          {/* Advanced Settings */}
+          {showAdvancedIOS() && (
+            <>
+              <h4 style={{ 'margin-top': '1.5rem', 'color': '#64748b' }}>Advanced Settings</h4>
+              
+              <div class="dropdown">
+                <label>Max Resampling Frames: {ttsState().iosAudioSettings?.maxResamplingFrames || 48000}</label>
+                <input
+                  type="range"
+                  min="12000"
+                  max="192000"
+                  step="6000"
+                  value={ttsState().iosAudioSettings?.maxResamplingFrames || 48000}
+                  onInput={(e) => setIOSMaxResamplingFrames(parseInt((e.target as HTMLInputElement).value))}
+                  style={{ width: '100%' }}
+                />
+                <p class="hint">Maximum buffer size for high-quality resampling. Lower values save memory.</p>
+              </div>
+              
+              <div class="dropdown">
+                <label>Audio Context Retries: {ttsState().iosAudioSettings?.maxRetries || 3}</label>
+                <input
+                  type="range"
+                  min="1"
+                  max="10"
+                  value={ttsState().iosAudioSettings?.maxRetries || 3}
+                  onInput={(e) => setIOSMaxRetries(parseInt((e.target as HTMLInputElement).value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              
+              <div class="dropdown">
+                <label>Retry Delay Base: {ttsState().iosAudioSettings?.baseRetryDelayMs || 150}ms</label>
+                <input
+                  type="range"
+                  min="50"
+                  max="2000"
+                  step="50"
+                  value={ttsState().iosAudioSettings?.baseRetryDelayMs || 150}
+                  onInput={(e) => setIOSBaseRetryDelay(parseInt((e.target as HTMLInputElement).value))}
+                  style={{ width: '100%' }}
+                />
+              </div>
+              
+              <div class="dropdown">
+                <label>Crossfade Chunk Size: {ttsState().iosAudioSettings?.crossfadeChunkSize || 100}</label>
+                <input
+                  type="range"
+                  min="10"
+                  max="1000"
+                  step="10"
+                  value={ttsState().iosAudioSettings?.crossfadeChunkSize || 100}
+                  onInput={(e) => setIOSCrossfadeChunkSize(parseInt((e.target as HTMLInputElement).value))}
+                  style={{ width: '100%' }}
+                />
+                <p class="hint">Size of crossfade between audio chunks to prevent clicks.</p>
+              </div>
+              
+              <div class="dropdown">
+                <label>Normalization Headroom: {((ttsState().iosAudioSettings?.normalizationHeadroom || 0.05) * 100).toFixed(1)}%</label>
+                <input
+                  type="range"
+                  min="0.01"
+                  max="0.5"
+                  step="0.01"
+                  value={ttsState().iosAudioSettings?.normalizationHeadroom || 0.05}
+                  onInput={(e) => setIOSNormalizationHeadroom(parseFloat((e.target as HTMLInputElement).value))}
+                  style={{ width: '100%' }}
+                />
+                <p class="hint">Percentage below maximum to leave as headroom to prevent clipping.</p>
+              </div>
+              
+              <div class="dropdown">
+                <div style={{ display: 'flex', 'align-items': 'center', 'gap': '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="highQualityResampling"
+                    checked={!!ttsState().iosAudioSettings?.enableHighQualityResampling}
+                    onChange={(e) => setIOSHighQualityResampling((e.target as HTMLInputElement).checked)}
+                  />
+                  <label for="highQualityResampling" style={{ margin: 0 }}>Enable high-quality resampling</label>
+                </div>
+                <p class="hint">Uses OfflineAudioContext for better quality but may use more memory.</p>
+              </div>
+              
+              <div class="dropdown">
+                <div style={{ display: 'flex', 'align-items': 'center', 'gap': '0.5rem' }}>
+                  <input
+                    type="checkbox"
+                    id="useWebAudio"
+                    checked={!!ttsState().iosAudioSettings?.useWebAudioOnIOS}
+                    onChange={(e) => setIOSUseWebAudio((e.target as HTMLInputElement).checked)}
+                  />
+                  <label for="useWebAudio" style={{ margin: 0 }}>Use WebAudio API (recommended)</label>
+                </div>
+                <p class="hint">WebAudio provides better control and quality on iOS.</p>
+              </div>
+            </>
+          )}
+          
+          <div style={{ 'margin-top': '1.5rem', 'display': 'flex', 'gap': '0.5rem' }}>
+            <button
+              onClick={() => {
+                if (confirm('Reset all iOS audio settings to defaults?')) {
+                  resetIOSAudioSettings()
+                }
+              }}
+              style={{ 
+                'padding': '0.5rem 1rem', 
+                'background': '#dc2626', 
+                'color': 'white', 
+                'border': 'none', 
+                'border-radius': '4px',
+                'cursor': 'pointer'
+              }}
+            >
+              Reset to Defaults
+            </button>
+            
+            <button
+              onClick={async () => {
+                try {
+                  await playTestTone(440, 2.0) // 2 second test tone
+                  alert('Test tone completed! Listen for quality issues.')
+                } catch (error) {
+                  alert(`Test tone failed: ${error}`)
+                }
+              }}
+              style={{ 
+                'padding': '0.5rem 1rem', 
+                'background': '#4CAF50', 
+                'color': 'white', 
+                'border': 'none', 
+                'border-radius': '4px',
+                'cursor': 'pointer'
+              }}
+            >
+              Test Audio
+            </button>
+          </div>
+          
+          {/* iOS Device Info */}
+          <div style={{ 
+            'margin-top': '1rem', 
+            'padding': '0.75rem', 
+            'background': '#f8fafc', 
+            'border-radius': '4px', 
+            'font-size': '0.9em',
+            'border': '1px solid #e2e8f0'
+          }}>
+            <h4 style={{ 'margin-bottom': '0.5rem', 'color': '#475569' }}>Device Information</h4>
+            <p><strong>iOS Detected:</strong> {iosInfo().isIOS ? 'Yes' : 'No'}</p>
+            <p><strong>Safari Browser:</strong> {iosInfo().isSafari ? 'Yes' : 'No'}</p>
+            <p><strong>iOS Version:</strong> {iosInfo().version || 'Unknown'}</p>
+            <p><strong>Advanced Audio Support:</strong> {iosInfo().supportsAdvancedAudio ? 'Yes' : 'No'}</p>
+          </div>
+        </div>
+      )}
+      
+      {iosInfo().isIOS && <hr class="section-divider" />}
 
       <div class="settings-section">
         <h3>About</h3>

@@ -8,9 +8,29 @@ export type PlayHandle = {
 
 // iOS detection and preferred sample rate
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+
+// Helper function to get iOS audio settings from TTS store
+const getIOSSettings = () => {
+  if (typeof window === 'undefined') return null
+  // Access the global TTS state if available
+  try {
+    const ttsStore = (window as any).__tts_store
+    if (ttsStore && typeof ttsStore.state === 'function') {
+      return ttsStore.state().iosAudioSettings || null
+    }
+  } catch {
+    // Fallback: try to access directly
+  }
+  return null
+}
+
 const getPreferredSampleRate = () => {
+  const iosSettings = getIOSSettings()
+  if (isIOS && iosSettings) {
+    return iosSettings.preferredSampleRate
+  }
   if (isIOS) {
-    // iOS Safari prefers 44100Hz for better compatibility
+    // iOS Safari prefers 44100Hz for better compatibility (fallback)
     return 44100
   }
   // Let the browser decide for other platforms
@@ -33,7 +53,17 @@ export const ensureAudioContext = (existing?: AudioContext | null): AudioContext
 
 const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
   // iOS memory optimization: Process in chunks for very large buffers
-  const maxChunkSize = isIOS ? 22050 * 5 : 22050 * 10 // 5s for iOS, 10s for others at 22kHz
+  const iosSettingsChunk = getIOSSettings()
+  const defaultChunkSize = 22050 * 10 // 10s for others at 22kHz
+  let maxChunkSize = defaultChunkSize
+  
+  if (isIOS && iosSettingsChunk) {
+    // Use configurable chunk size for iOS (in seconds, converted to samples at 22kHz)
+    maxChunkSize = 22050 * iosSettingsChunk.maxChunkSizeSeconds
+  } else if (isIOS) {
+    // Fallback: 5s for iOS at 22kHz
+    maxChunkSize = 22050 * 5
+  }
   
   if (input.length > maxChunkSize) {
     console.log(`[Audio] Processing large audio buffer in chunks: ${input.length} samples`)
@@ -64,6 +94,9 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
   }
   
   // Enhanced normalization with iOS-specific optimizations
+  const iosSettingsNorm = getIOSSettings()
+  const headroom = (isIOS && iosSettingsNorm) ? (1.0 - iosSettingsNorm.normalizationHeadroom) : 0.95
+  
   if (maxAbs > 2 && maxAbs <= 40000) {
     // Values look like int16 range, scale down appropriately
     const k = 32768
@@ -71,9 +104,9 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
     console.log(`[Audio] Scaled int16-range audio by 1/${k}`)
   } else if (maxAbs > 1) {
     // General normalization to prevent clipping
-    const scale = Math.min(1.0, 0.95 / maxAbs) // Leave 5% headroom
+    const scale = Math.min(1.0, headroom / maxAbs)
     for (let i = 0; i < pcm.length; i++) pcm[i] = pcm[i] * scale
-    console.log(`[Audio] Normalized audio with max value ${maxAbs.toFixed(3)}, scale: ${scale.toFixed(3)}`)
+    console.log(`[Audio] Normalized audio with max value ${maxAbs.toFixed(3)}, scale: ${scale.toFixed(3)}, headroom: ${((1.0 - headroom) * 100).toFixed(1)}%`)
   }
   
   // Remove DC offset if significant
@@ -83,9 +116,10 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
     console.log(`[Audio] Removed DC offset: ${mean.toFixed(6)}`)
   }
   
-  // iOS-specific: Longer fade to prevent clicks and audio artifacts
+  // iOS-specific: Configurable fade to prevent clicks and audio artifacts
   const baseSr = 48000
-  const fadeMs = isIOS ? 10 : 5 // Longer fade for iOS
+  const iosSettingsFade = getIOSSettings()
+  const fadeMs = (isIOS && iosSettingsFade) ? iosSettingsFade.fadeDurationMs : (isIOS ? 10 : 5)
   const fadeSamples = Math.max(1, Math.floor((baseSr * fadeMs) / 1000))
   const n = pcm.length
   const f = Math.min(fadeSamples, Math.floor(n / 8)) // Smaller fraction for safety
@@ -146,7 +180,10 @@ function processLargeBuffer(input: Float32Array, chunkSize: number): Float32Arra
   }
   
   // Apply cross-fade between chunks to prevent clicks
-  const crossfadeSize = Math.min(100, Math.floor(chunkSize / 10))
+  const iosSettingsCross = getIOSSettings()
+  const defaultCrossfadeSize = 100
+  const crossfadeSize = Math.min((isIOS && iosSettingsCross) ? iosSettingsCross.crossfadeChunkSize : defaultCrossfadeSize, Math.floor(chunkSize / 10))
+  
   for (let offset = crossfadeSize; offset < output.length - crossfadeSize; offset += chunkSize) {
     const chunkEnd = Math.min(offset + crossfadeSize, output.length - crossfadeSize)
     for (let i = 0; i < crossfadeSize && offset + i < chunkEnd; i++) {
@@ -173,13 +210,25 @@ export const playPCM = async (
   
   // iOS-specific: Handle sample rate differences more gracefully
   let targetSampleRate = sampleRate
+  const iosSettingsSample = getIOSSettings()
   
-  // Always resample to preferred rate on iOS for better compatibility
-  if (isIOS) {
+  // Handle resampling based on iOS settings
+  if (isIOS && iosSettingsSample) {
+    const preferredRate = iosSettingsSample.preferredSampleRate
+    if (preferredRate && iosSettingsSample.forceResampleToPreferred && Math.abs(sampleRate - preferredRate) > 100) {
+      targetSampleRate = preferredRate
+      console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz (iOS setting)`)
+    } else if (!preferredRate && Math.abs(sampleRate - ctx.sampleRate) > 100) {
+      // If no preferred rate set, resample to context sample rate
+      targetSampleRate = ctx.sampleRate
+      console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to context rate ${targetSampleRate}Hz`)
+    }
+  } else if (isIOS) {
+    // Fallback iOS behavior
     const preferredRate = 44100
     if (Math.abs(sampleRate - preferredRate) > 100) {
       targetSampleRate = preferredRate
-      console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz (iOS optimized)`)
+      console.log(`[Audio] iOS: Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz (iOS fallback)`)
     }
   } else if (Math.abs(sampleRate - ctx.sampleRate) > 100) {
     // Resample to match AudioContext sample rate on other platforms if needed
@@ -197,11 +246,17 @@ export const playPCM = async (
     try {
       const frames = Math.max(1, Math.floor((pcm.length / sampleRate) * targetSampleRate))
       
-      // iOS-specific: Use smaller buffer sizes to avoid memory issues
-      const maxFrames = isIOS ? 48000 : 96000 // 1s at 48kHz for iOS, 2s for others
+      // iOS-specific: Use configurable buffer sizes to avoid memory issues
+      const iosSettingsResample = getIOSSettings()
+      const defaultMaxFrames = isIOS ? 48000 : 96000 // 1s at 48kHz for iOS, 2s for others
+      let maxFrames = defaultMaxFrames
       
-      if (frames <= maxFrames) {
-        // Single pass resampling for shorter buffers
+      if (isIOS && iosSettingsResample) {
+        maxFrames = iosSettingsResample.maxResamplingFrames
+      }
+      
+      if (frames <= maxFrames && (!isIOS || !iosSettingsResample || iosSettingsResample.enableHighQualityResampling)) {
+        // Single pass resampling for shorter buffers (if high quality is enabled)
         const offline = new (window.OfflineAudioContext || (window as any).webkitOfflineAudioContext)(1, frames, targetSampleRate)
         const src = offline.createBufferSource()
         src.buffer = buffer
@@ -234,11 +289,14 @@ export const playPCM = async (
   
   // iOS-specific: Add gain node for better volume control
   if (isIOS) {
+    const iosSettingsGain = getIOSSettings()
+    const gainLevel = (iosSettingsGain) ? iosSettingsGain.gainLevel : 0.8
+    
     const gainNode = ctx.createGain()
-    gainNode.gain.value = 0.8 // Slightly reduce volume to prevent clipping
+    gainNode.gain.value = gainLevel
     src.connect(gainNode)
     gainNode.connect(ctx.destination as AudioDestinationNode)
-    console.log('[Audio] iOS: Added gain node for volume control')
+    console.log(`[Audio] iOS: Added gain node with level ${gainLevel}`)
   } else {
     src.connect(ctx.destination as AudioDestinationNode)
   }
@@ -287,8 +345,17 @@ async function ensureAudioContextRunning(ctx: AudioContext): Promise<void> {
     return
   }
   
-  const maxRetries = isIOS ? 3 : 2
-  const baseDelay = isIOS ? 150 : 50
+  const iosSettingsRetry = getIOSSettings()
+  const defaultMaxRetries = isIOS ? 3 : 2
+  const defaultBaseDelay = isIOS ? 150 : 50
+  
+  let maxRetries = defaultMaxRetries
+  let baseDelay = defaultBaseDelay
+  
+  if (isIOS && iosSettingsRetry) {
+    maxRetries = iosSettingsRetry.maxRetries
+    baseDelay = iosSettingsRetry.baseRetryDelayMs
+  }
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {

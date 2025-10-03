@@ -1,8 +1,9 @@
 import { createSignal } from 'solid-js'
-import { TTSState, TTSModel } from '@/types'
+import { TTSState, TTSModel, iOSAudioSettings } from '@/types'
 import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio, generateTestTone, playPCMDebug } from '@/utils/audio'
 import { cleanForTTS } from '@/tts/textCleaner'
 import { getPref, setPref } from '@/utils/idb'
+import { isIOSDevice } from '@/utils/iosDetection'
 // Note: Piper streaming provides its own chunking; avoid double chunking here
 
 // Shared, app-wide TTS state
@@ -23,13 +24,42 @@ const [state, setState] = createSignal<TTSState>({
   session: undefined,
   systemVoices: [],
   phonemizer: 'auto',
-  espeakTimeoutMs: /iPad|iPhone|iPod/.test(navigator.userAgent) ? 2000 : 4000,
+  espeakTimeoutMs: isIOSDevice() ? 2000 : 4000,
   // Chunking/config params (tunable in Settings)
   chunkMaxChars: 280,
   chunkOverlapChars: 24,
   sentenceSplit: true,
   interChunkPauseMs: 120,
-  targetSampleRate: 22050
+  targetSampleRate: 22050,
+  
+  // iOS-specific audio settings (only applied on iOS devices)
+  iosAudioSettings: {
+    // Sample rate settings
+    preferredSampleRate: 44100, // iOS Safari preferred rate
+    forceResampleToPreferred: true,
+    
+    // Audio processing settings
+    fadeDurationMs: 10, // Longer fade for iOS to prevent clicks
+    gainLevel: 0.8, // Slightly reduced gain to prevent clipping
+    maxChunkSizeSeconds: 5, // Smaller chunks for iOS memory management
+    
+    // Memory and performance settings
+    maxResamplingFrames: 48000, // 1 second at 48kHz for iOS
+    chunkedResampleThresholdSeconds: 1.0,
+    
+    // Audio context retry settings
+    maxRetries: 3, // More retries for iOS
+    baseRetryDelayMs: 150, // Longer delays for iOS
+    
+    // TTS-specific settings
+    espeakTimeoutMs: 2000, // Shorter timeout for iOS
+    useWebAudioOnIOS: true, // Use WebAudio instead of HTMLAudio
+    
+    // Advanced settings for audio quality
+    enableHighQualityResampling: true,
+    crossfadeChunkSize: 100,
+    normalizationHeadroom: 0.05 // 5% headroom
+  }
 })
 
 // Available TTS models based on architecture
@@ -52,6 +82,11 @@ const MODELS: TTSModel[] = [
 ]
 
 export const useTTS = () => {
+  // Make TTS store globally available for audio utilities
+  if (typeof window !== 'undefined') {
+    ;(window as any).__tts_store = { state }
+  }
+  
   // WebAudio handles to control local model playback (shared singleton)
   // These are module-scoped singletons to ensure all useTTS() callers share the same worker/context.
   // Without this, different components calling useTTS() would have isolated workers.
@@ -66,7 +101,7 @@ export const useTTS = () => {
   ;(globalThis as any).__piper_resumeFn ||= null as (() => void) | null
   ;(globalThis as any).__piper_isPaused ||= false as boolean
   ;(globalThis as any).__tts_autoload_done ||= false as boolean
-  ;(globalThis as any).__is_ios ||= /iPad|iPhone|iPod/.test(navigator.userAgent) as boolean
+  ;(globalThis as any).__is_ios ||= isIOSDevice() as boolean
   ;(globalThis as any).__audio_unlocked_ios ||= false as boolean
   ;(globalThis as any).__audio_context_unlock_attempted_ios ||= false as boolean
   ;(globalThis as any).__ios_debug_log ||= [] as string[]
@@ -715,12 +750,77 @@ export const useTTS = () => {
     }
   }
 
+  // Load iOS audio settings from storage
+  const loadIOSAudioSettings = async () => {
+    try {
+      const currentSettings = state().iosAudioSettings
+      if (!currentSettings) return
+      
+      // Load each setting from storage and merge with defaults
+      const loadedSettings: Partial<iOSAudioSettings> = {}
+      const keys = [
+        'preferredSampleRate',
+        'forceResampleToPreferred',
+        'fadeDurationMs', 
+        'gainLevel',
+        'maxChunkSizeSeconds',
+        'maxResamplingFrames',
+        'maxRetries',
+        'baseRetryDelayMs',
+        'espeakTimeoutMs',
+        'useWebAudioOnIOS',
+        'enableHighQualityResampling',
+        'crossfadeChunkSize',
+        'normalizationHeadroom'
+      ]
+      
+      for (const key of keys) {
+        try {
+          const prefKey = `iosAudio.${key}`
+          const value = await getPref(prefKey)
+          if (value !== undefined && value !== null) {
+            (loadedSettings as any)[key] = value
+          }
+        } catch {
+          // Skip individual setting errors
+        }
+      }
+      
+      // Create new settings object with proper type safety
+      const mergedSettings: iOSAudioSettings = {
+        preferredSampleRate: loadedSettings.preferredSampleRate ?? currentSettings.preferredSampleRate,
+        forceResampleToPreferred: loadedSettings.forceResampleToPreferred ?? currentSettings.forceResampleToPreferred,
+        fadeDurationMs: loadedSettings.fadeDurationMs ?? currentSettings.fadeDurationMs,
+        gainLevel: loadedSettings.gainLevel ?? currentSettings.gainLevel,
+        maxChunkSizeSeconds: loadedSettings.maxChunkSizeSeconds ?? currentSettings.maxChunkSizeSeconds,
+        maxResamplingFrames: loadedSettings.maxResamplingFrames ?? currentSettings.maxResamplingFrames,
+        chunkedResampleThresholdSeconds: loadedSettings.chunkedResampleThresholdSeconds ?? currentSettings.chunkedResampleThresholdSeconds,
+        maxRetries: loadedSettings.maxRetries ?? currentSettings.maxRetries,
+        baseRetryDelayMs: loadedSettings.baseRetryDelayMs ?? currentSettings.baseRetryDelayMs,
+        espeakTimeoutMs: loadedSettings.espeakTimeoutMs ?? currentSettings.espeakTimeoutMs,
+        useWebAudioOnIOS: loadedSettings.useWebAudioOnIOS ?? currentSettings.useWebAudioOnIOS,
+        enableHighQualityResampling: loadedSettings.enableHighQualityResampling ?? currentSettings.enableHighQualityResampling,
+        crossfadeChunkSize: loadedSettings.crossfadeChunkSize ?? currentSettings.crossfadeChunkSize,
+        normalizationHeadroom: loadedSettings.normalizationHeadroom ?? currentSettings.normalizationHeadroom
+      }
+      
+      setState(prev => ({ ...prev, iosAudioSettings: mergedSettings }))
+      console.log('[TTS] Loaded iOS audio settings from storage')
+    } catch (error) {
+      console.warn('[TTS] Failed to load iOS audio settings:', error)
+    }
+  }
+
   // Attempt to auto-load previously selected engine/model on first use
   ;(async () => {
     try {
       const done = (globalThis as any).__tts_autoload_done as boolean
       if (done) return
       ;(globalThis as any).__tts_autoload_done = true
+      
+      // Load iOS audio settings first
+      await loadIOSAudioSettings()
+      
       const pref = await getPref<any>('tts.selected')
       const ph = await getPref<'auto' | 'espeak' | 'text'>('tts.phonemizer')
       if (ph) setState(prev => ({ ...prev, phonemizer: ph }))
@@ -1593,6 +1693,212 @@ export const useTTS = () => {
     const v = Math.max(8000, Math.min(n || 24000, 192000))
     setState(prev => ({ ...prev, targetSampleRate: v }))
   }
+
+  // iOS Audio Settings setters
+  const setIOSPreferredSampleRate = (rate: number | null) => {
+    const validRate = rate === null ? null : Math.max(8000, Math.min(rate, 192000))
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        preferredSampleRate: validRate
+      }
+    }))
+    // Persist to storage
+    try { setPref('iosAudio.preferredSampleRate', validRate) } catch {}
+  }
+
+  const setIOSForceResample = (force: boolean) => {
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        forceResampleToPreferred: force
+      }
+    }))
+    try { setPref('iosAudio.forceResampleToPreferred', force) } catch {}
+  }
+
+  const setIOSFadeDuration = (duration: number) => {
+    const validDuration = Math.max(0, Math.min(duration || 10, 100)) // 0-100ms
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        fadeDurationMs: validDuration
+      }
+    }))
+    try { setPref('iosAudio.fadeDurationMs', validDuration) } catch {}
+  }
+
+  const setIOSGainLevel = (gain: number) => {
+    const validGain = Math.max(0.1, Math.min(gain || 0.8, 2.0)) // 0.1-2.0
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        gainLevel: validGain
+      }
+    }))
+    try { setPref('iosAudio.gainLevel', validGain) } catch {}
+  }
+
+  const setIOSMaxChunkSize = (size: number) => {
+    const validSize = Math.max(1, Math.min(size || 5, 30)) // 1-30 seconds
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        maxChunkSizeSeconds: validSize
+      }
+    }))
+    try { setPref('iosAudio.maxChunkSizeSeconds', validSize) } catch {}
+  }
+
+  const setIOSMaxResamplingFrames = (frames: number) => {
+    const validFrames = Math.max(12000, Math.min(frames || 48000, 192000)) // 0.25-4 seconds at 48kHz
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        maxResamplingFrames: validFrames
+      }
+    }))
+    try { setPref('iosAudio.maxResamplingFrames', validFrames) } catch {}
+  }
+
+  const setIOSMaxRetries = (retries: number) => {
+    const validRetries = Math.max(1, Math.min(retries || 3, 10)) // 1-10 retries
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        maxRetries: validRetries
+      }
+    }))
+    try { setPref('iosAudio.maxRetries', validRetries) } catch {}
+  }
+
+  const setIOSBaseRetryDelay = (delay: number) => {
+    const validDelay = Math.max(50, Math.min(delay || 150, 2000)) // 50-2000ms
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        baseRetryDelayMs: validDelay
+      }
+    }))
+    try { setPref('iosAudio.baseRetryDelayMs', validDelay) } catch {}
+  }
+
+  const setIOSEspeakTimeout = (timeout: number) => {
+    const validTimeout = Math.max(500, Math.min(timeout || 2000, 10000)) // 0.5-10 seconds
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        espeakTimeoutMs: validTimeout
+      }
+    }))
+    // Also update the main espeakTimeoutMs for compatibility
+    setState(prev => ({ ...prev, espeakTimeoutMs: validTimeout }))
+    try { setPref('iosAudio.espeakTimeoutMs', validTimeout) } catch {}
+  }
+
+  const setIOSUseWebAudio = (use: boolean) => {
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        useWebAudioOnIOS: use
+      }
+    }))
+    try { setPref('iosAudio.useWebAudioOnIOS', use) } catch {}
+  }
+
+  const setIOSHighQualityResampling = (enable: boolean) => {
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        enableHighQualityResampling: enable
+      }
+    }))
+    try { setPref('iosAudio.enableHighQualityResampling', enable) } catch {}
+  }
+
+  const setIOSCrossfadeChunkSize = (size: number) => {
+    const validSize = Math.max(10, Math.min(size || 100, 1000)) // 10-1000 samples
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        crossfadeChunkSize: validSize
+      }
+    }))
+    try { setPref('iosAudio.crossfadeChunkSize', validSize) } catch {}
+  }
+
+  const setIOSNormalizationHeadroom = (headroom: number) => {
+    const validHeadroom = Math.max(0.01, Math.min(headroom || 0.05, 0.5)) // 1%-50%
+    setState(prev => ({
+      ...prev,
+      iosAudioSettings: {
+        ...prev.iosAudioSettings!,
+        normalizationHeadroom: validHeadroom
+      }
+    }))
+    try { setPref('iosAudio.normalizationHeadroom', validHeadroom) } catch {}
+  }
+
+  const resetIOSAudioSettings = () => {
+    const defaultSettings: iOSAudioSettings = {
+      preferredSampleRate: 44100,
+      forceResampleToPreferred: true,
+      fadeDurationMs: 10,
+      gainLevel: 0.8,
+      maxChunkSizeSeconds: 5,
+      maxResamplingFrames: 48000,
+      chunkedResampleThresholdSeconds: 1.0,
+      maxRetries: 3,
+      baseRetryDelayMs: 150,
+      espeakTimeoutMs: 2000,
+      useWebAudioOnIOS: true,
+      enableHighQualityResampling: true,
+      crossfadeChunkSize: 100,
+      normalizationHeadroom: 0.05
+    }
+    
+    setState(prev => ({ 
+      ...prev, 
+      iosAudioSettings: { ...defaultSettings } 
+    }))
+    
+    // Clear all iOS audio preferences from storage
+    try {
+      const keys = [
+        'iosAudio.preferredSampleRate',
+        'iosAudio.forceResampleToPreferred', 
+        'iosAudio.fadeDurationMs',
+        'iosAudio.gainLevel',
+        'iosAudio.maxChunkSizeSeconds',
+        'iosAudio.maxResamplingFrames',
+        'iosAudio.maxRetries',
+        'iosAudio.baseRetryDelayMs',
+        'iosAudio.espeakTimeoutMs',
+        'iosAudio.useWebAudioOnIOS',
+        'iosAudio.enableHighQualityResampling',
+        'iosAudio.crossfadeChunkSize',
+        'iosAudio.normalizationHeadroom'
+      ]
+      keys.forEach(key => {
+        // Note: We don't have a deletePref function, so we'll set them to undefined
+        setPref(key, undefined)
+      })
+    } catch (error) {
+      console.warn('[TTS] Failed to clear iOS audio settings:', error)
+    }
+  }
   
   // --- Voice filtering functions for enhanced UI ---
   const getVoiceMetadata = async () => {
@@ -1712,6 +2018,22 @@ export const useTTS = () => {
     playTestTone,
     // iOS-specific helpers
     getAudioState,
-    unlockAudioIOS
+    unlockAudioIOS,
+    // iOS Audio Settings setters
+    setIOSPreferredSampleRate,
+    setIOSForceResample,
+    setIOSFadeDuration,
+    setIOSGainLevel,
+    setIOSMaxChunkSize,
+    setIOSMaxResamplingFrames,
+    setIOSMaxRetries,
+    setIOSBaseRetryDelay,
+    setIOSEspeakTimeout,
+    setIOSUseWebAudio,
+    setIOSHighQualityResampling,
+    setIOSCrossfadeChunkSize,
+    setIOSNormalizationHeadroom,
+    resetIOSAudioSettings,
+    loadIOSAudioSettings
   }
 }
