@@ -1,4 +1,4 @@
-import { Component, createSignal, For, Show } from 'solid-js'
+import { Component, createSignal, For, Show, onMount } from 'solid-js'
 import { useLibrary } from '@/stores/library'
 import { LibraryIndexItem } from '@/types/library'
 import { GlassDropdownButton } from './GlassDropdownButton'
@@ -10,15 +10,49 @@ export const LibraryView: Component = () => {
     setSearchQuery,
     setSortOptions,
     setViewMode,
-    clearError
+    clearError,
+    getStorageUsage
   } = useLibrary()
 
   const [sortBy, setSortBy] = createSignal<'title' | 'author' | 'date' | 'size'>('title')
   const [sortOrder, setSortOrder] = createSignal<'asc' | 'desc'>('asc')
+  const [storageUsage, setStorageUsage] = createSignal<{ used: number; quota: number; available: number } | null>(null)
+  const [showDebug, setShowDebug] = createSignal(false)
 
   // Update sort when controls change
   const handleSortChange = () => {
     setSortOptions(sortBy(), sortOrder())
+  }
+
+  // Load storage usage on mount
+  onMount(async () => {
+    try {
+      const usage = await getStorageUsage()
+      setStorageUsage(usage)
+    } catch (error) {
+      console.warn('Failed to get storage usage:', error)
+    }
+  })
+
+  // Format storage usage for display
+  const formatStorageUsage = () => {
+    const usage = storageUsage()
+    if (!usage) return 'Unknown'
+    
+    const formatBytes = (bytes: number): string => {
+      const units = ['B', 'KB', 'MB', 'GB']
+      let size = bytes
+      let unitIndex = 0
+      
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024
+        unitIndex++
+      }
+      
+      return `${size.toFixed(1)} ${units[unitIndex]}`
+    }
+    
+    return `Used: ${formatBytes(usage.used)} | Available: ${formatBytes(usage.available)}`
   }
 
   const libraryItems = () => getLibraryItems()
@@ -166,8 +200,51 @@ export const LibraryView: Component = () => {
       {/* Storage Info */}
       <div class="library-footer">
         <div class="storage-info">
-          <span>Storage: Loading...</span>
+          <span>Storage: {formatStorageUsage()}</span>
+          <button 
+            class="debug-toggle"
+            onClick={() => setShowDebug(!showDebug())}
+            title="Toggle debug information"
+          >
+            🐛
+          </button>
         </div>
+        
+        {/* Debug Panel */}
+        <Show when={showDebug()}>
+          <div class="debug-panel">
+            <h4>Debug Information</h4>
+            <div class="debug-grid">
+              <div class="debug-item">
+                <span class="debug-label">Tab ID:</span>
+                <span class="debug-value">{(window as any).__libraryDebug?.getTabId()?.slice(0, 20)}...</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">Is Leader:</span>
+                <span class="debug-value">{state().isLeader ? '✅ Yes' : '❌ No'}</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">Leader Info:</span>
+                <span class="debug-value">{state().leaderInfo ? JSON.stringify(state().leaderInfo).slice(0, 50) + '...' : 'None'}</span>
+              </div>
+              <div class="debug-item">
+                <span class="debug-label">Initialized:</span>
+                <span class="debug-value">{state().isInitialized ? '✅ Yes' : '❌ No'}</span>
+              </div>
+            </div>
+            <div class="debug-actions">
+              <button onClick={() => (window as any).__libraryDebug?.checkLocks()?.then((locks: any) => console.log('Locks:', locks))}>
+                Check Locks
+              </button>
+              <button onClick={() => (window as any).__libraryDebug?.startElection()}>
+                Start Election
+              </button>
+              <button onClick={() => (window as any).__libraryDebug?.stepDown()}>
+                Step Down
+              </button>
+            </div>
+          </div>
+        </Show>
       </div>
     </div>
     </>

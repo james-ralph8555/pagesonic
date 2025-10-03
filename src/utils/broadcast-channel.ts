@@ -408,16 +408,23 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// Debug utilities disabled for type checking
-// if (typeof window !== 'undefined') {
-//   // Expose broadcast channel to window for debugging
-//   (window as any).__broadcastChannel = broadcastChannel
-//   
-//   // Add debugging functions
-//   (window as any).__libraryBroadcastDebug = {
-//     getDebugInfo: () => broadcastChannel.getDebugInfo(),
-//     broadcast: (type: any, payload: unknown) => broadcastChannel.broadcast(type, payload),
-//     getHandlers: () => Array.from((broadcastChannel as any).handlers.keys()),
-//     getPendingRequests: () => Array.from((broadcastChannel as any).pendingRequests.keys())
-//   }
-// }
+// Debug utilities for troubleshooting broadcast channel
+if (typeof window !== 'undefined') {
+  // Add debugging functions using the singleton instance
+  (window as any).__libraryBroadcastDebug = {
+    getDebugInfo: () => broadcastChannel.getDebugInfo(),
+    broadcast: (type: any, payload: unknown) => {
+      try {
+        broadcastChannel.broadcast(type, payload)
+        return 'Message broadcasted'
+      } catch (error) {
+        return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    },
+    getHandlers: () => Array.from((broadcastChannel as any).handlers.keys()),
+    getPendingRequests: () => Array.from((broadcastChannel as any).pendingRequests.keys()),
+    getTabId: () => broadcastChannel.getTabId()
+  }
+  
+  console.log('[BroadcastChannel] Debug utilities available at window.__libraryBroadcastDebug')
+}

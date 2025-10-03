@@ -27,6 +27,56 @@
   padding-bottom: 0.5rem;
 }
 
+.debug-label {
+  font-weight: 500;
+  color: #495057;
+  font-size: 0.85rem;
+}
+
+.debug-value {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: #6c757d;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.debug-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.debug-actions button {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.debug-actions button:hover {
+  background: #5a6268;
+}
+
+.debug-toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+  font-size: 1rem;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.debug-toggle:hover {
+  opacity: 1;
+}
+
 .debug-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));

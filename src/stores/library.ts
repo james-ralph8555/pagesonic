@@ -155,13 +155,13 @@ export const useLibrary = () => {
         readerSettingsLoaded: !!readerSettings
       })
 
+      // Setup broadcast channel handlers before leader election
+      logLibraryStore.debug('Setting up broadcast channel handlers')
+      setupBroadcastHandlers()
+
       // Start leader election
       logLibraryStore.debug('Setting up leader election')
       await setupLeaderElection()
-
-      // Setup broadcast channel handlers
-      logLibraryStore.debug('Setting up broadcast channel handlers')
-      setupBroadcastHandlers()
 
       batch(() => {
         setState(prev => ({
@@ -178,6 +178,15 @@ export const useLibrary = () => {
       })
 
       logLibraryStore.endTimer('initialize', 'Library initialization completed successfully')
+      
+      // Log final state for debugging
+      logLibraryStore.info('Library initialization complete', {
+        documentCount: Object.keys(index).length,
+        isLeader: state().isLeader,
+        leaderInfo: state().leaderInfo,
+        tabId: leaderElection.getTabId()
+      })
+      
     } catch (error) {
       logLibraryStore.error('Failed to initialize library', error instanceof Error ? error : new Error(String(error)))
       setState(prev => ({
@@ -185,16 +194,19 @@ export const useLibrary = () => {
         error: error instanceof Error ? error.message : 'Failed to initialize library',
         isLoading: false
       }))
+      
+      // Don't throw - allow the library to function in follower mode
+      logLibraryStore.warn('Library initialization failed, but continuing in limited mode')
     }
   }
 
   // Setup leader election
   const setupLeaderElection = async () => {
-    logLibraryStore.debug('Setting up leader election callbacks')
+    logLibraryStore.info('Setting up leader election callbacks')
     
     const callbacks = {
       onLeaderElected: (leaderInfo: LeaderInfo) => {
-        logLibraryStore.info('This tab became leader', { tabId: leaderInfo.tabId })
+        logLibraryStore.info('🎉 This tab became leader', { tabId: leaderInfo.tabId })
         batch(() => {
           setState(prev => ({
             ...prev,
@@ -208,7 +220,7 @@ export const useLibrary = () => {
       },
       
       onLeaderLost: () => {
-        logLibraryStore.info('This tab lost leadership')
+        logLibraryStore.info('😞 This tab lost leadership')
         batch(() => {
           setState(prev => ({
             ...prev,
@@ -222,23 +234,32 @@ export const useLibrary = () => {
       },
       
       onHeartbeat: (leaderInfo: LeaderInfo) => {
-        logLibraryStore.debug('Received leader heartbeat', { leaderId: leaderInfo.tabId })
+        logLibraryStore.debug('💓 Received leader heartbeat', { leaderId: leaderInfo.tabId })
         setState(prev => ({ ...prev, leaderInfo }))
       }
     }
 
     leaderElection.setCallbacks(callbacks)
-    logLibraryStore.debug('Starting leader election process')
-    await leaderElection.startElection()
+    logLibraryStore.info('Starting leader election process')
+    try {
+      await leaderElection.startElection()
+      logLibraryStore.info('Leader election process started successfully')
+    } catch (error) {
+      logLibraryStore.error('Failed to start leader election', error instanceof Error ? error : new Error(String(error)))
+      throw error
+    }
   }
 
   // Setup broadcast channel message handlers
   const setupBroadcastHandlers = () => {
+    logLibraryStore.debug('Setting up broadcast channel handlers')
+    
     // Handle leader notifications
     const unregisterLeaderElected = broadcastChannel.register(
       'LEADER_ELECTED',
       (message: LibraryMessage) => {
         const leaderInfo = message.payload as LeaderInfo
+        logLibraryStore.debug('Received LEADER_ELECTED message', { leaderInfo, myTabId: leaderElection.getTabId() })
         if (leaderInfo.tabId !== leaderElection.getTabId()) {
           setState(prev => ({
             ...prev,

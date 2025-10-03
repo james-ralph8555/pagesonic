@@ -3,6 +3,7 @@ import { useTTS } from '@/stores/tts'
 import { useTheme } from '@/stores/theme'
 import { useLibrary } from '@/stores/library'
 import { GlassDropdownButton } from './GlassDropdownButton'
+import { LibrarySettings } from './LibrarySettings'
 import { logger, logOPFS } from '@/utils/logger'
 import { leaderElection } from '@/utils/leader-election'
 
@@ -336,6 +337,10 @@ export const SettingsView: Component = () => {
           </select>
         </div>
       </div>
+      <hr class="section-divider" />
+
+      {/* Library Settings Section */}
+      <LibrarySettings />
       <hr class="section-divider" />
 
       <div class="settings-section">

@@ -138,14 +138,16 @@ export class LeaderElection {
    */
   private async waitForLeadershipEnd(): Promise<void> {
     return new Promise<void>((resolve) => {
-      // This promise resolves when we lose the lock
-      // The lock is automatically released when this callback returns
-      // So we need to keep it alive until we're told to step down
+      // This promise resolves when we lose leadership (stepDown is called)
+      // The lock will be held as long as this async function doesn't return
+      logLeaderElection.debug('Starting to wait for leadership end')
       
       const checkLeadership = () => {
         if (!this.isLeader) {
+          logLeaderElection.info('Leadership ended, releasing lock')
           resolve()
         } else {
+          // Check every second if we should step down
           setTimeout(checkLeadership, 1000)
         }
       }
@@ -327,17 +329,25 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// Debug utilities disabled for type checking
-// if (typeof window !== 'undefined') {
-//   // Expose leader election to window for debugging
-//   (window as any).__leaderElection = leaderElection
-//   
-//   // Add some debugging functions
-//   (window as any).__libraryDebug = {
-//     getLeaderInfo: () => leaderElection.getDebugInfo(),
-//     forceTransfer: () => leaderElection.forceLeadershipTransfer(),
-//     stepDown: () => leaderElection.stepDown(),
-//     checkLocks: () => leaderElection.getLockInfo(),
-//     startElection: () => leaderElection.startElection()
-//   }
-// }
+// Debug utilities for troubleshooting leader election
+if (typeof window !== 'undefined') {
+  // Add debugging functions using the singleton instance
+  (window as any).__libraryDebug = {
+    getLeaderInfo: () => leaderElection.getDebugInfo(),
+    forceTransfer: () => leaderElection.forceLeadershipTransfer(),
+    stepDown: () => leaderElection.stepDown(),
+    checkLocks: () => leaderElection.getLockInfo(),
+    startElection: async () => {
+      try {
+        await leaderElection.startElection()
+        return 'Election started'
+      } catch (error) {
+        return `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      }
+    },
+    isLeader: () => leaderElection.isCurrentLeader(),
+    getTabId: () => leaderElection.getTabId()
+  }
+  
+  console.log('[LeaderElection] Debug utilities available at window.__libraryDebug')
+}
