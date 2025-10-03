@@ -1,10 +1,9 @@
 import { createSignal } from 'solid-js'
-import { TTSState, TTSModel, iOSAudioSettings } from '@/types'
-import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio, generateTestTone, playPCMDebug } from '@/utils/audio'
+import { TTSState, TTSModel } from '@/types'
+import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeAudio, close as closeAudio } from '@/utils/audio'
 import { cleanForTTS } from '@/tts/textCleaner'
 import { getPref, setPref } from '@/utils/idb'
 import { isIOSDevice } from '@/utils/iosDetection'
-// Note: Piper streaming provides its own chunking; avoid double chunking here
 
 // Shared, app-wide TTS state
 const [state, setState] = createSignal<TTSState>({
@@ -21,56 +20,19 @@ const [state, setState] = createSignal<TTSState>({
   isModelLoading: false,
   isWebGPUSupported: false,
   lastError: null,
-  session: undefined,
   systemVoices: [],
   phonemizer: 'auto',
-  espeakTimeoutMs: isIOSDevice() ? 2000 : 4000,
+  espeakTimeoutMs: 4000,
   // Chunking/config params (tunable in Settings)
   chunkMaxChars: 280,
   chunkOverlapChars: 24,
   sentenceSplit: true,
   interChunkPauseMs: 120,
-  targetSampleRate: 22050,
-  
-  // iOS-specific audio settings (only applied on iOS devices)
-  iosAudioSettings: {
-    // Sample rate settings
-    preferredSampleRate: 44100, // iOS Safari preferred rate
-    forceResampleToPreferred: true,
-    
-    // Audio processing settings
-    fadeDurationMs: 10, // Longer fade for iOS to prevent clicks
-    gainLevel: 0.8, // Slightly reduced gain to prevent clipping
-    maxChunkSizeSeconds: 5, // Smaller chunks for iOS memory management
-    
-    // Memory and performance settings
-    maxResamplingFrames: 48000, // 1 second at 48kHz for iOS
-    chunkedResampleThresholdSeconds: 1.0,
-    
-    // Audio context retry settings
-    maxRetries: 3, // More retries for iOS
-    baseRetryDelayMs: 150, // Longer delays for iOS
-    
-    // TTS-specific settings
-    espeakTimeoutMs: 2000, // Shorter timeout for iOS
-    useWebAudioOnIOS: true, // Use WebAudio instead of HTMLAudio
-    
-    // Advanced settings for audio quality
-    enableHighQualityResampling: true,
-    crossfadeChunkSize: 100,
-    normalizationHeadroom: 0.05 // 5% headroom
-  }
+  targetSampleRate: 22050
 })
 
-// Available TTS models based on architecture
+// Available TTS models
 const MODELS: TTSModel[] = [
-  {
-    name: 'Kokoro TTS',
-    size: 82, // 82MB
-    voices: ['af_sarah', 'af_nicole', 'am_michael', 'bf_emma', 'bf_isabella'],
-    requiresWebGPU: true,
-    url: '/models/kokoro-82m.onnx'
-  },
   {
     name: 'Piper TTS',
     size: 75, // 75MB
@@ -101,22 +63,6 @@ export const useTTS = () => {
   ;(globalThis as any).__piper_resumeFn ||= null as (() => void) | null
   ;(globalThis as any).__piper_isPaused ||= false as boolean
   ;(globalThis as any).__tts_autoload_done ||= false as boolean
-  ;(globalThis as any).__is_ios ||= isIOSDevice() as boolean
-  ;(globalThis as any).__audio_unlocked_ios ||= false as boolean
-  ;(globalThis as any).__audio_context_unlock_attempted_ios ||= false as boolean
-  ;(globalThis as any).__ios_debug_log ||= [] as string[]
-  ;(globalThis as any).__last_audio_error ||= null as string | null
-  const isiOS = (globalThis as any).__is_ios as boolean
-  const getAudioUnlocked = () => (globalThis as any).__audio_unlocked_ios as boolean
-  const setAudioUnlocked = (v: boolean) => { (globalThis as any).__audio_unlocked_ios = v }
-  const getDebugLog = () => (globalThis as any).__ios_debug_log as string[]
-  const addToDebugLog = (message: string) => {
-    const log = getDebugLog()
-    log.push(`[${new Date().toISOString().split('T')[1].split('.')[0]}] ${message}`)
-    // Keep only last 50 entries
-    if (log.length > 50) log.shift()
-  }
-  const setLastError = (error: string | null) => { (globalThis as any).__last_audio_error = error }
 
   const getAudioCtx = () => (globalThis as any).__tts_audioCtx as AudioContext | null
   const setAudioCtx = (ctx: AudioContext | null) => { (globalThis as any).__tts_audioCtx = ctx }
@@ -142,11 +88,6 @@ export const useTTS = () => {
   // Check WebGPU support on mount
   const checkWebGPU = async () => {
     try {
-      // Gate WebGPU off on iOS regardless of adapter availability
-      if (isiOS) {
-        setState(prev => ({ ...prev, isWebGPUSupported: false }))
-        return
-      }
       if ('gpu' in navigator && typeof (navigator as any).gpu !== 'undefined') {
         const adapter = await (navigator as any).gpu.requestAdapter()
         const supported = !!adapter
@@ -159,119 +100,6 @@ export const useTTS = () => {
   }
   
   checkWebGPU()
-  
-  // iOS audio context unlock functions
-  const unlockAudioContextIOS = async () => {
-    if (!isiOS) {
-      addToDebugLog('unlockAudioContextIOS called on non-iOS device')
-      return true
-    }
-    
-    if (getAudioUnlocked()) {
-      addToDebugLog('Audio already unlocked')
-      return true
-    }
-    
-    addToDebugLog('Starting audio unlock attempt')
-    setLastError(null)
-    
-    let audioCtx = getAudioCtx()
-    if (!audioCtx) {
-      addToDebugLog('Creating new AudioContext')
-      audioCtx = ensureAudioContext(null)
-      setAudioCtx(audioCtx)
-    }
-    
-    try {
-      // Ensure context is in a proper state
-      addToDebugLog(`AudioContext state: ${audioCtx.state}`)
-      if (audioCtx.state === 'closed') {
-        addToDebugLog('Creating new AudioContext (previous was closed)')
-        audioCtx = ensureAudioContext(null)
-        setAudioCtx(audioCtx)
-        addToDebugLog(`New AudioContext state: ${audioCtx.state}`)
-      }
-      
-      // Resume the context if suspended
-      if (audioCtx.state === 'suspended') {
-        addToDebugLog('Resuming suspended AudioContext')
-        await audioCtx.resume()
-        // Give it a moment to take effect
-        await new Promise(resolve => setTimeout(resolve, 100))
-        addToDebugLog(`AudioContext state after resume: ${audioCtx.state}`)
-      }
-      
-      // Create and play a silent buffer to unlock audio
-      addToDebugLog('Creating and playing silent buffer')
-      const silentBuffer = audioCtx.createBuffer(1, 1, audioCtx.sampleRate)
-      const silentSource = audioCtx.createBufferSource()
-      silentSource.buffer = silentBuffer
-      silentSource.connect(audioCtx.destination)
-      
-      // Play silent sound
-      silentSource.start(0)
-      
-      // Wait a moment for the buffer to actually play
-      await new Promise(resolve => setTimeout(resolve, 50))
-      
-      // Verify the context is running
-      const finalState = audioCtx.state
-      addToDebugLog(`Final AudioContext state: ${finalState}`)
-      if (finalState === 'running') {
-        setAudioUnlocked(true)
-        addToDebugLog('✅ Audio context unlocked successfully')
-        console.log('[TTS] iOS audio context unlocked successfully (state: running)')
-        return true
-      } else {
-        const errorMsg = `Audio context state after unlock: ${finalState}`
-        addToDebugLog(`❌ ${errorMsg}`)
-        console.warn('[TTS] iOS audio context state after unlock attempt:', finalState)
-        setLastError(errorMsg)
-        return false
-      }
-    } catch (error) {
-      const errorMsg = `Failed to unlock audio context: ${error}`
-      addToDebugLog(`❌ ${errorMsg}`)
-      console.warn('[TTS] Failed to unlock iOS audio context:', error)
-      setLastError(errorMsg)
-      return false
-    }
-  }
-  
-  const setupIOSAudioUnlock = () => {
-    if (!isiOS) return
-    
-    const unlockOnInteraction = async () => {
-      if (getAudioUnlocked()) return
-      
-      try {
-        const success = await unlockAudioContextIOS()
-        if (success) {
-          console.log('[TTS] iOS audio unlocked successfully via user interaction')
-          // Remove listeners after successful unlock
-          document.removeEventListener('touchstart', unlockOnInteraction)
-          document.removeEventListener('touchend', unlockOnInteraction)
-          document.removeEventListener('click', unlockOnInteraction)
-        } else {
-          console.log('[TTS] iOS audio unlock failed, will retry on next interaction')
-        }
-      } catch (error) {
-        console.error('[TTS] Error during iOS audio unlock:', error)
-      }
-    }
-    
-    // Set up listeners for user interactions (remove once: true to allow retries)
-    document.addEventListener('touchstart', unlockOnInteraction, { passive: true })
-    document.addEventListener('touchend', unlockOnInteraction, { passive: true })
-    document.addEventListener('click', unlockOnInteraction, { passive: true })
-    
-    console.log('[TTS] iOS audio unlock listeners configured (retry enabled)')
-  }
-  
-  // Initialize iOS audio unlock on mount
-  if (isiOS) {
-    setupIOSAudioUnlock()
-  }
 
   // Initialize browser SpeechSynthesis voices if available
   const refreshSystemVoices = () => {
@@ -750,66 +578,6 @@ export const useTTS = () => {
     }
   }
 
-  // Load iOS audio settings from storage
-  const loadIOSAudioSettings = async () => {
-    try {
-      const currentSettings = state().iosAudioSettings
-      if (!currentSettings) return
-      
-      // Load each setting from storage and merge with defaults
-      const loadedSettings: Partial<iOSAudioSettings> = {}
-      const keys = [
-        'preferredSampleRate',
-        'forceResampleToPreferred',
-        'fadeDurationMs', 
-        'gainLevel',
-        'maxChunkSizeSeconds',
-        'maxResamplingFrames',
-        'maxRetries',
-        'baseRetryDelayMs',
-        'espeakTimeoutMs',
-        'useWebAudioOnIOS',
-        'enableHighQualityResampling',
-        'crossfadeChunkSize',
-        'normalizationHeadroom'
-      ]
-      
-      for (const key of keys) {
-        try {
-          const prefKey = `iosAudio.${key}`
-          const value = await getPref(prefKey)
-          if (value !== undefined && value !== null) {
-            (loadedSettings as any)[key] = value
-          }
-        } catch {
-          // Skip individual setting errors
-        }
-      }
-      
-      // Create new settings object with proper type safety
-      const mergedSettings: iOSAudioSettings = {
-        preferredSampleRate: loadedSettings.preferredSampleRate ?? currentSettings.preferredSampleRate,
-        forceResampleToPreferred: loadedSettings.forceResampleToPreferred ?? currentSettings.forceResampleToPreferred,
-        fadeDurationMs: loadedSettings.fadeDurationMs ?? currentSettings.fadeDurationMs,
-        gainLevel: loadedSettings.gainLevel ?? currentSettings.gainLevel,
-        maxChunkSizeSeconds: loadedSettings.maxChunkSizeSeconds ?? currentSettings.maxChunkSizeSeconds,
-        maxResamplingFrames: loadedSettings.maxResamplingFrames ?? currentSettings.maxResamplingFrames,
-        chunkedResampleThresholdSeconds: loadedSettings.chunkedResampleThresholdSeconds ?? currentSettings.chunkedResampleThresholdSeconds,
-        maxRetries: loadedSettings.maxRetries ?? currentSettings.maxRetries,
-        baseRetryDelayMs: loadedSettings.baseRetryDelayMs ?? currentSettings.baseRetryDelayMs,
-        espeakTimeoutMs: loadedSettings.espeakTimeoutMs ?? currentSettings.espeakTimeoutMs,
-        useWebAudioOnIOS: loadedSettings.useWebAudioOnIOS ?? currentSettings.useWebAudioOnIOS,
-        enableHighQualityResampling: loadedSettings.enableHighQualityResampling ?? currentSettings.enableHighQualityResampling,
-        crossfadeChunkSize: loadedSettings.crossfadeChunkSize ?? currentSettings.crossfadeChunkSize,
-        normalizationHeadroom: loadedSettings.normalizationHeadroom ?? currentSettings.normalizationHeadroom
-      }
-      
-      setState(prev => ({ ...prev, iosAudioSettings: mergedSettings }))
-      console.log('[TTS] Loaded iOS audio settings from storage')
-    } catch (error) {
-      console.warn('[TTS] Failed to load iOS audio settings:', error)
-    }
-  }
 
   // Attempt to auto-load previously selected engine/model on first use
   ;(async () => {
@@ -818,8 +586,11 @@ export const useTTS = () => {
       if (done) return
       ;(globalThis as any).__tts_autoload_done = true
       
-      // Load iOS audio settings first
-      await loadIOSAudioSettings()
+      // On iOS, always use browser SpeechSynthesis
+      if (isIOSDevice()) {
+        await ensureBrowserEngine()
+        return
+      }
       
       const pref = await getPref<any>('tts.selected')
       const ph = await getPref<'auto' | 'espeak' | 'text'>('tts.phonemizer')
@@ -837,125 +608,30 @@ export const useTTS = () => {
   })()
 
   const speakWithPiperTTS = async (text: string) => {
-    console.log('[TTS] 🎵 Starting Piper TTS synthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
-    addToDebugLog('=== Piper TTS Synthesis Started ===')
-    addToDebugLog(`Text length: ${text.length} characters`)
-    addToDebugLog(`Selected voice: ${state().voice}`)
-    addToDebugLog(`Current rate: ${state().rate}`)
+    console.log('[TTS] Starting Piper TTS synthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
     
     const piperWorker = getPiperWorker()
     if (!piperWorker || !isPiperInitialized()) {
-      const errorMsg = `Piper TTS not initialized - worker: ${!!piperWorker}, initialized: ${isPiperInitialized()}`
-      console.error('[TTS] ❌', errorMsg)
-      addToDebugLog(`❌ ERROR: ${errorMsg}`)
-      
-      // Add detailed worker state debugging
-      if (piperWorker) {
-        addToDebugLog(`🔍 Worker details - readyState: ${(piperWorker as any).readyState || 'unknown'}`)
-        try {
-          // Try to ping the worker to see if it's responsive
-          const testMessage = { type: 'ping', timestamp: Date.now() }
-          piperWorker.postMessage(testMessage)
-          addToDebugLog('📡 Sent ping message to worker to test responsiveness')
-        } catch (err) {
-          addToDebugLog(`❌ Worker communication test failed: ${err}`)
-        }
-      }
-      
       throw new Error('Piper TTS not initialized')
-    }
-    
-    addToDebugLog('✅ Piper worker and initialization verified')
-    addToDebugLog(`🔍 Worker state - readyState: ${(piperWorker as any).readyState || 'unknown'}`)
-    
-    // Test worker communication before starting synthesis
-    try {
-      const pingStart = Date.now()
-      const pingHandler = (e: MessageEvent) => {
-        if (e.data?.type === 'pong') {
-          const latency = Date.now() - pingStart
-          addToDebugLog(`📡 Worker communication test successful - latency: ${latency}ms`)
-          piperWorker.removeEventListener('message', pingHandler)
-        }
-      }
-      piperWorker.addEventListener('message', pingHandler)
-      piperWorker.postMessage({ type: 'ping', timestamp: pingStart })
-      
-      // Remove ping handler after timeout to avoid hanging
-      setTimeout(() => {
-        piperWorker.removeEventListener('message', pingHandler)
-        addToDebugLog('⚠️ Worker ping test timed out')
-      }, 1000)
-    } catch (err) {
-      addToDebugLog(`❌ Worker communication test failed: ${err}`)
     }
 
     const cleaned = cleanForTTS(text)
     console.log('[TTS] Text cleaned, length:', cleaned.length)
-    addToDebugLog(`Text cleaned length: ${cleaned.length}`)
-    
-    // Ensure iOS audio context is unlocked before proceeding
-    if (isiOS) {
-      console.log('[TTS] iOS detected, checking audio context unlock...')
-      addToDebugLog('🍎 iOS device detected - checking audio unlock')
-      const unlocked = await unlockAudioContextIOS()
-      console.log('[TTS] iOS audio unlock result:', unlocked)
-      addToDebugLog(`iOS audio unlock result: ${unlocked ? '✅ SUCCESS' : '❌ FAILED'}`)
-      if (!unlocked) {
-        console.warn('[TTS] iOS audio context not unlocked, playback may fail')
-        addToDebugLog('⚠️ WARNING: Audio context not unlocked, playback may fail')
-      }
-    }
     
     // Sequential playback queue to avoid overlapping streamed chunks
     return new Promise<void>((resolve, reject) => {
       if (!piperWorker) return reject(new Error('Piper worker not initialized'))
 
-      // Use WebAudio on iOS to avoid HTMLAudio autoplay quirks
-      const useWebAudio = isiOS === true
-      addToDebugLog(`🔊 Playback mode: ${useWebAudio ? 'WebAudio' : 'HTMLAudio'} (iOS: ${isiOS})`)
-      
       const queue: { url?: string; f32?: Float32Array; sr?: number }[] = []
       let playing = false
       let done = false
       let currentAudio: HTMLAudioElement | null = null
       let currentHandle: { stop: () => void } | null = null
-      let chunkCount = 0
       
-      // Ensure a single AudioContext exists for WebAudio path and is resumed
+      // Ensure a single AudioContext exists and is resumed
       let audioCtx = getAudioCtx()
-      if (useWebAudio) {
-        addToDebugLog('🎛️ Setting up WebAudio context...')
-        audioCtx = ensureAudioContext(audioCtx)
-        setAudioCtx(audioCtx)
-        addToDebugLog(`AudioContext state: ${audioCtx.state}, sampleRate: ${audioCtx.sampleRate}`)
-        
-        // On iOS, ensure audio context is running before playback
-        if (isiOS && audioCtx.state === 'suspended') {
-          console.log('[TTS] Resuming audio context for Piper TTS...')
-          addToDebugLog('🍎 Resuming suspended AudioContext for iOS...')
-          // Use the async function to handle the resume
-          ;(async () => {
-            try {
-              await audioCtx.resume()
-              // Give it a moment to take effect
-              await new Promise(resolve => setTimeout(resolve, 100))
-              if (audioCtx.state === 'running') {
-                console.log('[TTS] Audio context successfully resumed for Piper TTS')
-                addToDebugLog('✅ AudioContext successfully resumed')
-              } else {
-                console.warn('[TTS] Audio context state after resume:', audioCtx.state)
-                addToDebugLog(`⚠️ AudioContext state after resume: ${audioCtx.state}`)
-              }
-            } catch (err) {
-              console.warn('[TTS] Failed to resume audio context:', err)
-              addToDebugLog(`❌ Failed to resume AudioContext: ${err}`)
-            }
-          })()
-        } else if (isiOS) {
-          addToDebugLog(`✅ AudioContext already running: ${audioCtx.state}`)
-        }
-      }
+      audioCtx = ensureAudioContext(audioCtx)
+      setAudioCtx(audioCtx)
 
       const cleanup = () => {
         try { piperWorker.removeEventListener('message', onMessage as any) } catch {}
@@ -988,94 +664,53 @@ export const useTTS = () => {
         if (!item) return tryResolve()
         playing = true
         
-        // Simplified iOS audio context management - ensure it's running once
-        if (isiOS && audioCtx && audioCtx.state === 'suspended') {
-          try {
-            addToDebugLog('🍎 Resuming AudioContext before WebAudio playback...')
-            await audioCtx.resume()
-            // Give iOS a moment to properly transition
-            await new Promise(resolve => setTimeout(resolve, 50))
-            addToDebugLog(`AudioContext state after resume: ${audioCtx.state}`)
-            console.log('[TTS] iOS audio context resumed for playback')
-          } catch (err) {
-            addToDebugLog(`❌ Failed to resume AudioContext: ${err}`)
-            console.warn('[TTS] Failed to resume iOS audio context:', err)
-          }
-        }
-        
-        if (useWebAudio && item.f32 && item.sr && audioCtx) {
+        if (item.f32 && item.sr && audioCtx) {
           // Play via WebAudio buffer
           const f32 = item.f32
           const sr = item.sr
           const playbackRate = Math.max(0.5, Math.min(state().rate || 1.0, 2.0))
           
-          console.log('[TTS] 🎵 Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr, 'audioCtx.state:', audioCtx.state)
-          addToDebugLog(`🎵 Starting WebAudio playback: ${f32.length} samples at ${sr}Hz`)
-          addToDebugLog(`🎛️ Playback rate: ${playbackRate}, AudioContext state: ${audioCtx.state}`)
-          
-          // Enhanced logging for iOS Safari debugging
-          if (isiOS) {
-            addToDebugLog('🍎 iOS Safari WebAudio playback initiated')
-            addToDebugLog(`📱 Context sampleRate: ${audioCtx.sampleRate}Hz, Audio sampleRate: ${sr}Hz`)
-            addToDebugLog(`🔄 Resampling needed: ${Math.abs(sr - audioCtx.sampleRate) > 100 ? 'Yes' : 'No'}`)
-          }
+          console.log('[TTS] Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr)
           
           ;(async () => {
             try {
-              // Final context state check for iOS
-              if (isiOS && audioCtx.state === 'suspended') {
-                addToDebugLog('⚠️ AudioContext still suspended, attempting final resume...')
-                await audioCtx.resume()
-                await new Promise(resolve => setTimeout(resolve, 25))
-              }
-              
               const handle = await playPCM(f32, sr, { 
                 audioContext: audioCtx!, 
                 playbackRate,
-                onInfo: (info) => {
-                  addToDebugLog(`✅ WebAudio buffer ready: ${info.length} samples at ${info.finalSampleRate}Hz (ctx ${info.contextSampleRate}Hz)`) 
-                },
                 onEnded: () => {
-                  addToDebugLog('✅ WebAudio chunk playback completed')
+                  console.log('[TTS] WebAudio chunk playback completed')
                 }
               })
               
-              console.log('[TTS] ✅ WebAudio handle created successfully')
-              addToDebugLog('✅ WebAudio playback handle created')
+              console.log('[TTS] WebAudio handle created successfully')
               
               currentHandle = handle
               setActiveStop(() => { 
-                addToDebugLog('⏹️ WebAudio stop requested')
                 try { handle.stop() } catch {} 
               })
               
               // Pause/resume controls via AudioContext
               setPiperPauseFn(() => { 
-                addToDebugLog('⏸️ WebAudio pause requested')
                 setPiperIsPaused(true)
                 try { audioCtx!.suspend() } catch {} 
               })
               
               setPiperResumeFn(() => { 
-                addToDebugLog('▶️ WebAudio resume requested')
                 setPiperIsPaused(false)
                 try { audioCtx!.resume() } catch {} 
               })
               
-              // Schedule next after duration with better timing accuracy
+              // Schedule next after duration
               const seconds = (f32.length / sr) / playbackRate
-              console.log('[TTS] ⏱️ Scheduled next chunk in', seconds.toFixed(2), 'seconds')
-              addToDebugLog(`⏱️ Next chunk scheduled in ${seconds.toFixed(2)}s`)
+              console.log('[TTS] Scheduled next chunk in', seconds.toFixed(2), 'seconds')
               
               setTimeout(() => {
                 console.log('[TTS] WebAudio chunk finished, scheduling next')
-                addToDebugLog('✅ WebAudio chunk finished, scheduling next')
                 playing = false
                 currentHandle = null
                 
                 const pause = Math.max(0, state().interChunkPauseMs || 0)
                 if (pause > 0) {
-                  addToDebugLog(`⏸️ Inter-chunk pause: ${pause}ms`)
                   setTimeout(() => startNext(), pause)
                 } else {
                   startNext()
@@ -1083,32 +718,16 @@ export const useTTS = () => {
               }, Math.max(0, seconds * 1000))
               
             } catch (err) {
-              console.error('[TTS] ❌ WebAudio Piper chunk error:', err)
-              addToDebugLog(`❌ WebAudio playback failed: ${err}`)
+              console.error('[TTS] WebAudio Piper chunk error:', err)
               playing = false
               currentHandle = null
-              
-              // On iOS, if WebAudio fails, try HTMLAudio fallback
-              if (isiOS) {
-                addToDebugLog('🔄 Attempting HTMLAudio fallback after WebAudio failure')
-                // Convert WebAudio data to HTMLAudio format and requeue
-                queue.unshift({ url: undefined, f32, sr })
-              }
-              
               setTimeout(() => startNext(), 100)
             }
           })()
         } else {
-          // Fallback: HTMLAudio with WAV blob URL (enhanced for iOS)
+          // Fallback: HTMLAudio with WAV blob URL
           const url = item.url!
           const audio = new Audio(url)
-          
-          // iOS-specific HTMLAudio setup
-          if (isiOS) {
-            audio.preload = 'auto'
-            // Set volume to prevent silent playback issues
-            audio.volume = Math.max(0.1, Math.min(1.0, 1.0))
-          }
           
           currentAudio = audio
           setActiveStop(() => {
@@ -1116,11 +735,12 @@ export const useTTS = () => {
             try { audio.currentTime = audio.duration || 0 } catch {}
             try { URL.revokeObjectURL(url) } catch {}
           })
-          // Expose pause/resume controls for Piper playback
+          
           setPiperPauseFn(() => {
             setPiperIsPaused(true)
             try { audio.pause() } catch {}
           })
+          
           setPiperResumeFn(() => {
             setPiperIsPaused(false)
             try {
@@ -1131,6 +751,7 @@ export const useTTS = () => {
               }
             } catch {}
           })
+          
           audio.onended = () => {
             try { URL.revokeObjectURL(url) } catch {}
             playing = false
@@ -1139,41 +760,18 @@ export const useTTS = () => {
             if (pause > 0) setTimeout(() => startNext(), pause)
             else startNext()
           }
+          
           audio.onerror = () => {
             console.warn('[TTS] Piper chunk playback error', audio.error)
             try { URL.revokeObjectURL(url) } catch {}
             playing = false
             currentAudio = null
-            // On iOS, if HTMLAudio fails, try to fallback to WebAudio if available
-            if (isiOS && audioCtx && item.f32 && item.sr) {
-              console.log('[TTS] iOS HTMLAudio failed, attempting WebAudio fallback')
-              queue.unshift({ f32: item.f32, sr: item.sr })
-              setTimeout(() => startNext(), 50)
-            } else {
-              startNext()
-            }
+            startNext()
           }
           
-          // iOS-specific playback with retry logic
-          const playWithRetry = async (retries = 2) => {
-            try {
-              await audio.play()
-            } catch (err: any) {
-              console.warn(`[TTS] HTMLAudio play failed (attempt ${3 - retries}):`, err)
-              if (retries > 0 && err.name !== 'NotAllowedError') {
-                setTimeout(() => playWithRetry(retries - 1), 100)
-              } else {
-                audio.onerror?.(new Event('error') as any)
-              }
-            }
-          }
-          
-          if (isiOS) {
-            // On iOS, add a small delay before attempting playback
-            setTimeout(() => playWithRetry(), 10)
-          } else {
-            playWithRetry()
-          }
+          audio.play().catch(() => {
+            setTimeout(() => startNext(), 100)
+          })
         }
       }
 
@@ -1182,65 +780,33 @@ export const useTTS = () => {
         const d = e.data
         if (!d || !d.status) return
         
-        chunkCount++
-        const statusMsg = d.status === 'stream' ? '(chunk received)' : 
-                         d.status === 'complete' ? '(generation complete)' : 
-                         d.status === 'error' ? '(error)' : ''
-        
-        console.log('[TTS] 📨 Worker message #' + chunkCount + ':', d.status, statusMsg)
-        addToDebugLog(`📨 Worker message: ${d.status} ${statusMsg}`)
-        
         if (d.status === 'stream') {
           try {
             // Prefer WebAudio path when Float32 is provided
-            if (useWebAudio && d.chunk?.f32 && d.chunk?.sr) {
+            if (d.chunk?.f32 && d.chunk?.sr) {
               const f32 = new Float32Array(d.chunk.f32)
-              console.log('[TTS] 🎵 Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
-              addToDebugLog(`🎵 WebAudio chunk enqueued: ${f32.length} samples at ${d.chunk.sr}Hz`)
-              
-              // Analyze audio data for debugging
-              if (f32.length > 0) {
-                const maxValue = Math.max(...f32.map(Math.abs))
-                const avgValue = f32.reduce((sum, val) => sum + Math.abs(val), 0) / f32.length
-                addToDebugLog(`📊 Audio analysis - max: ${maxValue.toFixed(4)}, avg: ${avgValue.toFixed(4)}`)
-                if (maxValue < 0.0001) {
-                  addToDebugLog('⚠️ WARNING: Audio data appears to be silent or near-silent')
-                } else {
-                  addToDebugLog('✅ Audio data has signal content')
-                }
-              } else {
-                addToDebugLog('❌ ERROR: Empty audio buffer received')
-              }
-              
+              console.log('[TTS] Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
               queue.push({ f32, sr: d.chunk.sr })
             } else {
               const url = URL.createObjectURL(d.chunk.audio)
-              console.log('[TTS] 🔊 Enqueued HTMLAudio chunk')
-              addToDebugLog('🔊 HTMLAudio chunk enqueued with blob URL')
+              console.log('[TTS] Enqueued HTMLAudio chunk')
               queue.push({ url })
             }
             
-            addToDebugLog(`📋 Queue size: ${queue.length} chunks`)
             if (!playing) {
-              addToDebugLog('▶️ Starting playback (was idle)')
               startNext()
             }
           } catch (err) {
             console.error('[TTS] Failed to enqueue Piper chunk:', err)
-            addToDebugLog(`❌ ERROR: Failed to enqueue chunk: ${err}`)
           }
         } else if (d.status === 'complete') {
-          console.log('[TTS] ✅ Worker reported generation complete')
-          addToDebugLog('✅ Worker synthesis complete')
+          console.log('[TTS] Worker reported generation complete')
           done = true
           tryResolve()
         } else if (d.status === 'error') {
-          console.error('[TTS] ❌ Worker reported error:', d.data)
-          addToDebugLog(`❌ ERROR: Worker synthesis failed: ${d.data}`)
+          console.error('[TTS] Worker reported error:', d.data)
           cleanup()
           reject(new Error(String(d.data || 'Piper TTS error')))
-        } else {
-          addToDebugLog(`ℹ️ Unknown worker status: ${d.status}`)
         }
       }
 
@@ -1258,9 +824,6 @@ export const useTTS = () => {
         }
       }
       
-      addToDebugLog(`🎤 Voice mapping: "${vName}" -> speakerId: ${speakerId}`)
-      addToDebugLog(`⚙️ Synthesis parameters: speed=${state().rate}, speakerId=${speakerId}`)
-      
       piperWorker.addEventListener('message', onMessage as any)
       
       const phonemeType = state().phonemizer === 'auto' ? undefined : state().phonemizer
@@ -1273,59 +836,12 @@ export const useTTS = () => {
         espeakTimeoutMs: state().espeakTimeoutMs
       }
       
-      console.log('[TTS] 📤 Sending synthesis request to worker:', synthesisRequest)
-      addToDebugLog('📤 Sending synthesis request to Piper worker')
-      addToDebugLog(`Request type: ${synthesisRequest.type}`)
-      addToDebugLog(`Request text length: ${synthesisRequest.text.length}`)
-      addToDebugLog(`Request speakerId: ${synthesisRequest.speakerId}`)
-      addToDebugLog(`Request speed: ${synthesisRequest.speed}`)
-      
+      console.log('[TTS] Sending synthesis request to worker')
       piperWorker.postMessage(synthesisRequest)
-      addToDebugLog('✅ Synthesis request sent, waiting for worker response...')
     })
   }
 
-  // Test tone generation for debugging audio pipeline
-  const playTestTone = async (frequency: number = 440, duration: number = 1.0): Promise<void> => {
-    addToDebugLog(`🎵 Starting test tone playback: ${frequency}Hz for ${duration}s`)
-    
-    if (isiOS) {
-      const unlocked = await unlockAudioContextIOS()
-      if (!unlocked) {
-        addToDebugLog('❌ Failed to unlock audio for test tone')
-        throw new Error('Audio context not unlocked for test tone')
-      }
-    }
-    
-    try {
-      let audioCtx = getAudioCtx()
-      audioCtx = ensureAudioContext(audioCtx)
-      setAudioCtx(audioCtx)
-      
-      const testTone = generateTestTone(frequency, duration, audioCtx.sampleRate)
-      addToDebugLog(`🎵 Generated test tone: ${testTone.length} samples at ${audioCtx.sampleRate}Hz`)
-      
-      const handle = await playPCMDebug(testTone, audioCtx.sampleRate, `test tone ${frequency}Hz`, {
-        audioContext: audioCtx,
-        onEnded: () => {
-          addToDebugLog('✅ Test tone playback completed')
-        }
-      })
-      
-      addToDebugLog('✅ Test tone playback started')
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          handle.stop()
-          addToDebugLog('⏹️ Test tone stopped')
-          resolve()
-        }, duration * 1000 + 100)
-      })
-    } catch (error) {
-      addToDebugLog(`❌ Test tone playback failed: ${error}`)
-      throw error
-    }
-  }
-
+  
   const speak = async (text: string) => {
     // Clear any queued/busy utterances to prevent piling up
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
@@ -1333,274 +849,38 @@ export const useTTS = () => {
     }
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
     setStopRequested(false)
+    
     try {
-      const current = state()
-
-      // Prepare chunks + logging
-      const t0 = performance.now()
-      const { chunks, meta } = chunkTextForTTS(text)
-      const eng = current.engine
-      const modelName = current.model?.name || 'Browser TTS'
-      console.log(`[TTS] text length=${text.length}, chunks=${chunks.length}, engine=${eng}, model=${modelName}, voice=${current.voice}, rate=${current.rate.toFixed(2)}, pitch=${current.pitch.toFixed(2)}, targetSr=${current.targetSampleRate}`)
-      meta.forEach(m => console.log(`[TTS] chunk #${m.idx + 1} chars=[${m.startChar}, ${m.endChar})`))
-
-      // Path 1: Piper TTS
-      if (current.model?.name === 'Piper TTS' && current.engine === 'local') {
-        console.log(`[TTS] Speaking with Piper TTS`)
+      // Simple platform detection: iOS uses SpeechSynthesis, others use Piper TTS
+      if (isIOSDevice()) {
+        console.log('[TTS] iOS detected, using SpeechSynthesis')
+        await speakWithBrowserTTS(text)
+      } else {
+        console.log('[TTS] Non-iOS device detected, using Piper TTS')
         await speakWithPiperTTS(text)
-        const t1 = performance.now()
-        console.log(`[TTS] Piper TTS completed in ${(t1 - t0).toFixed(0)}ms`)
-        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
-        return
       }
-
-      // Path 2: Local model (ONNX) for Kokoro
-      if (current.model && current.session && current.engine === 'local' && current.model?.name !== 'Piper TTS') {
-        console.log(`[TTS] Speaking with model=${current.model.name}, voice=${current.voice}`)
-        const ort = await import('onnxruntime-web') as any
-
-        // Ensure an AudioContext exists
-        const audioCtx = ensureAudioContext(getAudioCtx())
-        setAudioCtx(audioCtx)
-
-        const runChunk = async (chunk: string) => {
-          // Generic feeds builder for ONNX models
-          const session: any = current.session
-          const inMeta = session.inputMetadata || {}
-          const inNames: string[] = session.inputNames || Object.keys(inMeta)
-
-          const toCodes = (s: string) => {
-            // UTF-8 encode; safer than charCode for non-ASCII
-            try {
-              const bytes = new TextEncoder().encode(s)
-              return Array.from(bytes)
-            } catch {
-              const codes: number[] = []
-              for (let i = 0; i < s.length; i++) codes.push(s.charCodeAt(i) & 0xff)
-              return codes
-            }
-          }
-
-          const makeIntTensor = (dtype: string, arr: number[], dims: number[]) => {
-            const dt = (dtype || '').toLowerCase()
-            if (dt.includes('64')) {
-              const big = new BigInt64Array(arr.map(n => BigInt(n)))
-              return new ort.Tensor('int64', big, dims)
-            }
-            if (dt.includes('32')) return new ort.Tensor('int32', Int32Array.from(arr), dims)
-            if (dt.includes('uint8') || dt.includes('ubyte') || dt === 'byte') return new ort.Tensor('uint8', Uint8Array.from(arr), dims)
-            // Default to int64 for id-like tensors to avoid ORT int32/int64 mismatch
-            const big = new BigInt64Array(arr.map(n => BigInt(n)))
-            return new ort.Tensor('int64', big, dims)
-          }
-
-          const zeroTensor = (dtypeRaw: string, dims: number[]) => {
-            const dtype = (dtypeRaw || '').toLowerCase()
-            const norm =
-              dtype.includes('int64') ? 'int64' :
-              dtype.includes('int32') ? 'int32' :
-              dtype.includes('uint8') ? 'uint8' :
-              dtype.includes('float16') ? 'float16' :
-              dtype.includes('bfloat16') ? 'bfloat16' :
-              dtype.includes('float64') || dtype.includes('double') ? 'float64' :
-              dtype.includes('float') ? 'float32' :
-              dtype.includes('bool') ? 'bool' :
-              dtype.includes('string') ? 'string' : 'float32'
-            const shape = (dims && dims.length > 0) ? dims.map((d: any) => (typeof d === 'number' && d > 0 ? d : 1)) : [1]
-            const size = shape.reduce((a: number, b: number) => a * b, 1)
-            switch (norm) {
-              case 'int64': return new ort.Tensor('int64', new BigInt64Array(size), shape)
-              case 'int32': return new ort.Tensor('int32', new Int32Array(size), shape)
-              case 'uint8': return new ort.Tensor('uint8', new Uint8Array(size), shape)
-              case 'float64': return new ort.Tensor('float64', new Float64Array(size), shape)
-              case 'float16': return new ort.Tensor('float16', new Uint16Array(size), shape)
-              case 'bfloat16': return new ort.Tensor('bfloat16', new Uint16Array(size), shape)
-              case 'bool': return new ort.Tensor('bool', new Uint8Array(size), shape)
-              case 'string': return new ort.Tensor('string', Array(size).fill(''), shape)
-              default: return new ort.Tensor('float32', new Float32Array(size), shape)
-            }
-          }
-
-          const voiceIdFromState = () => {
-            const voices = (current.model?.voices || [])
-            const idx = Math.max(0, voices.indexOf(current.voice))
-            return idx < 0 ? 0 : idx
-          }
-
-          // Fill feeds based on common input names
-          const feeds: Record<string, any> = {}
-          for (const name of inNames) {
-            const meta = inMeta[name] || { type: 'tensor(float)' }
-            const type = (meta?.type || '').toString()
-            const elemType = (type.match(/tensor\(([^)]+)\)/)?.[1]) || type
-            const dims = (meta?.dimensions && meta.dimensions.length > 0) ? meta.dimensions.map((d: any) => (typeof d === 'number' ? d : -1)) : []
-
-            if (/text|chars|tokens|input_ids/i.test(name)) {
-              // If model expects string tensor input, pass the raw text directly.
-              const elem = (elemType || '').toLowerCase()
-              if (elem.includes('string')) {
-                const shape = (dims.length > 0)
-                  ? dims.map((d: number) => (typeof d === 'number' && d > 0 ? d : 1))
-                  : [1]
-                feeds[name] = new ort.Tensor('string', Array(shape.reduce((a:number,b:number)=>a*b,1)).fill('').map((_,i)=> i===0? chunk : ''), shape)
-              } else {
-                const codes = toCodes(chunk)
-                const shape = (dims.length > 0)
-                  ? dims.map((d: number, idx: number) => (d === -1 ? (idx === dims.length - 1 ? codes.length : 1) : d))
-                  : [1, codes.length]
-                // Prefer int64 unless metadata explicitly asks otherwise
-                const wanted = /64/.test(elem) ? 'int64' : (/32|uint8|int8/.test(elem) ? elemType : 'int64')
-                feeds[name] = makeIntTensor(wanted, codes, shape)
-              }
-              continue
-            }
-            if (/length|len/i.test(name)) {
-              // Many TTS graphs expect lengths as int64
-              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : 'int64'
-              feeds[name] = makeIntTensor(wanted, [chunk.length], [1])
-              continue
-            }
-            if (/speaker|voice|spk|sid/i.test(name)) {
-              const vid = voiceIdFromState()
-              // Speaker ids are commonly int64 in ONNX graphs
-              const wanted = /64/.test((elemType || '').toLowerCase()) ? 'int64' : 'int64'
-              feeds[name] = makeIntTensor(wanted, [vid], [1])
-              continue
-            }
-            if (/style|cond(itioning)?|prompt|emb(edding)?/i.test(name)) {
-              // Provide a style/conditioning embedding placeholder. Prefer model-declared dims.
-              const rawDims: any[] = (inMeta[name]?.dimensions as any) || []
-              let d1 = 1
-              let d2 = 256
-              if (Array.isArray(rawDims) && rawDims.length > 0) {
-                if (rawDims.length >= 2) {
-                  d1 = typeof rawDims[0] === 'number' && rawDims[0] > 0 ? rawDims[0] : 1
-                  const last = rawDims[1]
-                  d2 = typeof last === 'number' && last > 0 ? last : 256
-                } else if (rawDims.length === 1) {
-                  const only = rawDims[0]
-                  const val = typeof only === 'number' && only > 0 ? only : 256
-                  d1 = 1; d2 = val
-                }
-              }
-              const dims2 = [d1, d2]
-              feeds[name] = zeroTensor(elemType || 'float32', dims2)
-              continue
-            }
-            if (/rate|speed/i.test(name)) {
-              // Provide nominal speaking rate; many models ignore this
-              const r = Math.max(0.5, Math.min(current.rate || 1.0, 2.0))
-              feeds[name] = new ort.Tensor('float32', Float32Array.from([r]), [1])
-              continue
-            }
-            if (/pitch/i.test(name)) {
-              const p = Math.max(0.5, Math.min(current.pitch || 1.0, 2.0))
-              feeds[name] = new ort.Tensor('float32', Float32Array.from([p]), [1])
-              continue
-            }
-          }
-
-          // Provide default zero tensors for any remaining required inputs (e.g., 'style')
-          for (const name of inNames) {
-            if (feeds[name]) continue
-            const meta = inMeta[name] || {}
-            const type = (meta?.type || '').toString()
-            const elemType = (type.match(/tensor\(([^)]+)\)/)?.[1]) || type
-            // If dimensions are unknown but the input looks like a style/conditioning embedding,
-            // provide a rank-2 tensor with a trivial second dim to satisfy expected rank.
-            let dims: number[]
-            if (meta?.dimensions && meta.dimensions.length > 0) {
-              dims = meta.dimensions.map((d: any) => (typeof d === 'number' && d > 0 ? d : 1))
-            } else if (/style|cond(itioning)?|prompt|emb(edding)?/i.test(name)) {
-              dims = [1, 1]
-            } else {
-              dims = [1]
-            }
-            feeds[name] = zeroTensor(elemType, dims)
-          }
-
-          const outputs = await session.run(feeds)
-          // Attempt to locate waveform tensor and sample rate
-          const outNames = Object.keys(outputs)
-          let audioName = outNames.find(n => /audio|wave|pcm/i.test(n)) || outNames[0]
-          const audioTensor: any = outputs[audioName]
-          let data = audioTensor?.data as Float32Array | number[]
-          if (!data) throw new Error('Model did not return audio tensor')
-          let pcm = data instanceof Float32Array ? data : Float32Array.from(data)
-          // Flatten if 2D [1, T] or [T, 1]
-          if ((audioTensor?.dims?.length || 0) > 1) {
-            const flat = new Float32Array(audioTensor.data.length)
-            flat.set(audioTensor.data as any)
-            pcm = flat
-          }
-          // Sample rate extraction
-          let sr = current.targetSampleRate || 24000
-          const srName = outNames.find(n => /(sample|sampling).*rate|^sr$/i.test(n))
-          if (srName) {
-            const srT: any = outputs[srName]
-            const v = Array.isArray(srT?.data) ? (srT.data[0]) : (srT?.data ? (srT.data as any)[0] : null)
-            const num = typeof v === 'bigint' ? Number(v) : Number(v)
-            if (!Number.isNaN(num) && num > 8000 && num < 192000) sr = num
-          }
-
-          // Play the audio chunk
-          if (getStopRequested()) return
-          const handle = await playPCM(pcm, sr, {
-            audioContext: audioCtx!,
-            playbackRate: Math.max(0.5, Math.min(current.rate || 1.0, 2.0)),
-            onInfo: (info) => {
-              console.log(`[TTS] WebAudio buffer: ${info.length} samples at ${info.finalSampleRate}Hz (ctx ${info.contextSampleRate}Hz)`) 
-            },
-            onEnded: () => { /* handled by sequencing below */ }
-          })
-          setActiveStop(handle.stop)
-          // Wait for buffer duration approximately before proceeding
-          const seconds = (pcm.length / sr) / (Math.max(0.5, Math.min(current.rate || 1.0, 2.0)))
-          console.log(`[TTS] synthesized chunk: voice=${current.voice}, sr=${sr}, samples=${pcm.length}, durSec=${seconds.toFixed(2)}`)
-          await new Promise(res => setTimeout(res, Math.max(0, seconds * 1000)))
-        }
-
-        // Sequentially synthesize and play each chunk
-        for (let i = 0; i < chunks.length; i++) {
-          if (getStopRequested()) break
-          await runChunk(chunks[i])
-          if (getStopRequested()) break
-          const pause = current.interChunkPauseMs || 0
-          if (pause > 0) await new Promise(res => setTimeout(res, pause))
-        }
-
-        if (!getStopRequested()) {
-          const t1 = performance.now()
-          console.log(`[TTS] all chunks synthesized in ${(t1 - t0).toFixed(0)}ms`)
-        }
-        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
-        return
-      }
-
-      // Path 3: Browser TTS (chunked) if available
-      if ('speechSynthesis' in window) {
-        // Ensure voices are initialized before selecting; prime if needed
-        await primeSystemVoices().catch(() => {})
-        await waitForSystemVoices()
-        const vs = speechSynthesis.getVoices()
-        if (!vs || vs.length === 0) {
-          throw new Error('No SpeechSynthesis voices available on this platform')
-        }
-        await speakChunksWithBrowserTTS(chunks)
-        const t1 = performance.now()
-        console.log(`[TTS] all chunks spoken in ${(t1 - t0).toFixed(0)}ms`)
-        setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
-        return
-      }
-
-      // If no model pipeline yet and no speechSynthesis, error out
-      if (!state().model) {
-        throw new Error('No TTS available (load a model or enable SpeechSynthesis)')
-      }
+      
+      setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
     } catch (error) {
       setState(prev => ({ ...prev, isPlaying: false, lastError: (error as Error)?.message || 'TTS error' }))
       throw error
     }
+  }
+
+  const speakWithBrowserTTS = async (text: string) => {
+    console.log('[TTS] Starting SpeechSynthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
+    
+    if (!('speechSynthesis' in window)) {
+      throw new Error('SpeechSynthesis not available on this platform')
+    }
+    
+    // Ensure voices are initialized
+    await waitForSystemVoices()
+    
+    const { chunks } = chunkTextForTTS(text)
+    await speakChunksWithBrowserTTS(chunks)
+    
+    console.log('[TTS] SpeechSynthesis completed')
   }
   
   const stop = () => {
@@ -1694,212 +974,6 @@ export const useTTS = () => {
     setState(prev => ({ ...prev, targetSampleRate: v }))
   }
 
-  // iOS Audio Settings setters
-  const setIOSPreferredSampleRate = (rate: number | null) => {
-    const validRate = rate === null ? null : Math.max(8000, Math.min(rate, 192000))
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        preferredSampleRate: validRate
-      }
-    }))
-    // Persist to storage
-    try { setPref('iosAudio.preferredSampleRate', validRate) } catch {}
-  }
-
-  const setIOSForceResample = (force: boolean) => {
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        forceResampleToPreferred: force
-      }
-    }))
-    try { setPref('iosAudio.forceResampleToPreferred', force) } catch {}
-  }
-
-  const setIOSFadeDuration = (duration: number) => {
-    const validDuration = Math.max(0, Math.min(duration || 10, 100)) // 0-100ms
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        fadeDurationMs: validDuration
-      }
-    }))
-    try { setPref('iosAudio.fadeDurationMs', validDuration) } catch {}
-  }
-
-  const setIOSGainLevel = (gain: number) => {
-    const validGain = Math.max(0.1, Math.min(gain || 0.8, 2.0)) // 0.1-2.0
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        gainLevel: validGain
-      }
-    }))
-    try { setPref('iosAudio.gainLevel', validGain) } catch {}
-  }
-
-  const setIOSMaxChunkSize = (size: number) => {
-    const validSize = Math.max(1, Math.min(size || 5, 30)) // 1-30 seconds
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        maxChunkSizeSeconds: validSize
-      }
-    }))
-    try { setPref('iosAudio.maxChunkSizeSeconds', validSize) } catch {}
-  }
-
-  const setIOSMaxResamplingFrames = (frames: number) => {
-    const validFrames = Math.max(12000, Math.min(frames || 48000, 192000)) // 0.25-4 seconds at 48kHz
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        maxResamplingFrames: validFrames
-      }
-    }))
-    try { setPref('iosAudio.maxResamplingFrames', validFrames) } catch {}
-  }
-
-  const setIOSMaxRetries = (retries: number) => {
-    const validRetries = Math.max(1, Math.min(retries || 3, 10)) // 1-10 retries
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        maxRetries: validRetries
-      }
-    }))
-    try { setPref('iosAudio.maxRetries', validRetries) } catch {}
-  }
-
-  const setIOSBaseRetryDelay = (delay: number) => {
-    const validDelay = Math.max(50, Math.min(delay || 150, 2000)) // 50-2000ms
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        baseRetryDelayMs: validDelay
-      }
-    }))
-    try { setPref('iosAudio.baseRetryDelayMs', validDelay) } catch {}
-  }
-
-  const setIOSEspeakTimeout = (timeout: number) => {
-    const validTimeout = Math.max(500, Math.min(timeout || 2000, 10000)) // 0.5-10 seconds
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        espeakTimeoutMs: validTimeout
-      }
-    }))
-    // Also update the main espeakTimeoutMs for compatibility
-    setState(prev => ({ ...prev, espeakTimeoutMs: validTimeout }))
-    try { setPref('iosAudio.espeakTimeoutMs', validTimeout) } catch {}
-  }
-
-  const setIOSUseWebAudio = (use: boolean) => {
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        useWebAudioOnIOS: use
-      }
-    }))
-    try { setPref('iosAudio.useWebAudioOnIOS', use) } catch {}
-  }
-
-  const setIOSHighQualityResampling = (enable: boolean) => {
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        enableHighQualityResampling: enable
-      }
-    }))
-    try { setPref('iosAudio.enableHighQualityResampling', enable) } catch {}
-  }
-
-  const setIOSCrossfadeChunkSize = (size: number) => {
-    const validSize = Math.max(10, Math.min(size || 100, 1000)) // 10-1000 samples
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        crossfadeChunkSize: validSize
-      }
-    }))
-    try { setPref('iosAudio.crossfadeChunkSize', validSize) } catch {}
-  }
-
-  const setIOSNormalizationHeadroom = (headroom: number) => {
-    const validHeadroom = Math.max(0.01, Math.min(headroom || 0.05, 0.5)) // 1%-50%
-    setState(prev => ({
-      ...prev,
-      iosAudioSettings: {
-        ...prev.iosAudioSettings!,
-        normalizationHeadroom: validHeadroom
-      }
-    }))
-    try { setPref('iosAudio.normalizationHeadroom', validHeadroom) } catch {}
-  }
-
-  const resetIOSAudioSettings = () => {
-    const defaultSettings: iOSAudioSettings = {
-      preferredSampleRate: 44100,
-      forceResampleToPreferred: true,
-      fadeDurationMs: 10,
-      gainLevel: 0.8,
-      maxChunkSizeSeconds: 5,
-      maxResamplingFrames: 48000,
-      chunkedResampleThresholdSeconds: 1.0,
-      maxRetries: 3,
-      baseRetryDelayMs: 150,
-      espeakTimeoutMs: 2000,
-      useWebAudioOnIOS: true,
-      enableHighQualityResampling: true,
-      crossfadeChunkSize: 100,
-      normalizationHeadroom: 0.05
-    }
-    
-    setState(prev => ({ 
-      ...prev, 
-      iosAudioSettings: { ...defaultSettings } 
-    }))
-    
-    // Clear all iOS audio preferences from storage
-    try {
-      const keys = [
-        'iosAudio.preferredSampleRate',
-        'iosAudio.forceResampleToPreferred', 
-        'iosAudio.fadeDurationMs',
-        'iosAudio.gainLevel',
-        'iosAudio.maxChunkSizeSeconds',
-        'iosAudio.maxResamplingFrames',
-        'iosAudio.maxRetries',
-        'iosAudio.baseRetryDelayMs',
-        'iosAudio.espeakTimeoutMs',
-        'iosAudio.useWebAudioOnIOS',
-        'iosAudio.enableHighQualityResampling',
-        'iosAudio.crossfadeChunkSize',
-        'iosAudio.normalizationHeadroom'
-      ]
-      keys.forEach(key => {
-        // Note: We don't have a deletePref function, so we'll set them to undefined
-        setPref(key, undefined)
-      })
-    } catch (error) {
-      console.warn('[TTS] Failed to clear iOS audio settings:', error)
-    }
-  }
-  
   // --- Voice filtering functions for enhanced UI ---
   const getVoiceMetadata = async () => {
     try {
@@ -1964,25 +1038,7 @@ export const useTTS = () => {
     return speakers.find((speaker: any) => speaker.speaker_id === speakerId)
   }
 
-  // iOS-specific helpers
-  const getAudioState = () => ({
-    isIOS: isiOS,
-    isAudioUnlocked: isiOS ? getAudioUnlocked() : null,
-    audioContextState: getAudioCtx()?.state || null,
-    debugLog: isiOS ? getDebugLog() : null,
-    lastError: isiOS ? (globalThis as any).__last_audio_error : null
-  })
-  
-  const unlockAudioIOS = async () => {
-    if (!isiOS) return true
-    return await unlockAudioContextIOS()
-  }
-  
-  // Expose manual unlock function globally for iOS debugging
-  if (typeof window !== 'undefined') {
-    ;(window as any).triggerAudioUnlock = unlockAudioIOS
-  }
-  
+    
   return {
     state,
     models: MODELS,
@@ -2013,27 +1069,6 @@ export const useTTS = () => {
     filterVoicesByPitchRange,
     filterVoicesByRateRange,
     filterVoicesByBrightnessRange,
-    getVoiceMetadataById,
-    // Testing and debugging
-    playTestTone,
-    // iOS-specific helpers
-    getAudioState,
-    unlockAudioIOS,
-    // iOS Audio Settings setters
-    setIOSPreferredSampleRate,
-    setIOSForceResample,
-    setIOSFadeDuration,
-    setIOSGainLevel,
-    setIOSMaxChunkSize,
-    setIOSMaxResamplingFrames,
-    setIOSMaxRetries,
-    setIOSBaseRetryDelay,
-    setIOSEspeakTimeout,
-    setIOSUseWebAudio,
-    setIOSHighQualityResampling,
-    setIOSCrossfadeChunkSize,
-    setIOSNormalizationHeadroom,
-    resetIOSAudioSettings,
-    loadIOSAudioSettings
+    getVoiceMetadataById
   }
 }

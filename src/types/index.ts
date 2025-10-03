@@ -38,8 +38,6 @@ export interface TTSState {
   isModelLoading: boolean
   isWebGPUSupported: boolean
   lastError?: string | null
-  // Opaque handle to the loaded ONNX session (if any)
-  session?: unknown
   // Available system voices for browser SpeechSynthesis
   systemVoices?: string[]
   // Phonemizer preference: auto chooses model cfg with safe fallbacks on iOS
@@ -52,15 +50,6 @@ export interface TTSState {
   sentenceSplit?: boolean
   interChunkPauseMs?: number
   targetSampleRate?: number
-  // iOS-specific audio debugging info
-  audioState?: {
-    contextState?: string
-    audioUnlocked?: boolean
-    lastError?: string
-  }
-  
-  // iOS-specific audio settings (only used on iOS devices)
-  iosAudioSettings?: iOSAudioSettings
 }
 
 export interface ReaderState {
@@ -74,33 +63,5 @@ export interface ReaderState {
   fontFamily: string
 }
 
-// iOS-specific audio settings for fine-tuning playback quality
-export interface iOSAudioSettings {
-  // Sample rate settings
-  preferredSampleRate: number | null // null = auto-detect
-  forceResampleToPreferred: boolean
-  
-  // Audio processing settings
-  fadeDurationMs: number
-  gainLevel: number
-  maxChunkSizeSeconds: number
-  
-  // Memory and performance settings  
-  maxResamplingFrames: number
-  chunkedResampleThresholdSeconds: number
-  
-  // Audio context retry settings
-  maxRetries: number
-  baseRetryDelayMs: number
-  
-  // TTS-specific settings
-  espeakTimeoutMs: number
-  useWebAudioOnIOS: boolean
-  
-  // Advanced settings for audio quality
-  enableHighQualityResampling: boolean
-  crossfadeChunkSize: number
-  normalizationHeadroom: number
-}
 
 export type AppMode = 'pdf' | 'settings'
