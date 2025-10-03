@@ -13,7 +13,7 @@ export const App: Component = () => {
   const { initialize } = useLibrary()
   
   // Initialize theme to ensure CSS variables are set
-  const { theme } = useTheme()
+  useTheme()
   
   onMount(() => {
     const handler = (e: Event) => {

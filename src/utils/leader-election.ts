@@ -809,7 +809,6 @@ if (typeof window !== 'undefined') {
     forceLeadership: async () => {
       try {
         logLeaderElection.warn('🚨 FORCE LEADERSHIP ATTEMPT - Emergency override')
-        const info = leaderElection.getDebugInfo()
         
         // Step down first to clear any existing state
         await leaderElection.stepDown('force-override')

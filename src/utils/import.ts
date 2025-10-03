@@ -13,6 +13,9 @@ import {
   DocumentId,
   ImportProgress as LibraryImportProgress
 } from '@/types/library'
+
+// Re-export for convenience
+export type ImportProgress = LibraryImportProgress
 import { opfsManager } from '@/utils/opfs'
 import { logLibraryStore } from '@/utils/logger'
 

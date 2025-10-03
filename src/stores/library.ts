@@ -22,7 +22,6 @@ import {
   LibraryErrorCodes,
   ImportProgress as LibraryImportProgress
 } from '@/types/library'
-import type { LibraryState } from '@/types/library'
 import { opfsManager } from '@/utils/opfs'
 import { leaderElection } from '@/utils/leader-election'
 import { broadcastChannel } from '@/utils/broadcast-channel'
@@ -1138,7 +1137,7 @@ export const useLibrary = () => {
           leaderInfo: state().leaderInfo
         })
       } else {
-        logLibraryStore.error('Leader state synchronization failed to update store', {
+        logLibraryStore.error('Leader state synchronization failed to update store', new Error('Expected leader state does not match actual'), {
           expected: isActuallyLeader,
           actual: finalLeaderState
         })

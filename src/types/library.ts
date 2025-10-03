@@ -251,6 +251,37 @@ export interface LibraryResponse<T = unknown> {
   messageId: string
 }
 
+// Library store state interface
+export interface LibraryState {
+  // Data
+  index: LibraryIndex
+  documents: Record<string, LibraryIndexItem>
+  settings: {
+    user: UserSettings
+    reader: ReaderSettings
+  }
+  
+  // UI state
+  currentView: 'grid' | 'list'
+  selectedDocument?: string
+  searchQuery: string
+  sortBy: 'title' | 'author' | 'date' | 'size' | 'progress'
+  sortOrder: 'asc' | 'desc'
+  
+  // Async state
+  isLoading: boolean
+  error?: string
+  
+  // Import state
+  isImporting: boolean
+  importProgress?: ImportProgress
+  
+  // Leader election state
+  isLeader: boolean
+  leaderInfo?: LeaderInfo
+  isReady: boolean
+}
+
 // Leader election types
 export interface LeaderInfo {
   id: string

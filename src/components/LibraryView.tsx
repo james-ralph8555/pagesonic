@@ -21,7 +21,7 @@ export const LibraryView: Component = () => {
   } = useLibrary()
 
   // Initialize theme to ensure CSS variables are set
-  const { theme } = useTheme()
+  useTheme()
 
   const [sortBy, setSortBy] = createSignal<'title' | 'author' | 'date' | 'size'>('title')
   const [sortOrder, setSortOrder] = createSignal<'asc' | 'desc'>('asc')
