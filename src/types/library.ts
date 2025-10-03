@@ -309,6 +309,7 @@ export interface ImportProgress {
   progress: number
   currentFile?: string
   totalFiles?: number
+  status?: string // Detailed status message for current operation
   error?: string
 }
 

@@ -374,7 +374,7 @@ export const LibraryView: Component = () => {
             <Show when={state().importProgress}>
               {(progress) => (
                 <div class="import-progress-content">
-                  <div class="progress-stage">
+                  <div class="progress-stage" data-stage={progress().stage}>
                     Stage: {progress().stage.charAt(0).toUpperCase() + progress().stage.slice(1)}
                   </div>
                   

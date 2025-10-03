@@ -16,8 +16,10 @@ export const PDFViewer: Component = () => {
   const [fileInput, setFileInput] = createSignal<HTMLInputElement | null>(null)
   const [viewportW, setViewportW] = createSignal<number>(window.innerWidth)
   const [showRail, setShowRail] = createSignal<boolean>(true)
-  let hideTimer: number | undefined
+  const [showFAB, setShowFAB] = createSignal<boolean>(true)
   let scrollRoot: HTMLDivElement | null = null
+  let lastScrollY = 0
+  let scrollThreshold = 50 // Minimum scroll distance to trigger hide/show
 
   // Track which pages are (near) visible to lazily render
   const [visiblePages, setVisiblePages] = createSignal<Set<number>>(new Set([1]))
@@ -93,18 +95,32 @@ export const PDFViewer: Component = () => {
     setViewportW(window.innerWidth)
   }
 
-  const pokeUI = () => {
-    setShowRail(true)
-    if (hideTimer) window.clearTimeout(hideTimer)
-    hideTimer = window.setTimeout(() => setShowRail(false), 2000)
+  const handleScrollHideShow = (currentScrollY: number) => {
+    const scrollDelta = currentScrollY - lastScrollY
+    
+    // Only trigger if we've scrolled past the threshold
+    if (Math.abs(scrollDelta) < scrollThreshold) return
+    
+    if (scrollDelta > 0) {
+      // Scrolling down - hide both elements
+      setShowRail(false)
+      setShowFAB(false)
+    } else {
+      // Scrolling up - show both elements
+      setShowRail(true)
+      setShowFAB(true)
+    }
+    
+    lastScrollY = currentScrollY
   }
 
+  
   onMount(() => {
     window.addEventListener('resize', onResize)
-    document.addEventListener('mousemove', pokeUI)
-    document.addEventListener('scroll', pokeUI, { passive: true })
-    // Start hidden after a moment for immersion
-    hideTimer = window.setTimeout(() => setShowRail(false), 1500)
+    // Initialize scroll tracking
+    if (scrollRoot) {
+      lastScrollY = scrollRoot.scrollTop
+    }
     // Measure page bubble width once content mounts
     requestAnimationFrame(measurePageBubble)
     
@@ -116,6 +132,8 @@ export const PDFViewer: Component = () => {
         scrollRoot.addEventListener('scroll', onScrollRoot, { passive: true })
         scrollListenerAttached = true
         console.info('[PDFViewer] Attached scroll listener to .pdf-scroll')
+        // Initialize scroll tracking after attaching listener
+        lastScrollY = scrollRoot.scrollTop
       }
       console.info('[PDFViewer] Setting up IntersectionObserver')
       io = new IntersectionObserver((entries) => {
@@ -238,7 +256,12 @@ export const PDFViewer: Component = () => {
 
   const onScrollRoot = () => {
     // Throttle via rAF; multiple scroll events collapse naturally
-    requestAnimationFrame(() => seedVisibleFromScroll())
+    requestAnimationFrame(() => {
+      seedVisibleFromScroll()
+      if (scrollRoot) {
+        handleScrollHideShow(scrollRoot.scrollTop)
+      }
+    })
   }
 
   const clampPage = (pn: number) => {
@@ -262,9 +285,6 @@ export const PDFViewer: Component = () => {
 
   onCleanup(() => {
     window.removeEventListener('resize', onResize)
-    document.removeEventListener('mousemove', pokeUI)
-    document.removeEventListener('scroll', pokeUI)
-    if (hideTimer) window.clearTimeout(hideTimer)
     if (io) io.disconnect()
     if (scrollRoot) scrollRoot.removeEventListener('scroll', onScrollRoot)
     scrollListenerAttached = false
@@ -292,7 +312,6 @@ export const PDFViewer: Component = () => {
   createEffect(() => {
     // Recompute when pages change (new document)
     pdfState().pages.length
-    pokeUI()
     // Keep page input in sync when document changes
     setPageInput(String(currentPage()))
     // When a new document loads, re-bind IO to new nodes
@@ -318,6 +337,15 @@ export const PDFViewer: Component = () => {
 
   return (
     <div class="pdf-viewer">
+      {/* Top rail hover zone - invisible trigger area */}
+      <div 
+        class="top-rail-hover-zone"
+        onMouseEnter={() => setShowRail(true)}
+        onMouseLeave={() => {
+          // Don't hide immediately, let scroll behavior take over
+        }}
+      />
+      
       <div class={"pdf-top-rail" + (showRail() ? '' : ' hidden')}>
         <input
           ref={setFileInput}
@@ -515,7 +543,16 @@ export const PDFViewer: Component = () => {
           const isPaused = () => ttsState().isPaused
 
           return (
-            <div ref={el => (rootEl = el!)} class="pdf-fab">
+            <div ref={el => (rootEl = el!)} class={"pdf-fab" + (showFAB() ? '' : ' hidden')}>
+              {/* FAB hover zone - invisible trigger area */}
+              <div 
+                class="fab-hover-zone"
+                onMouseEnter={() => setShowFAB(true)}
+                onMouseLeave={() => {
+                  // Don't hide immediately, let scroll behavior take over
+                }}
+              />
+              
               <button
                 type="button"
                 class="rail-btn fab-trigger"

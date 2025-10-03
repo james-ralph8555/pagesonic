@@ -334,8 +334,8 @@ div[style*="background: #f0f4f8"] button:hover {
 }
 
 .theme-light .page-bubble,
-.theme-light .page-bubble .bubble-input,
 .theme-light .page-bubble .maxpage,
 .theme-light .page-selector .slash {
   color: #111 !important;
 }
+
