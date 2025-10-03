@@ -178,6 +178,39 @@
   gap: 0.75rem;
   width: 100%;
 }
+
+/* Single-line dropdown layout */
+.dropdown.single-line {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dropdown.single-line label {
+  margin-bottom: 0;
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.dropdown.single-line select,
+.dropdown.single-line input[type="number"],
+.dropdown.single-line input[type="text"] {
+  flex-shrink: 0;
+  width: auto;
+  min-width: 120px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.dropdown.single-line span {
+  margin-left: 0;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.dropdown.single-line input[type="checkbox"] {
+  margin-left: 0.5rem;
+}
 .dropdown label { 
   display: block; 
   font-size: 0.9rem; 

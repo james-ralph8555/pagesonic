@@ -206,7 +206,7 @@ export const SettingsView: Component = () => {
 
       <div class="settings-section">
         <h3>Appearance</h3>
-        <div class="dropdown">
+        <div class="dropdown single-line">
           <label>Theme:</label>
           <select
             value={theme()}
@@ -422,7 +422,7 @@ export const SettingsView: Component = () => {
         )}
 
         {/* Voice selector */}
-        <div class="dropdown">
+        <div class="dropdown single-line">
           <label>Voice:</label>
           {ttsState().model?.name === 'Piper TTS' && ttsState().engine === 'local' ? (
             <select
@@ -467,7 +467,7 @@ export const SettingsView: Component = () => {
       <div class="settings-section">
         <h3>TTS Chunking</h3>
         <p class="hint">Controls how input text is split for inference/playback. Console logs include chunk indices and timing.</p>
-        <div class="dropdown">
+        <div class="dropdown single-line">
           <label>Max chunk size:</label>
           <input
             type="number"
@@ -477,8 +477,9 @@ export const SettingsView: Component = () => {
             value={ttsState().chunkMaxChars}
             onInput={(e) => setChunkMaxChars(parseInt((e.target as HTMLInputElement).value || '280'))}
           />
-          <span>{ttsState().chunkMaxChars} chars</span>
-
+          <span>chars</span>
+        </div>
+        <div class="dropdown single-line">
           <label>Overlap:</label>
           <input
             type="number"
@@ -488,15 +489,17 @@ export const SettingsView: Component = () => {
             value={ttsState().chunkOverlapChars}
             onInput={(e) => setChunkOverlapChars(parseInt((e.target as HTMLInputElement).value || '0'))}
           />
-          <span>{ttsState().chunkOverlapChars} chars</span>
-
+          <span>chars</span>
+        </div>
+        <div class="dropdown single-line">
           <label>Split by sentence:</label>
           <input
             type="checkbox"
             checked={!!ttsState().sentenceSplit}
             onChange={(e) => setSentenceSplit((e.target as HTMLInputElement).checked)}
           />
-
+        </div>
+        <div class="dropdown single-line">
           <label>Pause between chunks:</label>
           <input
             type="number"
@@ -506,7 +509,7 @@ export const SettingsView: Component = () => {
             value={ttsState().interChunkPauseMs}
             onInput={(e) => setInterChunkPauseMs(parseInt((e.target as HTMLInputElement).value || '0'))}
           />
-          <span>{ttsState().interChunkPauseMs} ms</span>
+          <span>ms</span>
         </div>
       </div>
       <hr class="section-divider" />
@@ -581,7 +584,7 @@ export const SettingsView: Component = () => {
       
       <div class="settings-section">
         <h3>Audio</h3>
-        <div class="dropdown">
+        <div class="dropdown single-line">
           <label>Target sample rate:</label>
           <input
             type="number"
@@ -591,7 +594,7 @@ export const SettingsView: Component = () => {
             value={ttsState().targetSampleRate}
             onChange={(e) => setTargetSampleRate(parseInt((e.target as HTMLInputElement).value || '24000'))}
           />
-          <span>{ttsState().targetSampleRate} Hz</span>
+          <span>Hz</span>
         </div>
       </div>
       
