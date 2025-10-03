@@ -528,6 +528,13 @@ export const PDFViewer: Component = () => {
           onMount(() => { document.addEventListener('click', onDocClick); document.addEventListener('keydown', onKey) })
           onCleanup(() => { document.removeEventListener('click', onDocClick); document.removeEventListener('keydown', onKey) })
 
+          // Close menu when FAB button becomes hidden
+          createEffect(() => {
+            if (!showFAB()) {
+              setOpen(false)
+            }
+          })
+
           const zoomLabel = () => {
             if (fitWidth() && pdfState().pages.length > 0) {
               const first = pdfState().pages[0]
@@ -551,9 +558,7 @@ export const PDFViewer: Component = () => {
                 // Don't hide immediately, let scroll behavior take over
               }}
             >
-              {/* Large invisible hover area - visual only */}
-              <div class="fab-hover-area" />
-              
+                
               {/* Button and menu container - positioned at bottom right */}
               <div class="fab-button-container">
                 <button
