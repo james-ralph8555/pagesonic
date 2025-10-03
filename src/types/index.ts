@@ -60,4 +60,4 @@ export interface ReaderState {
 }
 
 
-export type AppMode = 'pdf' | 'settings'
+export type AppMode = 'pdf' | 'settings' | 'library'

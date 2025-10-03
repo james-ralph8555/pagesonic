@@ -364,6 +364,7 @@ export const PDFViewer: Component = () => {
             { value: 'open', label: 'Open' },
             { value: 'nav-header', label: 'Navigation', isHeader: true },
             { value: 'pdf', label: 'PDF Viewer' },
+            { value: 'library', label: 'Library' },
             { value: 'settings', label: 'Settings' },
             { value: 'model-header', label: 'Models', isHeader: true },
             { value: 'Browser TTS', label: 'Browser TTS (System)', disabled: !('speechSynthesis' in window) },
@@ -376,8 +377,8 @@ export const PDFViewer: Component = () => {
           onSelect={async (v) => {
             if (v === 'open') {
               fileInput()?.click()
-            } else if (v === 'pdf' || v === 'settings') {
-              window.dispatchEvent(new CustomEvent('app:set-mode', { detail: v as 'pdf' | 'settings' }))
+            } else if (v === 'pdf' || v === 'library' || v === 'settings') {
+              window.dispatchEvent(new CustomEvent('app:set-mode', { detail: v as 'pdf' | 'library' | 'settings' }))
             } else if (v === 'Browser TTS') {
               setSelectedModel(v)
               try {

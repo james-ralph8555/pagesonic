@@ -192,10 +192,11 @@ export const SettingsView: Component = () => {
           )}
           items={[
             { value: 'pdf', label: 'PDF Viewer' },
+            { value: 'library', label: 'Library' },
             { value: 'settings', label: 'Settings' }
           ]}
           onSelect={(value) => {
-            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value as 'pdf' | 'settings' }))
+            window.dispatchEvent(new CustomEvent('app:set-mode', { detail: value as 'pdf' | 'library' | 'settings' }))
           }}
         />
         <div class="rail-meta">App Settings</div>
@@ -204,6 +205,7 @@ export const SettingsView: Component = () => {
       <div class="settings-scroll">
         <div class="settings-view">
 
+    
       <div class="settings-section">
         <h3>Appearance</h3>
         <div class="dropdown single-line">

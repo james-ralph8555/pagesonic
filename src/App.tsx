@@ -1,6 +1,7 @@
 import { Component, createSignal, onMount, onCleanup } from 'solid-js'
 import { PDFViewer } from './components/PDFViewer'
 import { SettingsView } from './components/SettingsView'
+import { LibraryView } from './components/LibraryView'
 import { AppMode } from './types'
 
 export const App: Component = () => {
@@ -9,7 +10,7 @@ export const App: Component = () => {
   onMount(() => {
     const handler = (e: Event) => {
       const mode = (e as CustomEvent<AppMode>).detail
-      if (mode === 'pdf' || mode === 'settings') {
+      if (mode === 'pdf' || mode === 'settings' || mode === 'library') {
         setCurrentMode(mode)
       }
     }
@@ -18,7 +19,11 @@ export const App: Component = () => {
   })
   
   return (
-    <div class={"app " + (currentMode() === 'pdf' ? 'app--pdf' : 'app--settings')}>
+    <div class={"app " + (
+      currentMode() === 'pdf' ? 'app--pdf' : 
+      currentMode() === 'settings' ? 'app--settings' : 
+      'app--library'
+    )}>
       <header class="app-header">
         <h1>PageSonic</h1>
         <p>PDF Reader with Text-to-Speech</p>
@@ -28,6 +33,12 @@ export const App: Component = () => {
             onClick={() => setCurrentMode('pdf')}
           >
             PDF Viewer
+          </button>
+          <button
+            class={currentMode() === 'library' ? 'active' : ''}
+            onClick={() => setCurrentMode('library')}
+          >
+            Library
           </button>
           <button
             class={currentMode() === 'settings' ? 'active' : ''}
@@ -40,6 +51,7 @@ export const App: Component = () => {
       
       <main class="app-main">
         {currentMode() === 'pdf' && <PDFViewer />}
+        {currentMode() === 'library' && <LibraryView />}
         {currentMode() === 'settings' && <SettingsView />}
       </main>
     </div>
