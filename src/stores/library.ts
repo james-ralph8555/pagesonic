@@ -184,22 +184,7 @@ export const useLibrary = () => {
       } catch (opfsError) {
         logLibraryStore.error('OPFS initialization failed, attempting fallback mode', opfsError instanceof Error ? opfsError : new Error(String(opfsError)))
         
-        // Try to reset and retry once
-        if (opfsManager.hasFailed()) {
-          logLibraryStore.info('OPFS failed, attempting reset and retry')
-          opfsManager.resetInitialization()
-          
-          try {
-            await opfsManager.initialize()
-            opfsInitialized = true
-            logLibraryStore.info('OPFS initialization succeeded after reset')
-          } catch (retryError) {
-            logLibraryStore.error('OPFS retry also failed, entering limited mode', retryError instanceof Error ? retryError : new Error(String(retryError)))
-            fallbackMode = true
-          }
-        } else {
-          fallbackMode = true
-        }
+        fallbackMode = true
       }
 
       // Load initial data (only if OPFS is available)
@@ -944,44 +929,19 @@ export const useLibrary = () => {
 
   // Synchronize leader state between election system and library store
   const synchronizeLeaderState = async (): Promise<boolean> => {
-    logLibraryStore.info('Synchronizing leader state', { 
+    logLibraryStore.info('Synchronizing leader state', {
       isLeaderElection: leaderElection.isCurrentLeader(),
       isLeaderStore: state().isLeader,
       tabId: leaderElection.getTabId()
     })
 
-    // Wait a moment for any pending callbacks to propagate
-    await new Promise(resolve => setTimeout(resolve, 100))
-    
-    // Check multiple times to ensure consistency
-    let isActuallyLeader = false
-    let attempts = 0
-    const maxAttempts = 3
-    
-    while (attempts < maxAttempts) {
-      attempts++
-      isActuallyLeader = leaderElection.isCurrentLeader()
-      
-      logLibraryStore.debug(`Leadership check attempt ${attempts}: ${isActuallyLeader}`)
-      
-      // If we get a consistent result, break early
-      if (attempts > 1 && isActuallyLeader === leaderElection.isCurrentLeader()) {
-        break
-      }
-      
-      // Wait between checks
-      if (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, 100))
-      }
-    }
-
+    const isActuallyLeader = leaderElection.isCurrentLeader()
     const storeThinksIsLeader = state().isLeader
 
     if (isActuallyLeader !== storeThinksIsLeader) {
       logLibraryStore.warn('Leader state mismatch detected, synchronizing', {
         isActuallyLeader,
-        storeThinksIsLeader,
-        attempts
+        storeThinksIsLeader
       })
 
       if (isActuallyLeader) {
@@ -997,7 +957,6 @@ export const useLibrary = () => {
           })
         } else {
           logLibraryStore.warn('Leader election says we are leader but no leader info available')
-          // Create fallback leader info
           const fallbackLeaderInfo = {
             id: leaderElection.getTabId(),
             timestamp: Date.now(),
@@ -1022,23 +981,6 @@ export const useLibrary = () => {
         })
       }
 
-      // Wait for state update to propagate
-      await new Promise(resolve => setTimeout(resolve, 50))
-      
-      // Verify the synchronization worked
-      const finalLeaderState = state().isLeader
-      if (finalLeaderState === isActuallyLeader) {
-        logLibraryStore.info('Leader state synchronization completed successfully', {
-          newIsLeader: finalLeaderState,
-          leaderInfo: state().leaderInfo
-        })
-      } else {
-        logLibraryStore.error('Leader state synchronization failed to update store', new Error('Expected leader state does not match actual'), {
-          expected: isActuallyLeader,
-          actual: finalLeaderState
-        })
-      }
-      
       return true
     }
 
@@ -1046,29 +988,25 @@ export const useLibrary = () => {
     return false
   }
 
-  // Ensure leadership with fallback recovery and timeout
+  // Ensure leadership with fallback recovery
   const ensureLeadership = async (): Promise<boolean> => {
     logLibraryStore.info('Ensuring leadership for import operation')
-    
-    // Add timeout to prevent infinite loops
-    const leadershipTimeout = 5000 // 5 seconds
-    const startTime = Date.now()
 
     // First, synchronize current state
     await synchronizeLeaderState()
-    
+
     if (state().isLeader) {
       logLibraryStore.info('Leadership confirmed after synchronization')
       return true
     }
 
     logLibraryStore.warn('Not leader after sync, attempting to acquire leadership')
-    
+
     // Check if we're likely in a single-tab scenario first
     try {
       const lockInfo = await leaderElection.getLockInfo()
       const hasActiveLocks = lockInfo.held.length > 0 || lockInfo.pending.length > 0
-      
+
       if (!hasActiveLocks) {
         logLibraryStore.info('No active locks detected, proceeding in single-tab mode')
         return true
@@ -1077,87 +1015,56 @@ export const useLibrary = () => {
       logLibraryStore.warn('Could not check lock info, proceeding with leadership election', error instanceof Error ? error : new Error(String(error)))
     }
 
-    // Try leadership acquisition with timeout
+    // Try leadership acquisition
     const attempts = [
       { name: 'immediate acquisition', action: () => leaderElection.attemptLeadership() },
       { name: 'election process', action: () => leaderElection.startElection() }
     ]
 
     for (let i = 0; i < attempts.length; i++) {
-      // Check timeout
-      if (Date.now() - startTime > leadershipTimeout) {
-        logLibraryStore.warn('Leadership acquisition timeout reached, proceeding in single-tab mode')
-        return true
-      }
-
       const attempt = attempts[i]
       logLibraryStore.info(`Leadership attempt ${i + 1}: ${attempt.name}`)
-      
+
       try {
+        await attempt.action()
+
         if (i === 0) {
-          // Immediate acquisition with 1-second timeout
-          const acquired = await Promise.race([
-            attempt.action(),
-            new Promise<boolean>((_, reject) => 
-              setTimeout(() => reject(new Error('Leadership acquisition timeout')), 1000)
-            )
-          ])
-          
+          // Immediate acquisition
+          const acquired = leaderElection.isCurrentLeader()
           if (acquired) {
             logLibraryStore.info('Leadership acquired successfully')
-            await new Promise(resolve => setTimeout(resolve, 200))
             await synchronizeLeaderState()
             if (state().isLeader) {
               return true
             }
           }
         } else if (i === 1) {
-          // Full election process with 2-second timeout
-          await Promise.race([
-            attempt.action(),
-            new Promise<never>((_, reject) => 
-              setTimeout(() => reject(new Error('Election process timeout')), 2000)
-            )
-          ])
-          
-          await new Promise(resolve => setTimeout(resolve, 500))
+          // Full election process
           await synchronizeLeaderState()
           if (state().isLeader) {
             return true
           }
         }
-        
+
         // Wait between attempts
         if (i < attempts.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 500))
         }
-        
+
       } catch (error) {
         logLibraryStore.error(`Leadership attempt ${i + 1} failed`, error instanceof Error ? error : new Error(String(error)))
-        
-        // If it's a timeout, proceed in single-tab mode
-        if (error instanceof Error && error.message.includes('timeout')) {
-          logLibraryStore.warn('Leadership acquisition timed out, proceeding in single-tab mode')
-          return true
-        }
       }
     }
 
-    // Final timeout check
-    if (Date.now() - startTime > leadershipTimeout) {
-      logLibraryStore.warn('Total leadership acquisition timeout reached, proceeding in single-tab mode')
-      return true
-    }
+    logLibraryStore.warn('Failed to ensure leadership after all attempts - proceeding in single-tab mode')
 
-    logLibraryStore.error('Failed to ensure leadership after all attempts - proceeding in single-tab mode')
-    
     // Final state check
     await synchronizeLeaderState()
     if (state().isLeader) {
       logLibraryStore.info('Leadership finally available after all attempts')
       return true
     }
-    
+
     // As a last resort, proceed in single-tab mode
     logLibraryStore.warn('Proceeding in single-tab mode as last resort')
     return true

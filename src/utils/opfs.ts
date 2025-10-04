@@ -1,15 +1,15 @@
 /**
  * OPFS (Origin Private File System) Manager
- * Handles all file system operations with proper locking and atomic writes
+ * Handles all file system operations with proper state management
  */
 
-import { 
-  OPFS_STRUCTURE, 
-  LibraryIndex, 
-  LibraryIndexVersion, 
-  DocumentMetadata, 
-  BookmarksFile, 
-  UserSettings, 
+import {
+  OPFS_STRUCTURE,
+  LibraryIndex,
+  LibraryIndexVersion,
+  DocumentMetadata,
+  BookmarksFile,
+  UserSettings,
   ReaderSettings,
   LibraryError,
   LibraryErrorCodes,
@@ -24,8 +24,6 @@ export class OPFSManager {
   private initializationPromise: Promise<void> | null = null
   private initializationState: 'idle' | 'initializing' | 'ready' | 'failed' = 'idle'
   private initializationError: Error | null = null
-  private retryCount = 0
-  private maxRetries = 3
   private initializationQueue: Array<{ resolve: (value: void) => void; reject: (error: Error) => void }> = []
 
   private constructor() {}
@@ -43,23 +41,14 @@ export class OPFSManager {
   async initialize(): Promise<void> {
     // If already initialized, return immediately
     if (this.initialized && this.initializationState === 'ready') {
-      logOPFS.debug('OPFS already initialized, skipping')
       return
     }
 
     // If initialization is in progress, queue this request
     if (this.initializationState === 'initializing') {
-      logOPFS.debug('OPFS initialization already in progress, queuing request...')
       return new Promise<void>((resolve, reject) => {
         this.initializationQueue.push({ resolve, reject })
       })
-    }
-
-    // If initialization failed and we haven't exceeded retries, try again
-    if (this.initializationState === 'failed' && this.retryCount < this.maxRetries) {
-      logOPFS.info('Retrying OPFS initialization', { retryCount: this.retryCount + 1 })
-      this.initializationState = 'idle'
-      this.initializationError = null
     }
 
     // Start initialization process
@@ -68,10 +57,8 @@ export class OPFSManager {
 
     try {
       await this.initializationPromise
-      // Resolve all queued requests
       this.resolveQueuedRequests()
     } catch (error) {
-      // Reject all queued requests
       this.rejectQueuedRequests(error instanceof Error ? error : new Error(String(error)))
       throw error
     } finally {
@@ -85,7 +72,6 @@ export class OPFSManager {
   private resolveQueuedRequests(): void {
     const queue = this.initializationQueue.splice(0)
     queue.forEach(({ resolve }) => resolve())
-    logOPFS.debug(`Resolved ${queue.length} queued initialization requests`)
   }
 
   /**
@@ -94,61 +80,38 @@ export class OPFSManager {
   private rejectQueuedRequests(error: Error): void {
     const queue = this.initializationQueue.splice(0)
     queue.forEach(({ reject }) => reject(error))
-    logOPFS.debug(`Rejected ${queue.length} queued initialization requests`)
   }
 
   /**
    * Perform the actual initialization
    */
   private async performInitialization(): Promise<void> {
-    logOPFS.startTimer('initialize', 'OPFS initialization')
-    logOPFS.info('Starting OPFS initialization', { retryCount: this.retryCount })
+    logOPFS.info('Starting OPFS initialization')
 
     try {
-      logOPFS.debug('Getting OPFS root directory')
       this.root = await navigator.storage.getDirectory()
-      logOPFS.debug('OPFS root directory obtained')
-      
+
       // Create directory structure
-      logOPFS.debug('Creating directory structure')
       await this.ensureDirectory(OPFS_STRUCTURE.SETTINGS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.COVERS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.DOCS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.CONVERSIONS_DIR)
       await this.ensureDirectory(OPFS_STRUCTURE.TEMP_DIR)
-      logOPFS.info('Directory structure created successfully')
 
       // Initialize index if it doesn't exist
-      logOPFS.debug('Initializing library index')
       await this.initializeIndex()
-      logOPFS.info('Library index initialized')
 
       this.initialized = true
       this.initializationState = 'ready'
       this.initializationError = null
-      this.retryCount = 0
-      logOPFS.endTimer('initialize', 'OPFS initialization completed successfully')
+      logOPFS.info('OPFS initialization completed successfully')
     } catch (error) {
       logOPFS.error('OPFS initialization failed', error instanceof Error ? error : new Error(String(error)))
       this.initializationState = 'failed'
       this.initializationError = error instanceof Error ? error : new Error(String(error))
-      
-      // Attempt retry if we haven't exceeded max retries
-      if (this.retryCount < this.maxRetries) {
-        this.retryCount++
-        logOPFS.info(`Retrying OPFS initialization (attempt ${this.retryCount} of ${this.maxRetries})`)
-        
-        // Wait before retrying with exponential backoff
-        const delay = Math.min(1000 * Math.pow(2, this.retryCount - 1), 5000)
-        await new Promise(resolve => setTimeout(resolve, delay))
-        
-        // Reset state and try again
-        this.initializationState = 'idle'
-        return this.performInitialization()
-      }
-      
+
       throw new LibraryError(
-        'Failed to initialize OPFS after maximum retries',
+        'Failed to initialize OPFS',
         LibraryErrorCodes.PERMISSION_DENIED,
         undefined,
         this.initializationError
@@ -161,24 +124,21 @@ export class OPFSManager {
    */
   private async ensureDirectory(path: string): Promise<FileSystemDirectoryHandle> {
     if (!this.root) throw new LibraryError('OPFS not initialized', LibraryErrorCodes.PERMISSION_DENIED)
-    
-    logOPFS.debug(`Ensuring directory exists: ${path}`)
+
     const parts = path.split('/').filter(Boolean)
     let current = this.root
 
     for (const part of parts) {
       current = await current.getDirectoryHandle(part, { create: true })
-      logOPFS.debug(`Directory ensured: ${part}`)
     }
 
-    logOPFS.debug(`Directory path created/verified: ${path}`)
     return current
   }
 
   /**
    * Get a directory handle
    */
-  async getDirectory(path: string): Promise<FileSystemDirectoryHandle> {
+  async getDirectory(path: string, create = false): Promise<FileSystemDirectoryHandle> {
     if (!this.initialized) await this.initialize()
     if (!this.root) throw new LibraryError('OPFS not initialized', LibraryErrorCodes.PERMISSION_DENIED)
 
@@ -186,7 +146,7 @@ export class OPFSManager {
     let current = this.root
 
     for (const part of parts) {
-      current = await current.getDirectoryHandle(part)
+      current = await current.getDirectoryHandle(part, { create })
     }
 
     return current
@@ -207,45 +167,16 @@ export class OPFSManager {
   }
 
   /**
-   * Write text to a file atomically
+   * Write text to a file
    */
   async writeTextFile(path: string, content: string): Promise<void> {
-    const tempPath = `${path}.tmp.${Date.now()}`
-    const contentSize = new Blob([content]).size
-    
-    logOPFS.startTimer(`write:${path}`, `Write text file: ${path}`)
-    logOPFS.info(`Starting atomic write to ${path}`, { size: contentSize })
-    
     try {
-      // Write to temporary file first
-      logOPFS.debug(`Creating temp file: ${tempPath}`)
-      const tempFile = await this.getFileHandle(tempPath, true)
-      const writable = await tempFile.createWritable()
+      const file = await this.getFileHandle(path, true)
+      const writable = await file.createWritable()
       await writable.write(content)
       await writable.close()
-      logOPFS.debug(`Temp file written successfully: ${tempPath}`)
-
-      // Rename to final path (atomic operation)
-      logOPFS.debug(`Renaming temp file to final path: ${tempPath} -> ${path}`)
-      await this.renameFile(tempPath, path)
-      logOPFS.info(`File written successfully: ${path}`, { size: contentSize })
     } catch (error) {
-      logOPFS.error(`Failed to write file: ${path}`, error instanceof Error ? error : new Error(String(error)), { 
-        tempPath, 
-        contentSize 
-      })
-      
-      // Clean up temp file if it exists
-      try {
-        logOPFS.debug(`Cleaning up temp file: ${tempPath}`)
-        await this.deleteFile(tempPath)
-        logOPFS.debug(`Temp file cleaned up: ${tempPath}`)
-      } catch (cleanupError) {
-        logOPFS.warn(`Failed to clean up temp file: ${tempPath}`, cleanupError)
-      }
-      
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-        logOPFS.error('Storage quota exceeded during write', error as Error)
         throw new LibraryError(
           'Storage quota exceeded',
           LibraryErrorCodes.QUOTA_EXCEEDED,
@@ -253,15 +184,13 @@ export class OPFSManager {
           error
         )
       }
-      
+
       throw new LibraryError(
         `Failed to write file ${path}`,
         LibraryErrorCodes.PERMISSION_DENIED,
         undefined,
         error instanceof Error ? error : new Error(String(error))
       )
-    } finally {
-      logOPFS.endTimer(`write:${path}`, `Write text file completed: ${path}`)
     }
   }
 
@@ -269,26 +198,12 @@ export class OPFSManager {
    * Read text from a file
    */
   async readTextFile(path: string): Promise<string> {
-    logOPFS.startTimer(`read:${path}`, `Read text file: ${path}`)
-    
     try {
-      logOPFS.debug(`Getting file handle for: ${path}`)
       const file = await this.getFileHandle(path)
       const fileObj = await file.getFile()
-      const size = fileObj.size
-      
-      logOPFS.debug(`Reading file content: ${path}`, { size })
-      const content = await fileObj.text()
-      
-      logOPFS.info(`File read successfully: ${path}`, { size, contentLength: content.length })
-      logOPFS.endTimer(`read:${path}`, `Read text file completed: ${path}`)
-      
-      return content
+      return await fileObj.text()
     } catch (error) {
-      logOPFS.error(`Failed to read file: ${path}`, error instanceof Error ? error : new Error(String(error)))
-      
       if (error instanceof DOMException && error.name === 'NotFoundError') {
-        logOPFS.warn(`File not found: ${path}`)
         throw new LibraryError(
           `File not found: ${path}`,
           LibraryErrorCodes.DOCUMENT_NOT_FOUND,
@@ -296,7 +211,7 @@ export class OPFSManager {
           error
         )
       }
-      
+
       throw new LibraryError(
         `Failed to read file ${path}`,
         LibraryErrorCodes.PERMISSION_DENIED,
@@ -307,26 +222,15 @@ export class OPFSManager {
   }
 
   /**
-   * Write binary data to a file atomically
+   * Write binary data to a file
    */
   async writeBinaryFile(path: string, data: ArrayBuffer | Uint8Array): Promise<void> {
-    const tempPath = `${path}.tmp.${Date.now()}`
-    
     try {
-      // Write to temporary file first
-      const tempFile = await this.getFileHandle(tempPath, true)
-      const writable = await tempFile.createWritable()
+      const file = await this.getFileHandle(path, true)
+      const writable = await file.createWritable()
       await writable.write(new Uint8Array(data))
       await writable.close()
-
-      // Rename to final path
-      await this.renameFile(tempPath, path)
     } catch (error) {
-      // Clean up temp file if it exists
-      try {
-        await this.deleteFile(tempPath)
-      } catch {}
-      
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         throw new LibraryError(
           'Storage quota exceeded',
@@ -335,7 +239,7 @@ export class OPFSManager {
           error
         )
       }
-      
+
       throw new LibraryError(
         `Failed to write binary file ${path}`,
         LibraryErrorCodes.PERMISSION_DENIED,
@@ -362,7 +266,7 @@ export class OPFSManager {
           error
         )
       }
-      
+
       throw new LibraryError(
         `Failed to read binary file ${path}`,
         LibraryErrorCodes.PERMISSION_DENIED,
@@ -398,20 +302,7 @@ export class OPFSManager {
     }
   }
 
-  /**
-   * Rename a file (atomic operation)
-   */
-  private async renameFile(oldPath: string, newPath: string): Promise<void> {
-    // Read the old file
-    const data = await this.readBinaryFile(oldPath)
-    
-    // Write to new location
-    await this.writeBinaryFile(newPath, data)
-    
-    // Delete old file
-    await this.deleteFile(oldPath)
-  }
-
+  
   /**
    * Check if a file exists
    */
@@ -578,7 +469,7 @@ export class OPFSManager {
    */
   async writeDocumentMetadata(metadata: DocumentMetadata): Promise<void> {
     const metadataPath = `${OPFS_STRUCTURE.DOCS_DIR}${metadata.id}/metadata.json`
-    await this.ensureDirectory(`${OPFS_STRUCTURE.DOCS_DIR}${metadata.id}/`)
+    await this.getDirectory(`${OPFS_STRUCTURE.DOCS_DIR}${metadata.id}/`, true)
     await this.writeTextFile(metadataPath, JSON.stringify(metadata, null, 2))
   }
 
@@ -587,7 +478,7 @@ export class OPFSManager {
    */
   async readDocumentBookmarks(docId: DocumentId): Promise<BookmarksFile | null> {
     const bookmarksPath = `${OPFS_STRUCTURE.DOCS_DIR}${docId}/bookmarks.json`
-    
+
     if (!await this.fileExists(bookmarksPath)) {
       return {
         docId,
@@ -596,7 +487,7 @@ export class OPFSManager {
         lastModified: Date.now()
       }
     }
-    
+
     try {
       const content = await this.readTextFile(bookmarksPath)
       return JSON.parse(content)
@@ -615,7 +506,7 @@ export class OPFSManager {
    */
   async writeDocumentBookmarks(bookmarks: BookmarksFile): Promise<void> {
     const bookmarksPath = `${OPFS_STRUCTURE.DOCS_DIR}${bookmarks.docId}/bookmarks.json`
-    await this.ensureDirectory(`${OPFS_STRUCTURE.DOCS_DIR}${bookmarks.docId}/`)
+    await this.getDirectory(`${OPFS_STRUCTURE.DOCS_DIR}${bookmarks.docId}/`, true)
     await this.writeTextFile(bookmarksPath, JSON.stringify(bookmarks, null, 2))
   }
 
@@ -714,28 +605,7 @@ export class OPFSManager {
     return this.initializationError
   }
 
-  /**
-   * Reset initialization state (for recovery)
-   */
-  resetInitialization(): void {
-    this.initializationState = 'idle'
-    this.initialized = false
-    this.initializationError = null
-    this.retryCount = 0
-    this.initializationPromise = null
-    this.initializationQueue.length = 0
-    logOPFS.info('OPFS state reset')
-  }
-
-  /**
-   * Force re-initialization
-   */
-  async forceReinitialize(): Promise<void> {
-    logOPFS.info('Force re-initializing OPFS')
-    this.resetInitialization()
-    return this.initialize()
-  }
-
+  
   /**
    * Get storage usage estimate
    */

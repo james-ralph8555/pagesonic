@@ -249,8 +249,7 @@ class LibraryDebugger {
       }
 
       if (diagnostics.opfs.hasFailed) {
-        opfsManager.resetInitialization()
-        actions.push('Reset OPFS manager')
+        actions.push('OPFS manager has failed - manual refresh recommended')
       }
 
       // Try to reinitialize
