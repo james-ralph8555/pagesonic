@@ -17,7 +17,10 @@ export const LibraryView: Component = () => {
     importMultipleFiles,
     clearImportProgress,
     synchronizeLeaderState,
-    ensureLeadership
+    ensureLeadership,
+    updateDocumentMetadata,
+    deleteDocument,
+    getDocumentMetadata
   } = useLibrary()
 
   // Initialize theme to ensure CSS variables are set
@@ -27,6 +30,14 @@ export const LibraryView: Component = () => {
   const [sortOrder, setSortOrder] = createSignal<'asc' | 'desc'>('asc')
   const [storageUsage, setStorageUsage] = createSignal<{ used: number; quota: number; available: number } | null>(null)
   const [showDebug, setShowDebug] = createSignal(false)
+  const [showEditModal, setShowEditModal] = createSignal(false)
+  const [editingDocId, setEditingDocId] = createSignal<string | null>(null)
+  const [editTitle, setEditTitle] = createSignal('')
+  const [editAuthors, setEditAuthors] = createSignal('')
+  const [editTags, setEditTags] = createSignal('')
+  const [editLanguage, setEditLanguage] = createSignal('')
+  const [editDescription, setEditDescription] = createSignal('')
+  const [isSavingEdit, setIsSavingEdit] = createSignal(false)
   
   // Refs for file inputs
   let fileInputRef: HTMLInputElement | undefined
@@ -114,6 +125,61 @@ export const LibraryView: Component = () => {
   // Clear import progress when component unmounts or user dismisses
   const handleDismissImportProgress = () => {
     clearImportProgress()
+  }
+
+  // Edit metadata handlers
+  const openEditModal = async (item: LibraryIndexItem) => {
+    setEditingDocId(item.id)
+    setShowEditModal(true)
+    try {
+      const meta = await getDocumentMetadata(item.id)
+      if (meta) {
+        setEditTitle(meta.title || '')
+        setEditAuthors((meta.authors || []).join(', '))
+        setEditTags((meta.tags || []).join(', '))
+        setEditLanguage(meta.language || '')
+        setEditDescription(meta.description || '')
+      } else {
+        // Fallback to index values
+        setEditTitle(item.title || '')
+        setEditAuthors((item.authors || []).join(', '))
+        setEditTags((item.tags || []).join(', '))
+        setEditLanguage(item.language || '')
+        setEditDescription('')
+      }
+    } catch (e) {
+      // Minimal fallback
+      setEditTitle(item.title || '')
+      setEditAuthors((item.authors || []).join(', '))
+      setEditTags((item.tags || []).join(', '))
+      setEditLanguage(item.language || '')
+      setEditDescription('')
+    }
+  }
+
+  const closeEditModal = () => {
+    setShowEditModal(false)
+    setEditingDocId(null)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingDocId()) return
+    setIsSavingEdit(true)
+    try {
+      const updates = {
+        title: editTitle().trim(),
+        authors: editAuthors().split(',').map(a => a.trim()).filter(Boolean),
+        tags: editTags().split(',').map(t => t.trim()).filter(Boolean),
+        language: editLanguage().trim(),
+        description: editDescription().trim()
+      }
+      await updateDocumentMetadata(editingDocId()!, updates)
+      closeEditModal()
+    } catch (e) {
+      console.error('Failed to save metadata:', e)
+    } finally {
+      setIsSavingEdit(false)
+    }
   }
 
   return (
@@ -233,6 +299,15 @@ export const LibraryView: Component = () => {
 
       {/* Library Content */}
       <div class="library-content">
+        {/* Always-visible import actions */}
+        <div class="import-actions" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+          <button onClick={handleImportFiles} disabled={state().isImporting}>
+            {state().isImporting ? 'Importing...' : 'Import Files'}
+          </button>
+          <button onClick={handleImportFolder} disabled={state().isImporting}>
+            {state().isImporting ? 'Importing...' : 'Import Folder'}
+          </button>
+        </div>
         <Show 
           when={libraryItems().length > 0}
           fallback={
@@ -253,7 +328,16 @@ export const LibraryView: Component = () => {
           <div class={`library-items library-items--${state().viewMode}`}>
             <For each={libraryItems()}>
               {(item) => (
-                <LibraryItemCard item={item} viewMode={state().viewMode} />
+                <LibraryItemCard 
+                  item={item} 
+                  viewMode={state().viewMode}
+                  onEdit={() => openEditModal(item)}
+                  onDelete={async () => {
+                    if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
+                      await deleteDocument(item.id)
+                    }
+                  }}
+                />
               )}
             </For>
           </div>
@@ -466,6 +550,46 @@ export const LibraryView: Component = () => {
           </div>
         </div>
       </Show>
+
+      {/* Edit Metadata Modal */}
+      <Show when={showEditModal()}>
+        <div class="import-progress-overlay" onClick={closeEditModal}>
+          <div class="import-progress-modal" onClick={(e) => e.stopPropagation()}>
+            <div class="import-progress-header">
+              <h3>Edit Metadata</h3>
+              <button class="close-btn" onClick={closeEditModal}>×</button>
+            </div>
+            <div class="import-progress-content">
+              <label>
+                <div style="margin-bottom: 0.25rem; color: var(--text-secondary)">Title</div>
+                <input type="text" value={editTitle()} onInput={(e) => setEditTitle(e.currentTarget.value)} />
+              </label>
+              <label>
+                <div style="margin-bottom: 0.25rem; color: var(--text-secondary)">Authors (comma-separated)</div>
+                <input type="text" value={editAuthors()} onInput={(e) => setEditAuthors(e.currentTarget.value)} />
+              </label>
+              <label>
+                <div style="margin-bottom: 0.25rem; color: var(--text-secondary)">Tags (comma-separated)</div>
+                <input type="text" value={editTags()} onInput={(e) => setEditTags(e.currentTarget.value)} />
+              </label>
+              <label>
+                <div style="margin-bottom: 0.25rem; color: var(--text-secondary)">Language</div>
+                <input type="text" value={editLanguage()} onInput={(e) => setEditLanguage(e.currentTarget.value)} />
+              </label>
+              <label>
+                <div style="margin-bottom: 0.25rem; color: var(--text-secondary)">Description</div>
+                <textarea rows={4} value={editDescription()} onInput={(e) => setEditDescription(e.currentTarget.value)} />
+              </label>
+              <div style="display:flex; gap: 0.5rem; justify-content: flex-end;">
+                <button class="secondary-btn" onClick={closeEditModal} disabled={isSavingEdit()}>Cancel</button>
+                <button class="primary-btn" onClick={handleSaveEdit} disabled={isSavingEdit()}>
+                  {isSavingEdit() ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Show>
         </div>
       </div>
     </>
@@ -475,6 +599,8 @@ export const LibraryView: Component = () => {
 interface LibraryItemCardProps {
   item: LibraryIndexItem
   viewMode: 'grid' | 'list'
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
 const LibraryItemCard: Component<LibraryItemCardProps> = (props) => {
@@ -509,6 +635,10 @@ const LibraryItemCard: Component<LibraryItemCardProps> = (props) => {
             </For>
           </div>
         </Show>
+        <div class="item-actions">
+          <button class="action-btn" title="Edit" onClick={(e) => { e.stopPropagation(); props.onEdit?.() }}>✏️</button>
+          <button class="action-btn" title="Delete" onClick={(e) => { e.stopPropagation(); props.onDelete?.() }}>🗑️</button>
+        </div>
       </div>
     </div>
   )

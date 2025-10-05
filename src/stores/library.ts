@@ -556,6 +556,112 @@ export const useLibrary = () => {
     return null
   }
 
+  // Update document metadata (leader-only; attempts to ensure leadership)
+  const updateDocumentMetadata = async (
+    docId: DocumentId,
+    updates: Partial<DocumentMetadata>
+  ): Promise<DocumentMetadata | null> => {
+    try {
+      // Ensure we are the leader (or proceed in single-tab mode)
+      const hasLeadership = await ensureLeadership()
+      if (!hasLeadership) {
+        throw new LibraryError('Leader required to update metadata', LibraryErrorCodes.LEADER_REQUIRED, docId)
+      }
+
+      // Read current metadata
+      const current = await opfsManager.readDocumentMetadata(docId)
+      if (!current) {
+        throw new LibraryError('Document not found', LibraryErrorCodes.DOCUMENT_NOT_FOUND, docId)
+      }
+
+      // Merge and persist metadata
+      const merged: DocumentMetadata = {
+        ...current,
+        ...updates,
+        // Normalize simple fields
+        title: updates.title !== undefined ? updates.title : current.title,
+        authors: updates.authors !== undefined ? updates.authors : current.authors,
+        tags: updates.tags !== undefined ? updates.tags : current.tags,
+        language: updates.language !== undefined ? updates.language : current.language,
+        description: updates.description !== undefined ? updates.description : current.description,
+        updatedAt: Date.now()
+      }
+
+      await opfsManager.writeDocumentMetadata(merged)
+
+      // Update index entry
+      const index = await opfsManager.readIndex()
+      const entry = index[docId]
+      if (entry) {
+        index[docId] = {
+          ...entry,
+          title: merged.title,
+          authors: merged.authors,
+          tags: merged.tags,
+          language: merged.language,
+          updated: merged.updatedAt
+        }
+        await opfsManager.writeIndex(index)
+      }
+
+      // Update local state
+      setState(prev => ({
+        ...prev,
+        index: entry ? { ...prev.index, [docId]: index[docId] } : prev.index,
+        currentDocument: prev.currentDocument?.id === docId ? merged : prev.currentDocument
+      }))
+
+      return merged
+    } catch (error) {
+      logLibraryStore.error('Failed to update document metadata', error instanceof Error ? error : new Error(String(error)))
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to update document metadata'
+      }))
+      return null
+    }
+  }
+
+  // Delete a document (leader-only; attempts to ensure leadership)
+  const deleteDocument = async (docId: DocumentId): Promise<boolean> => {
+    try {
+      const hasLeadership = await ensureLeadership()
+      if (!hasLeadership) {
+        throw new LibraryError('Leader required to delete document', LibraryErrorCodes.LEADER_REQUIRED, docId)
+      }
+
+      // Remove from OPFS
+      await opfsManager.removeDirectory(`docs/${docId}`, true)
+
+      // Update index
+      const index = await opfsManager.readIndex()
+      if (index[docId]) {
+        delete index[docId]
+        await opfsManager.writeIndex(index)
+      }
+
+      // Update local state
+      setState(prev => {
+        const newIndex = { ...prev.index }
+        delete newIndex[docId]
+        return {
+          ...prev,
+          index: newIndex,
+          currentDocument: prev.currentDocument?.id === docId ? null : prev.currentDocument
+        }
+      })
+
+      return true
+    } catch (error) {
+      logLibraryStore.error('Failed to delete document', error instanceof Error ? error : new Error(String(error)))
+      setState(prev => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Failed to delete document'
+      }))
+      return false
+    }
+  }
+
   // Update user settings
   const updateUserSettings = async (settings: Partial<UserSettings>): Promise<void> => {
     logLibraryStore.startTimer('updateUserSettings', 'Update user settings')
@@ -1149,6 +1255,10 @@ export const useLibrary = () => {
     getLeaderInfo: () => state().leaderInfo,
     synchronizeLeaderState,
     ensureLeadership,
+    
+    // Document ops
+    updateDocumentMetadata,
+    deleteDocument,
     
     // Debug helpers
     getInstanceInfo: () => ({
