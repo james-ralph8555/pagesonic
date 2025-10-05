@@ -3,6 +3,8 @@ import { useLibrary } from '@/stores/library'
 import { useTheme } from '@/stores/theme'
 import { LibraryIndexItem } from '@/types/library'
 import { GlassDropdownButton } from './GlassDropdownButton'
+import { usePDF } from '@/stores/pdf'
+import { opfsManager } from '@/utils/opfs'
 
 export const LibraryView: Component = () => {
   const {
@@ -22,6 +24,7 @@ export const LibraryView: Component = () => {
     deleteDocument,
     getDocumentMetadata
   } = useLibrary()
+  const { loadPDF } = usePDF()
 
   // Initialize theme to ensure CSS variables are set
   useTheme()
@@ -125,6 +128,28 @@ export const LibraryView: Component = () => {
   // Clear import progress when component unmounts or user dismisses
   const handleDismissImportProgress = () => {
     clearImportProgress()
+  }
+
+  // Open a library item in the PDF viewer
+  const openInViewer = async (item: LibraryIndexItem) => {
+    try {
+      const meta = await getDocumentMetadata(item.id)
+      if (!meta) throw new Error('Document metadata not found')
+      const pdfInfo = meta.formats && (meta.formats as Record<string, any>)['pdf']
+      if (!pdfInfo?.path) throw new Error('PDF format not available for this document')
+
+      const path = pdfInfo.path.startsWith('/') ? pdfInfo.path : '/' + pdfInfo.path
+      const data = await opfsManager.readBinaryFile(path)
+      const fileName = `${meta.title || item.title || 'document'}.pdf`
+      const blob = new Blob([data], { type: 'application/pdf' })
+      const file = new File([blob], fileName, { type: 'application/pdf' })
+
+      await loadPDF(file)
+      window.dispatchEvent(new CustomEvent('app:set-mode', { detail: 'pdf' }))
+    } catch (e) {
+      console.error('Failed to open document in viewer:', e)
+      setState(prev => ({ ...prev, error: e instanceof Error ? e.message : 'Failed to open document' }))
+    }
   }
 
   // Edit metadata handlers
@@ -331,6 +356,7 @@ export const LibraryView: Component = () => {
                 <LibraryItemCard 
                   item={item} 
                   viewMode={state().viewMode}
+                  onOpen={() => openInViewer(item)}
                   onEdit={() => openEditModal(item)}
                   onDelete={async () => {
                     if (confirm(`Delete "${item.title}"? This cannot be undone.`)) {
@@ -599,6 +625,7 @@ export const LibraryView: Component = () => {
 interface LibraryItemCardProps {
   item: LibraryIndexItem
   viewMode: 'grid' | 'list'
+  onOpen?: () => void
   onEdit?: () => void
   onDelete?: () => void
 }
@@ -613,7 +640,14 @@ const LibraryItemCard: Component<LibraryItemCardProps> = (props) => {
       </div>
       
       <div class="item-info">
-        <h3 class="item-title">{props.item.title}</h3>
+        <h3 
+          class="item-title"
+          onClick={(e) => { e.stopPropagation(); props.onOpen?.() }}
+          style="cursor: pointer;"
+          title="Open in PDF viewer"
+        >
+          {props.item.title}
+        </h3>
         <p class="item-author">
           {props.item.authors.length > 0 ? props.item.authors.join(', ') : 'Unknown Author'}
         </p>
