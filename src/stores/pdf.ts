@@ -22,6 +22,14 @@ const [state, setState] = createSignal<PDFState>({
 })
 
 export const usePDF = () => {
+  const beginLoading = () => {
+    setState(prev => ({ ...prev, isLoading: true, error: null }))
+  }
+
+  const setError = (message: string) => {
+    setState(prev => ({ ...prev, isLoading: false, error: message }))
+  }
+
   const loadPDF = async (file: File) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
     
@@ -129,7 +137,9 @@ export const usePDF = () => {
   
   return {
     state,
+    beginLoading,
     loadPDF,
+    setError,
     getCurrentPage,
     extractTextFromPage,
     getAllExtractedText,

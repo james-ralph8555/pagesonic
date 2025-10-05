@@ -24,7 +24,7 @@ export const LibraryView: Component = () => {
     deleteDocument,
     getDocumentMetadata
   } = useLibrary()
-  const { loadPDF } = usePDF()
+  const { loadPDF, beginLoading, setError: setPDFError } = usePDF()
 
   // Initialize theme to ensure CSS variables are set
   useTheme()
@@ -132,24 +132,34 @@ export const LibraryView: Component = () => {
 
   // Open a library item in the PDF viewer
   const openInViewer = async (item: LibraryIndexItem) => {
-    try {
-      const meta = await getDocumentMetadata(item.id)
-      if (!meta) throw new Error('Document metadata not found')
-      const pdfInfo = meta.formats && (meta.formats as Record<string, any>)['pdf']
-      if (!pdfInfo?.path) throw new Error('PDF format not available for this document')
+    // Instantly navigate to viewer and show loading indicator
+    window.dispatchEvent(new CustomEvent('app:set-mode', { detail: 'pdf' }))
+    beginLoading()
 
-      const path = pdfInfo.path.startsWith('/') ? pdfInfo.path : '/' + pdfInfo.path
-      const data = await opfsManager.readBinaryFile(path)
-      const fileName = `${meta.title || item.title || 'document'}.pdf`
-      const blob = new Blob([data], { type: 'application/pdf' })
-      const file = new File([blob], fileName, { type: 'application/pdf' })
+    // Continue loading the file in the background
+    ;(async () => {
+      try {
+        const meta = await getDocumentMetadata(item.id)
+        if (!meta) throw new Error('Document metadata not found')
+        const pdfInfo = meta.formats && (meta.formats as Record<string, any>)['pdf']
+        if (!pdfInfo?.path) throw new Error('PDF format not available for this document')
 
-      await loadPDF(file)
-      window.dispatchEvent(new CustomEvent('app:set-mode', { detail: 'pdf' }))
-    } catch (e) {
-      console.error('Failed to open document in viewer:', e)
-      setState(prev => ({ ...prev, error: e instanceof Error ? e.message : 'Failed to open document' }))
-    }
+        const path = pdfInfo.path.startsWith('/') ? pdfInfo.path : '/' + pdfInfo.path
+        const data = await opfsManager.readBinaryFile(path)
+        const fileName = `${meta.title || item.title || 'document'}.pdf`
+        const blob = new Blob([data], { type: 'application/pdf' })
+        const file = new File([blob], fileName, { type: 'application/pdf' })
+
+        await loadPDF(file)
+      } catch (e) {
+        console.error('Failed to open document in viewer:', e)
+        const msg = e instanceof Error ? e.message : 'Failed to open document'
+        // Surface error in the viewer
+        setPDFError(msg)
+        // Also record in library state for completeness
+        setState(prev => ({ ...prev, error: msg }))
+      }
+    })()
   }
 
   // Edit metadata handlers
