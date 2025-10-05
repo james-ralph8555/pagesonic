@@ -704,6 +704,12 @@
   background: rgba(0, 0, 255, 0.25);
 }
 
+/* Current TTS chunk highlight */
+.textLayer .tts-highlight {
+  background: rgba(255, 235, 59, 0.6);
+  border-radius: 2px;
+}
+
 /* Floating Zoom Controls */
 .pdf-zoom-controls {
   position: fixed;

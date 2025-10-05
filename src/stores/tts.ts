@@ -11,6 +11,8 @@ const [state, setState] = createSignal<TTSState>({
   isPaused: false,
   currentSentence: 0,
   totalSentences: 0,
+  currentChunkIndex: null,
+  currentChunkText: null,
   // Will be set to a valid voice when an engine/model is selected
   voice: '',
   rate: 1.0,
@@ -476,7 +478,7 @@ export const useTTS = () => {
     })
   }
 
-  const speakChunksWithBrowserTTS = async (chunks: string[]) => {
+  const speakChunksWithBrowserTTS = async (chunks: string[], meta: { idx: number; startChar: number; endChar: number }[]) => {
     const { interChunkPauseMs } = state()
     return new Promise<void>((resolve, reject) => {
       const voices = speechSynthesis.getVoices()
@@ -487,6 +489,8 @@ export const useTTS = () => {
       let i = 0
       const next = () => {
         if (i >= chunks.length) {
+          // Clear highlight state when finished
+          setState(prev => ({ ...prev, currentChunkIndex: null, currentChunkText: null, currentChunkStart: null, currentChunkEnd: null }))
           if (okCount === 0 && errCount > 0) {
             reject(new Error('Browser TTS failed to synthesize speech'))
           } else {
@@ -504,7 +508,9 @@ export const useTTS = () => {
         const vName = selected?.name || state().voice || 'unknown'
         console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) voice=${vName} rate=${utterance.rate} pitch=${utterance.pitch} sr=n/a`)
         utterance.onstart = () => {
-          // Consider this chunk successful once speech starts
+          // Expose current chunk for UI highlighting
+          const m = meta[chunkIdx]
+          setState(prev => ({ ...prev, currentChunkIndex: chunkIdx, currentChunkText: text, currentChunkStart: m?.startChar ?? null, currentChunkEnd: m?.endChar ?? null }))
         }
         utterance.onend = () => {
           okCount += 1
@@ -614,7 +620,6 @@ export const useTTS = () => {
 
   const speakWithPiperTTS = async (text: string) => {
     console.log('[TTS] Starting Piper TTS synthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
-    
     const piperWorker = getPiperWorker()
     if (!piperWorker || !isPiperInitialized()) {
       throw new Error('Piper TTS not initialized')
@@ -622,226 +627,241 @@ export const useTTS = () => {
 
     const cleaned = cleanForTTS(text)
     console.log('[TTS] Text cleaned, length:', cleaned.length)
-    
-    // Sequential playback queue to avoid overlapping streamed chunks
-    return new Promise<void>((resolve, reject) => {
-      if (!piperWorker) return reject(new Error('Piper worker not initialized'))
 
-      const queue: { url?: string; f32?: Float32Array; sr?: number }[] = []
-      let playing = false
-      let done = false
-      let currentAudio: HTMLAudioElement | null = null
-      let currentHandle: { stop: () => void } | null = null
-      
-      // Ensure a single AudioContext exists and is resumed
-      let audioCtx = getAudioCtx()
-      audioCtx = ensureAudioContext(audioCtx)
-      setAudioCtx(audioCtx)
+    const { chunks, meta } = chunkTextForTTS(cleaned)
 
-      const cleanup = () => {
-        try { piperWorker.removeEventListener('message', onMessage as any) } catch {}
-        try { if (currentAudio) { currentAudio.onended = null as any; currentAudio.onerror = null as any; currentAudio.pause() } } catch {}
-        try { if (currentHandle) { currentHandle.stop() } } catch {}
-        currentAudio = null
-        currentHandle = null
-        while (queue.length > 0) {
-          const u = queue.shift()!
-          try { if (u.url) URL.revokeObjectURL(u.url) } catch {}
+    // Ensure a single AudioContext exists and is resumed (once)
+    let audioCtx = getAudioCtx()
+    audioCtx = ensureAudioContext(audioCtx)
+    setAudioCtx(audioCtx)
+
+    const synthesizeChunk = async (chunkText: string): Promise<void> => {
+      if (getStopRequested()) return
+      return new Promise<void>((resolve, reject) => {
+        if (!piperWorker) return reject(new Error('Piper worker not initialized'))
+
+        const queue: { url?: string; f32?: Float32Array; sr?: number }[] = []
+        let playing = false
+        let done = false
+        let currentAudio: HTMLAudioElement | null = null
+        let currentHandle: { stop: () => void } | null = null
+
+        const cleanup = () => {
+          try { piperWorker.removeEventListener('message', onMessage as any) } catch {}
+          try { if (currentAudio) { currentAudio.onended = null as any; currentAudio.onerror = null as any; currentAudio.pause() } } catch {}
+          try { if (currentHandle) { currentHandle.stop() } } catch {}
+          currentAudio = null
+          currentHandle = null
+          while (queue.length > 0) {
+            const u = queue.shift()!
+            try { if (u.url) URL.revokeObjectURL(u.url) } catch {}
+          }
+          setActiveStop(null)
+          setPiperPauseFn(null)
+          setPiperResumeFn(null)
+          setPiperIsPaused(false)
         }
-        setActiveStop(null)
-        setPiperPauseFn(null)
-        setPiperResumeFn(null)
-        setPiperIsPaused(false)
-      }
 
-      const tryResolve = () => {
-        if (done && !playing && queue.length === 0) {
-          cleanup()
-          resolve()
+        const tryResolve = () => {
+          if (done && !playing && queue.length === 0) {
+            cleanup()
+            resolve()
+          }
         }
-      }
 
-      const startNext = async () => {
-        if (getPiperIsPaused()) return
-        if (getStopRequested()) { cleanup(); return resolve() }
-        if (playing) return
-        const item = queue.shift()
-        if (!item) return tryResolve()
-        playing = true
-        
-        if (item.f32 && item.sr && audioCtx) {
-          // Play via WebAudio buffer
-          const f32 = item.f32
-          const sr = item.sr
-          const playbackRate = Math.max(0.5, Math.min(state().rate || 1.0, 2.0))
-          
-          console.log('[TTS] Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr)
-          
-          ;(async () => {
-            try {
-              const handle = await playPCM(f32, sr, { 
-                audioContext: audioCtx!, 
-                playbackRate,
-                onEnded: () => {
-                  console.log('[TTS] WebAudio chunk playback completed')
-                }
-              })
-              
-              console.log('[TTS] WebAudio handle created successfully')
-              
-              currentHandle = handle
-              setActiveStop(() => { 
-                try { handle.stop() } catch {} 
-              })
-              
-              // Pause/resume controls via AudioContext
-              setPiperPauseFn(() => { 
-                setPiperIsPaused(true)
-                try { audioCtx!.suspend() } catch {} 
-              })
-              
-              setPiperResumeFn(() => { 
-                setPiperIsPaused(false)
-                try { audioCtx!.resume() } catch {} 
-              })
-              
-              // Schedule next after duration
-              const seconds = (f32.length / sr) / playbackRate
-              console.log('[TTS] Scheduled next chunk in', seconds.toFixed(2), 'seconds')
-              
-              setTimeout(() => {
-                console.log('[TTS] WebAudio chunk finished, scheduling next')
+        const startNext = async () => {
+          if (getPiperIsPaused()) return
+          if (getStopRequested()) { cleanup(); return resolve() }
+          if (playing) return
+          const item = queue.shift()
+          if (!item) return tryResolve()
+          playing = true
+
+          if (item.f32 && item.sr && audioCtx) {
+            // Play via WebAudio buffer
+            const f32 = item.f32
+            const sr = item.sr
+            const playbackRate = Math.max(0.5, Math.min(state().rate || 1.0, 2.0))
+
+            console.log('[TTS] Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr)
+
+            ;(async () => {
+              try {
+                const handle = await playPCM(f32, sr, { 
+                  audioContext: audioCtx!, 
+                  playbackRate,
+                  onEnded: () => {
+                    console.log('[TTS] WebAudio chunk playback completed')
+                  }
+                })
+
+                console.log('[TTS] WebAudio handle created successfully')
+
+                currentHandle = handle
+                setActiveStop(() => { 
+                  try { handle.stop() } catch {} 
+                })
+
+                // Pause/resume controls via AudioContext
+                setPiperPauseFn(() => { 
+                  setPiperIsPaused(true)
+                  try { audioCtx!.suspend() } catch {} 
+                })
+
+                setPiperResumeFn(() => { 
+                  setPiperIsPaused(false)
+                  try { audioCtx!.resume() } catch {} 
+                })
+
+                // Schedule next after duration
+                const seconds = (f32.length / sr) / playbackRate
+                console.log('[TTS] Scheduled next chunk in', seconds.toFixed(2), 'seconds')
+
+                setTimeout(() => {
+                  console.log('[TTS] WebAudio chunk finished, scheduling next')
+                  playing = false
+                  currentHandle = null
+
+                  const pause = Math.max(0, state().interChunkPauseMs || 0)
+                  if (pause > 0) {
+                    setTimeout(() => startNext(), pause)
+                  } else {
+                    startNext()
+                  }
+                }, Math.max(0, seconds * 1000))
+
+              } catch (err) {
+                console.error('[TTS] WebAudio Piper chunk error:', err)
                 playing = false
                 currentHandle = null
-                
-                const pause = Math.max(0, state().interChunkPauseMs || 0)
-                if (pause > 0) {
-                  setTimeout(() => startNext(), pause)
-                } else {
+                setTimeout(() => startNext(), 100)
+              }
+            })()
+          } else {
+            // Fallback: HTMLAudio with WAV blob URL
+            const url = item.url!
+            const audio = new Audio(url)
+
+            currentAudio = audio
+            setActiveStop(() => {
+              try { audio.pause() } catch {}
+              try { audio.currentTime = audio.duration || 0 } catch {}
+              try { URL.revokeObjectURL(url) } catch {}
+            })
+
+            setPiperPauseFn(() => {
+              setPiperIsPaused(true)
+              try { audio.pause() } catch {}
+            })
+
+            setPiperResumeFn(() => {
+              setPiperIsPaused(false)
+              try {
+                if (currentAudio) {
+                  currentAudio.play().catch(() => {})
+                } else if (!playing) {
                   startNext()
                 }
-              }, Math.max(0, seconds * 1000))
-              
-            } catch (err) {
-              console.error('[TTS] WebAudio Piper chunk error:', err)
-              playing = false
-              currentHandle = null
-              setTimeout(() => startNext(), 100)
-            }
-          })()
-        } else {
-          // Fallback: HTMLAudio with WAV blob URL
-          const url = item.url!
-          const audio = new Audio(url)
-          
-          currentAudio = audio
-          setActiveStop(() => {
-            try { audio.pause() } catch {}
-            try { audio.currentTime = audio.duration || 0 } catch {}
-            try { URL.revokeObjectURL(url) } catch {}
-          })
-          
-          setPiperPauseFn(() => {
-            setPiperIsPaused(true)
-            try { audio.pause() } catch {}
-          })
-          
-          setPiperResumeFn(() => {
-            setPiperIsPaused(false)
-            try {
-              if (currentAudio) {
-                currentAudio.play().catch(() => {})
-              } else if (!playing) {
-                startNext()
-              }
-            } catch {}
-          })
-          
-          audio.onended = () => {
-            try { URL.revokeObjectURL(url) } catch {}
-            playing = false
-            currentAudio = null
-            const pause = Math.max(0, state().interChunkPauseMs || 0)
-            if (pause > 0) setTimeout(() => startNext(), pause)
-            else startNext()
-          }
-          
-          audio.onerror = () => {
-            console.warn('[TTS] Piper chunk playback error', audio.error)
-            try { URL.revokeObjectURL(url) } catch {}
-            playing = false
-            currentAudio = null
-            startNext()
-          }
-          
-          audio.play().catch(() => {
-            setTimeout(() => startNext(), 100)
-          })
-        }
-      }
+              } catch {}
+            })
 
-      const onMessage = (e: MessageEvent<any>) => {
-        if (getStopRequested()) { cleanup(); return resolve() }
-        const d = e.data
-        if (!d || !d.status) return
-        
-        if (d.status === 'stream') {
-          try {
-            // Prefer WebAudio path when Float32 is provided
-            if (d.chunk?.f32 && d.chunk?.sr) {
-              const f32 = new Float32Array(d.chunk.f32)
-              console.log('[TTS] Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
-              queue.push({ f32, sr: d.chunk.sr })
-            } else {
-              const url = URL.createObjectURL(d.chunk.audio)
-              console.log('[TTS] Enqueued HTMLAudio chunk')
-              queue.push({ url })
+            audio.onended = () => {
+              try { URL.revokeObjectURL(url) } catch {}
+              playing = false
+              currentAudio = null
+              const pause = Math.max(0, state().interChunkPauseMs || 0)
+              if (pause > 0) setTimeout(() => startNext(), pause)
+              else startNext()
             }
-            
-            if (!playing) {
+
+            audio.onerror = () => {
+              console.warn('[TTS] Piper chunk playback error', audio.error)
+              try { URL.revokeObjectURL(url) } catch {}
+              playing = false
+              currentAudio = null
               startNext()
             }
-          } catch (err) {
-            console.error('[TTS] Failed to enqueue Piper chunk:', err)
-          }
-        } else if (d.status === 'complete') {
-          console.log('[TTS] Worker reported generation complete')
-          done = true
-          tryResolve()
-        } else if (d.status === 'error') {
-          console.error('[TTS] Worker reported error:', d.data)
-          cleanup()
-          reject(new Error(String(d.data || 'Piper TTS error')))
-        }
-      }
 
-      // Resolve speakerId from selected voice using voices.json map; fallback to 0
-      const m = getPiperVoiceMap() || {}
-      const vName = (state().voice || '').trim()
-      let speakerId = 0
-      if (typeof m[vName] === 'number') {
-        speakerId = m[vName]!
-      } else {
-        const match = vName.match(/voice\s+(\d+)/i)
-        if (match) {
-          const n = parseInt(match[1] || '1', 10)
-          if (!Number.isNaN(n) && n > 0) speakerId = n - 1
+            audio.play().catch(() => {
+              setTimeout(() => startNext(), 100)
+            })
+          }
         }
-      }
-      
-      piperWorker.addEventListener('message', onMessage as any)
-      
-      const synthesisRequest = {
-        type: 'generate',
-        text: cleaned,
-        speakerId,
-        speed: state().rate,
-        phonemeType: 'espeak'
-      }
-      
-      console.log('[TTS] Sending synthesis request to worker')
-      piperWorker.postMessage(synthesisRequest)
-    })
+
+        const onMessage = (e: MessageEvent<any>) => {
+          if (getStopRequested()) { cleanup(); return resolve() }
+          const d = e.data
+          if (!d || !d.status) return
+
+          if (d.status === 'stream') {
+            try {
+              // Prefer WebAudio path when Float32 is provided
+              if (d.chunk?.f32 && d.chunk?.sr) {
+                const f32 = new Float32Array(d.chunk.f32)
+                console.log('[TTS] Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
+                queue.push({ f32, sr: d.chunk.sr })
+              } else {
+                const url = URL.createObjectURL(d.chunk.audio)
+                console.log('[TTS] Enqueued HTMLAudio chunk')
+                queue.push({ url })
+              }
+
+              if (!playing) {
+                startNext()
+              }
+            } catch (err) {
+              console.error('[TTS] Failed to enqueue Piper chunk:', err)
+            }
+          } else if (d.status === 'complete') {
+            console.log('[TTS] Worker reported generation complete')
+            done = true
+            tryResolve()
+          } else if (d.status === 'error') {
+            console.error('[TTS] Worker reported error:', d.data)
+            cleanup()
+            reject(new Error(String(d.data || 'Piper TTS error')))
+          }
+        }
+
+        // Resolve speakerId from selected voice using voices.json map; fallback to 0
+        const m = getPiperVoiceMap() || {}
+        const vName = (state().voice || '').trim()
+        let speakerId = 0
+        if (typeof m[vName] === 'number') {
+          speakerId = m[vName]!
+        } else {
+          const match = vName.match(/voice\s+(\d+)/i)
+          if (match) {
+            const n = parseInt(match[1] || '1', 10)
+            if (!Number.isNaN(n) && n > 0) speakerId = n - 1
+          }
+        }
+
+        piperWorker.addEventListener('message', onMessage as any)
+
+        const synthesisRequest = {
+          type: 'generate',
+          text: chunkText,
+          speakerId,
+          speed: state().rate,
+          phonemeType: 'espeak'
+        }
+
+        console.log('[TTS] Sending synthesis request to worker')
+        piperWorker.postMessage(synthesisRequest)
+      })
+    }
+
+    for (let i = 0; i < chunks.length; i++) {
+      if (getStopRequested()) break
+      const c = chunks[i]
+      const m = meta[i]
+      setState(prev => ({ ...prev, currentChunkIndex: i, currentChunkText: c, currentChunkStart: m.startChar, currentChunkEnd: m.endChar }))
+      await synthesizeChunk(c)
+    }
+
+    // Clear highlight after completion
+    setState(prev => ({ ...prev, currentChunkIndex: null, currentChunkText: null, currentChunkStart: null, currentChunkEnd: null }))
   }
 
   
@@ -850,7 +870,7 @@ export const useTTS = () => {
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try { speechSynthesis.cancel() } catch {}
     }
-    setState(prev => ({ ...prev, isPlaying: true, isPaused: false }))
+    setState(prev => ({ ...prev, isPlaying: true, isPaused: false, currentChunkIndex: null, currentChunkText: null }))
     setStopRequested(false)
     
     try {
@@ -863,9 +883,9 @@ export const useTTS = () => {
         await speakWithPiperTTS(text)
       }
       
-      setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+      setState(prev => ({ ...prev, isPlaying: false, isPaused: false, currentChunkIndex: null, currentChunkText: null }))
     } catch (error) {
-      setState(prev => ({ ...prev, isPlaying: false, lastError: (error as Error)?.message || 'TTS error' }))
+      setState(prev => ({ ...prev, isPlaying: false, lastError: (error as Error)?.message || 'TTS error', currentChunkIndex: null, currentChunkText: null }))
       throw error
     }
   }
@@ -880,15 +900,15 @@ export const useTTS = () => {
     // Ensure voices are initialized
     await waitForSystemVoices()
     
-    const { chunks } = chunkTextForTTS(text)
-    await speakChunksWithBrowserTTS(chunks)
+    const { chunks, meta } = chunkTextForTTS(text)
+    await speakChunksWithBrowserTTS(chunks, meta)
     
     console.log('[TTS] SpeechSynthesis completed')
   }
   
   const stop = () => {
     setStopRequested(true)
-    setState(prev => ({ ...prev, isPlaying: false, isPaused: false }))
+    setState(prev => ({ ...prev, isPlaying: false, isPaused: false, currentChunkIndex: null, currentChunkText: null }))
     const activeStop = getActiveStop()
     try { if (activeStop) activeStop() } catch {}
     setActiveStop(null)

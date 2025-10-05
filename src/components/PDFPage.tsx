@@ -1,5 +1,6 @@
 import { Component, createSignal, onMount, onCleanup, createEffect } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
+import { useTTS } from '@/stores/tts'
 
 interface PDFPageProps {
   pageNumber: number
@@ -10,6 +11,7 @@ interface PDFPageProps {
 
 export const PDFPage: Component<PDFPageProps> = (props) => {
   const { state: pdfState, getCurrentPage } = usePDF()
+  const { state: ttsState } = useTTS()
   const [canvasRef, setCanvasRef] = createSignal<HTMLCanvasElement | null>(null)
   const [textLayerRef, setTextLayerRef] = createSignal<HTMLDivElement | null>(null)
   // Removed unused isLoading signal; rendering is driven by hasRendered/error
@@ -145,6 +147,8 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         })
         // Use the same viewport as the canvas to keep perfect alignment
         await textLayerBuilder.render({ viewport })
+        // Try applying any active highlight after layer renders
+        try { applyCurrentHighlight() } catch {}
       }
     } catch (err) {
       const error = err as any
@@ -224,6 +228,115 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     }
     if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
       try { textLayerBuilder.cancel() } catch {}
+    }
+  })
+
+  // --- Highlight handling ---
+  const clearHighlights = () => {
+    const container = textLayerRef()
+    if (!container) return
+    const layer = (container.querySelector('.textLayer') as HTMLElement) || container
+    const marks = Array.from(layer.querySelectorAll('.tts-highlight')) as HTMLElement[]
+    if (marks.length === 0) return
+    for (const mark of marks) {
+      const parent = mark.parentNode as HTMLElement | null
+      const text = mark.textContent || ''
+      // Replace the highlight span with a text node
+      const textNode = document.createTextNode(text)
+      mark.replaceWith(textNode)
+      // Normalize parent to merge adjacent text nodes
+      try { parent?.normalize() } catch {}
+    }
+    // Also remove any empty spans accidentally created
+    const spans = Array.from(layer.querySelectorAll('span')) as HTMLSpanElement[]
+    for (const s of spans) {
+      if (s.childNodes.length === 0) s.remove()
+    }
+  }
+
+  const applyCurrentHighlight = () => {
+    const s = ttsState()
+    const current = (s.currentChunkText || '').trim()
+    if (!current) { clearHighlights(); return }
+    const container = textLayerRef()
+    if (!container) return
+    const layer = (container.querySelector('.textLayer') as HTMLElement) || container
+    const pageMeta = pdfState().pages[props.pageNumber - 1]
+    if (!pageMeta || !pageMeta.textContent) { clearHighlights(); return }
+
+    // First, clear previous highlights on this page
+    clearHighlights()
+    
+    // Determine intersection of current chunk range with this page's range
+    const chunkStart = typeof s.currentChunkStart === 'number' ? s.currentChunkStart! : null
+    const chunkEnd = typeof s.currentChunkEnd === 'number' ? s.currentChunkEnd! : null
+    let startIdx: number
+    let endIdx: number
+    if (chunkStart !== null && chunkEnd !== null && typeof pageMeta.textStart === 'number' && typeof pageMeta.textEnd === 'number') {
+      const pageStart = pageMeta.textStart!
+      const pageEnd = pageMeta.textEnd!
+      const ovStart = Math.max(pageStart, chunkStart)
+      const ovEnd = Math.min(pageEnd, chunkEnd)
+      if (ovEnd <= ovStart) return // no overlap on this page
+      // Convert to page-local indices
+      startIdx = ovStart - pageStart
+      endIdx = ovEnd - pageStart
+    } else {
+      // Fallback: try to find the full chunk within this page's text content
+      const pageText = pageMeta.textContent
+      const localStart = pageText.indexOf(current)
+      if (localStart < 0) return
+      startIdx = localStart
+      endIdx = localStart + current.length
+    }
+
+    const spans = Array.from(layer.querySelectorAll('span')) as HTMLSpanElement[]
+    if (spans.length === 0) return
+
+    // Walk spans and compute combined positions with a single space between nodes,
+    // matching the construction in pdf.ts (items.join(' ')).
+    let pos = 0
+    for (let i = 0; i < spans.length; i++) {
+      const s = spans[i]
+      const text = s.textContent || ''
+      const nodeStart = pos
+      const nodeEnd = nodeStart + text.length
+
+      const hlStart = Math.max(0, startIdx - nodeStart)
+      const hlEnd = Math.min(text.length, endIdx - nodeStart)
+      const hasOverlap = hlEnd > hlStart
+      if (hasOverlap) {
+        // Split into before/mid/after and wrap mid with highlight span
+        const before = text.slice(0, hlStart)
+        const mid = text.slice(hlStart, hlEnd)
+        const after = text.slice(hlEnd)
+        const frag = document.createDocumentFragment()
+        if (before) frag.appendChild(document.createTextNode(before))
+        if (mid) {
+          const mark = document.createElement('span')
+          mark.className = 'tts-highlight'
+          mark.textContent = mid
+          frag.appendChild(mark)
+        }
+        if (after) frag.appendChild(document.createTextNode(after))
+        // Replace span contents
+        s.textContent = ''
+        s.appendChild(frag)
+      }
+
+      // Advance pos, adding a space between nodes (except last) to mirror join(' ')
+      pos = nodeEnd + 1
+      if (i === spans.length - 1) pos = nodeEnd
+      // Early exit if we've passed the end
+      if (pos > endIdx) break
+    }
+  }
+
+  // Re-apply highlight when TTS chunk changes or after render completes
+  createEffect(() => {
+    void ttsState().currentChunkText
+    if (props.isVisible && hasRendered()) {
+      try { applyCurrentHighlight() } catch {}
     }
   })
 

@@ -14,6 +14,9 @@ export interface PDFPage {
   width: number
   height: number
   textContent?: string
+  // Global text offsets within getAllExtractedText() aggregation
+  textStart?: number
+  textEnd?: number
 }
 
 export interface TTSModel {
@@ -29,6 +32,11 @@ export interface TTSState {
   isPaused?: boolean
   currentSentence: number
   totalSentences: number
+  // Active chunk info for UI highlighting
+  currentChunkIndex?: number | null
+  currentChunkText?: string | null
+  currentChunkStart?: number | null
+  currentChunkEnd?: number | null
   voice: string
   rate: number
   pitch: number

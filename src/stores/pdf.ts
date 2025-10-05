@@ -56,6 +56,7 @@ export const usePDF = () => {
       }
       
       const pages: PDFPage[] = []
+      let offset = 0
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i)
         const viewport = page.getViewport({ scale: 1 })
@@ -64,12 +65,18 @@ export const usePDF = () => {
         const textContent = await page.getTextContent()
         const text = textContent.items.map((item: any) => item.str).join(' ')
         
+        const pageStart = offset
+        const pageEnd = pageStart + text.length
         pages.push({
           pageNumber: i,
           width: viewport.width,
           height: viewport.height,
-          textContent: text
+          textContent: text,
+          textStart: pageStart,
+          textEnd: pageEnd
         })
+        // Account for the two newlines inserted between pages by getAllExtractedText()
+        offset = pageEnd + (i < pdf.numPages ? 2 : 0)
       }
       
       setState({
