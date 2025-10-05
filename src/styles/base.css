@@ -18,11 +18,9 @@ body {
   justify-content: center;
   min-width: 320px;
   min-height: 100vh;
-  /* App-wide frosted ambiance background - uses theme variables */
+  /* App-wide frosted ambiance background - simplified; remove blue/red layers */
   background:
     var(--ambient-gradient-1),
-    var(--ambient-gradient-2),
-    var(--ambient-gradient-3),
     var(--ambient-base);
   color: var(--text-primary);
 }
@@ -88,4 +86,3 @@ body {
   flex-direction: column;
   gap: 1rem;
 }
-

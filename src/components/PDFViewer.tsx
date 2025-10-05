@@ -481,7 +481,11 @@ export const PDFViewer: Component = () => {
 
       <div class="pdf-scroll" ref={el => { scrollRoot = el }}>
         {pdfState().isLoading && (
-          <div class="loading">Loading PDF...</div>
+          <div class="pdf-loading-overlay" aria-hidden="true">
+            <div class="pdf-loading-modal">
+              <div class="loading-spinner" />
+            </div>
+          </div>
         )}
 
         {pdfState().error && (
