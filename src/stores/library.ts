@@ -19,14 +19,13 @@ import {
   LeaderInfo,
   DocumentId,
   LibraryError,
-  LibraryErrorCodes,
-  ImportProgress as LibraryImportProgress
+  LibraryErrorCodes
 } from '@/types/library'
 import { opfsManager } from '@/utils/opfs'
 import { leaderElection } from '@/utils/leader-election'
 import { broadcastChannel } from '@/utils/broadcast-channel'
 import { logLibraryStore } from '@/utils/logger'
-import { importFile, importFiles, importFolder, ImportProgress, ImportResult } from '@/utils/import'
+  import { importFile, importFiles, importFolder, ImportProgress, ImportResult } from '@/utils/import'
 
 interface LibraryState {
   // Data
@@ -35,7 +34,7 @@ interface LibraryState {
   currentBookmarks: BookmarksFile | null
   userSettings: UserSettings
   readerSettings: ReaderSettings
-  conversions: Record<string, any>
+  // reserved for future conversions (removed for now)
   
   // UI State
   isLoading: boolean
@@ -86,7 +85,6 @@ const [state, setState] = createSignal<LibraryState>({
     autoBookmark: true,
     syncProgress: true
   },
-  conversions: {},
   
   isLoading: false,
   isInitialized: false,
@@ -172,7 +170,6 @@ export const useLibrary = () => {
     setState(prev => ({ ...prev, isLoading: true, error: null }))
 
     let opfsInitialized = false
-    let leaderElectionSetup = false
     let fallbackMode = false
 
     try {
@@ -230,7 +227,6 @@ export const useLibrary = () => {
       logLibraryStore.debug('Setting up leader election')
       try {
         await setupLeaderElection()
-        leaderElectionSetup = true
       } catch (leaderError) {
         logLibraryStore.warn('Leader election failed, continuing in single-tab mode', leaderError instanceof Error ? leaderError : new Error(String(leaderError)))
       }
@@ -260,7 +256,6 @@ export const useLibrary = () => {
         leaderInfo: state().leaderInfo,
         tabId: leaderElection.getTabId(),
         opfsInitialized,
-        leaderElectionSetup,
         fallbackMode
       })
       
@@ -782,7 +777,7 @@ export const useLibrary = () => {
           stage: 'validating',
           progress: 10,
           error: undefined
-        } as LibraryImportProgress
+        } as ImportProgress
       } as LibraryState))
 
       const results = await importFiles(fileArray, (progress) => {
@@ -805,7 +800,7 @@ export const useLibrary = () => {
             progress: 0, 
             totalFiles: fileArray.length,
             error: results.failed > 0 ? 'Some files failed to import' : 'All files failed to import'
-          } as LibraryImportProgress
+          } as ImportProgress
 
       setState(prev => ({ 
         ...prev, 
@@ -880,7 +875,7 @@ export const useLibrary = () => {
             stage: 'error' as const, 
             progress: 0,
             error: 'No files were successfully imported'
-          } as LibraryImportProgress
+          } as ImportProgress
 
       setState(prev => ({ 
         ...prev, 

@@ -5,7 +5,6 @@
 
 // OPFS Directory structure constants
 export const OPFS_STRUCTURE = {
-  ROOT: '/',
   INDEX: '/index.json',
   SETTINGS_DIR: '/settings/',
   USER_SETTINGS: '/settings/user.json',

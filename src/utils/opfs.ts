@@ -240,7 +240,7 @@ export class OPFSManager {
    */
   async writeBinaryFile(path: string, data: ArrayBuffer | Uint8Array): Promise<void> {
     try {
-      const size = data instanceof Uint8Array ? data.byteLength : data.byteLength
+      const size = (data as ArrayBuffer | Uint8Array).byteLength
       logOPFS.debug('writeBinaryFile start', { path, bytes: size })
       const file = await this.getFileHandle(path, true)
       const writable = await file.createWritable()
@@ -293,32 +293,6 @@ export class OPFSManager {
     }
   }
 
-  /**
-   * Delete a file
-   */
-  async deleteFile(path: string): Promise<void> {
-    try {
-      const parts = path.split('/')
-      const filename = parts.pop()!
-      const directory = parts.join('/') || '/'
-
-      const dirHandle = await this.getDirectory(directory)
-      await dirHandle.removeEntry(filename)
-    } catch (error) {
-      // Ignore file not found errors
-      if (error instanceof DOMException && error.name === 'NotFoundError') {
-        return
-      }
-      
-      throw new LibraryError(
-        `Failed to delete file ${path}`,
-        LibraryErrorCodes.PERMISSION_DENIED,
-        undefined,
-        error instanceof Error ? error : new Error(String(error))
-      )
-    }
-  }
-
   
   /**
    * Check if a file exists
@@ -330,35 +304,6 @@ export class OPFSManager {
     } catch {
       return false
     }
-  }
-
-  /**
-   * Get file size
-   */
-  async getFileSize(path: string): Promise<number> {
-    try {
-      const file = await this.getFileHandle(path)
-      const fileObj = await file.getFile()
-      return fileObj.size
-    } catch {
-      return 0
-    }
-  }
-
-  /**
-   * List directory contents
-   */
-  async listDirectory(path: string): Promise<string[]> {
-    const dir = await this.getDirectory(path)
-    const entries: string[] = []
-    
-    // Use iteration with unknown structure for compatibility
-    // @ts-ignore - DirectoryHandle iteration may not be fully typed
-    for await (const [name] of dir.entries()) {
-      entries.push(name)
-    }
-    
-    return entries
   }
 
   /**
