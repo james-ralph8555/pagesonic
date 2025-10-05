@@ -139,7 +139,14 @@ export class OPFSManager {
    * Get a directory handle
    */
   async getDirectory(path: string, create = false): Promise<FileSystemDirectoryHandle> {
-    if (!this.initialized) await this.initialize()
+    // Avoid re-entrancy deadlock: during initialization, root may already be set
+    // and we should not await initialize() again.
+    if (!this.root) {
+      await this.initialize()
+    } else if (this.initializationState === 'initializing') {
+      // Proceed using existing root while initialization finalizes
+      logOPFS.debug('getDirectory during initialization; using existing root')
+    }
     if (!this.root) throw new LibraryError('OPFS not initialized', LibraryErrorCodes.PERMISSION_DENIED)
 
     const parts = path.split('/').filter(Boolean)
@@ -156,7 +163,12 @@ export class OPFSManager {
    * Get a file handle
    */
   async getFileHandle(path: string, create = false): Promise<FileSystemFileHandle> {
-    if (!this.initialized) await this.initialize()
+    // Avoid re-entrancy deadlock similar to getDirectory
+    if (!this.root) {
+      await this.initialize()
+    } else if (this.initializationState === 'initializing') {
+      logOPFS.debug('getFileHandle during initialization; using existing root')
+    }
     
     const parts = path.split('/')
     const filename = parts.pop()!
@@ -171,10 +183,12 @@ export class OPFSManager {
    */
   async writeTextFile(path: string, content: string): Promise<void> {
     try {
+      logOPFS.debug('writeTextFile start', { path, bytes: content.length })
       const file = await this.getFileHandle(path, true)
       const writable = await file.createWritable()
       await writable.write(content)
       await writable.close()
+      logOPFS.debug('writeTextFile success', { path })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         throw new LibraryError(
@@ -226,10 +240,13 @@ export class OPFSManager {
    */
   async writeBinaryFile(path: string, data: ArrayBuffer | Uint8Array): Promise<void> {
     try {
+      const size = data instanceof Uint8Array ? data.byteLength : data.byteLength
+      logOPFS.debug('writeBinaryFile start', { path, bytes: size })
       const file = await this.getFileHandle(path, true)
       const writable = await file.createWritable()
       await writable.write(new Uint8Array(data))
       await writable.close()
+      logOPFS.debug('writeBinaryFile success', { path, bytes: size })
     } catch (error) {
       if (error instanceof DOMException && error.name === 'QuotaExceededError') {
         throw new LibraryError(

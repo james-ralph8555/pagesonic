@@ -466,7 +466,8 @@ export async function importFiles(
         ...progress,
         progress: safeProgress(progress.progress),
         currentFile: progress.currentFile || 'Unknown file',
-        totalFiles: safeProgress(progress.totalFiles || 0)
+        // Preserve the actual file count; don't clamp like a percentage
+        totalFiles: progress.totalFiles
       }
       progressCallback?.(safeProgressData)
     } catch (error) {
@@ -476,11 +477,17 @@ export async function importFiles(
 
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
-    const fileProgress = safeProgress((i / totalFiles) * 100)
-    
+
+    // Map this file's progress into its segment of the overall 0..100 timeline
+    // start: inclusive start of this file's segment, end: exclusive end
+    const segmentStart = safeProgress((i / totalFiles) * 100)
+    const segmentEnd = safeProgress(((i + 1) / totalFiles) * 100)
+    const segmentSpan = Math.max(0, segmentEnd - segmentStart)
+
+    // Initial notification for this file
     safeProgressCallback({
       stage: 'validating',
-      progress: fileProgress,
+      progress: segmentStart,
       currentFile: file.name,
       totalFiles
     })
@@ -488,14 +495,13 @@ export async function importFiles(
     try {
       const result = await importFile(file, (fileProgress) => {
         try {
-          // Adjust progress to be within the overall batch progress
-          const batchProgress = safeProgress((i / totalFiles) * 100)
-          const overallProgress = safeProgress(fileProgress.progress + batchProgress)
-          const adjustedProgress = safeProgress(overallProgress / 2) // Scale to 0-50% for batch
-          
+          // Map inner 0..100 progress to this file's segment [segmentStart..segmentEnd]
+          const inner = safeProgress(fileProgress.progress)
+          const mapped = safeProgress(segmentStart + (inner / 100) * segmentSpan)
+
           safeProgressCallback({
             ...fileProgress,
-            progress: adjustedProgress,
+            progress: mapped,
             currentFile: file.name,
             totalFiles
           })
@@ -503,7 +509,8 @@ export async function importFiles(
           console.warn('File progress calculation failed:', error)
           safeProgressCallback({
             stage: fileProgress.stage || 'processing',
-            progress: safeProgress((i / totalFiles) * 50), // Use simple progress as fallback
+            // Fallback to midpoint of this file's segment
+            progress: safeProgress(segmentStart + segmentSpan / 2),
             currentFile: file.name,
             totalFiles
           })
