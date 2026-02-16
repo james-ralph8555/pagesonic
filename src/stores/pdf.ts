@@ -138,8 +138,6 @@ export const usePDF = () => {
       })
       let lastCurrentPage = 1
 
-      try { console.info('[PDF] Extraction queue initialized with', numPages - 1, 'pages') } catch {}
-
       let pageNumber: number | undefined
       while ((pageNumber = getNextPage(extractionQueue, extractedPages)) !== undefined) {
         // Yield to browser between extractions to allow UI updates and scrolling

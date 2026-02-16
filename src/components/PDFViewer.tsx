@@ -8,7 +8,7 @@ import { useTheme } from '@/stores/theme'
 import { logPDF } from '@/utils/logger'
 
 export const PDFViewer: Component = () => {
-  const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
+  const { state: pdfState, loadPDF, getAllExtractedText, setCurrentPage: setStoreCurrentPage } = usePDF()
   const { state: ttsState, speak, pause, resume, models, loadModel, ensureBrowserEngine } = useTTS()
   const [selectedModel, setSelectedModel] = createSignal<string>('Kokoro TTS')
   const { theme, setTheme } = useTheme()
@@ -238,6 +238,7 @@ export const PDFViewer: Component = () => {
           seedFirst = 1
           seedLast = 1
           setCurrentPage(1)
+          setStoreCurrentPage(1)
           recomputeVisiblePages()
         }
         return
@@ -245,6 +246,7 @@ export const PDFViewer: Component = () => {
       if (centerPage === lastSeedCenter) return
       lastSeedCenter = centerPage
       setCurrentPage(centerPage)
+      setStoreCurrentPage(centerPage)
       // Include a window around the center page to start rendering nearby
       seedFirst = Math.max(1, centerPage - SEED_WINDOW_RADIUS)
       seedLast = Math.min(pdfState().pages.length, centerPage + SEED_WINDOW_RADIUS)
@@ -282,6 +284,7 @@ export const PDFViewer: Component = () => {
     const centerTop = Math.max(0, offsetWithinRoot - (scrollRoot.clientHeight / 2) + (target.clientHeight / 2))
     scrollRoot.scrollTo({ top: centerTop, behavior: 'smooth' })
     setCurrentPage(pn)
+    setStoreCurrentPage(pn)
   }
 
   onCleanup(() => {
