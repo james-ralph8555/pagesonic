@@ -35,10 +35,10 @@ The ledger below is intentionally granular so an implementation agent can execut
 ## Feature Ledger
 | ID | Feature | Priority | Scope | Status | PR/Commit | Owner | Acceptance Criteria | Dependencies |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DOC-001 | Add modernization backlog + ledger | P0 | Create this file as project execution source of truth | done | pending | coding-agent | Backlog exists with prioritized, commit-trackable tasks | None |
-| DOC-002 | Rewrite README for modernization workflow | P0 | Replace stale README sections with current roadmap and matrix | done | pending | coding-agent | README links backlog and shows model/status matrix | DOC-001 |
-| DOC-003 | Replace AGENTS operational guide | P0 | New repo-owned implementation guide with quality gates | done | pending | coding-agent | New AGENTS specifies workflow + commands + commit format | DOC-001 |
-| DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | pending | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
+| DOC-001 | Add modernization backlog + ledger | P0 | Create this file as project execution source of truth | done | 4a8acff | coding-agent | Backlog exists with prioritized, commit-trackable tasks | None |
+| DOC-002 | Rewrite README for modernization workflow | P0 | Replace stale README sections with current roadmap and matrix | done | 81d723e | coding-agent | README links backlog and shows model/status matrix | DOC-001 |
+| DOC-003 | Replace AGENTS operational guide | P0 | New repo-owned implementation guide with quality gates | done | f49989f | coding-agent | New AGENTS specifies workflow + commands + commit format | DOC-001 |
+| DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | b11bc37 | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
 | P0-RDR-001 | Staged PDF load pipeline | P0 | Load metadata/first page first; defer full extraction | planned | pending | coding-agent | First page renders before full text extraction completion | None |
 | P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | planned | pending | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
 | P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | planned | pending | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
