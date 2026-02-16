@@ -69,3 +69,20 @@ export interface ReaderState {
 
 
 export type AppMode = 'pdf' | 'settings' | 'library'
+
+// Re-export telemetry types
+export type {
+  TelemetryCategory,
+  TelemetryEventBase,
+  PDFEventName,
+  PDFEvent,
+  TTSEventName,
+  TTSEvent,
+  RenderEventName,
+  RenderEvent,
+  AppEventName,
+  AppEvent,
+  TelemetryEvent,
+  TelemetrySnapshot,
+  TelemetryConfig
+} from './telemetry'
