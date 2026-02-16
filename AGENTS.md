@@ -97,10 +97,14 @@ When running browser verification:
 ## Charm Crush Testing Protocol
 Use this message structure after each feature implementation:
 1. `What changed`: one paragraph summary.
-2. `How to test in browser`:
-- run `npm run preview`,
-- open the preview URL,
-- perform 3-8 feature-specific steps,
-- compare to expected results.
-3. `Ask the user`: "How would you like to test this slice in your browser? If you want, use the checklist above."
-4. `Stop`: wait for user feedback before moving to the next backlog ID.
+2. `Automated MCP Verification` (if browser is running on port 9223):
+   - Use MCP tools to navigate, interact, and verify the feature works
+   - Check console messages for errors
+   - Report findings to user before manual testing
+3. `How to test in browser`:
+   - run `npm run preview`,
+   - open the preview URL,
+   - perform 3-8 feature-specific steps,
+   - compare to expected results.
+4. `Ask the user`: "How would you like to test this slice in your browser? If you want, use the checklist above."
+5. `Stop`: wait for user feedback before moving to the next backlog ID.
