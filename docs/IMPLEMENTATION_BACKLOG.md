@@ -54,7 +54,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P0-RDR-008 | Canvas memory guardrails | P0 | Limit retained raster surfaces and reclaim memory | planned | pending | coding-agent | Memory usage plateaus under long scroll sessions | P0-RDR-003 |
 | P0-RDR-009 | Mobile low-power render mode | P0 | Reduced expensive visual effects + conservative prefetch | planned | pending | coding-agent | Mobile mode maintains responsiveness on mid-tier devices | P0-RDR-003 |
 | P0-RDR-010 | Reader perf baseline harness | P0 | Script/utility to compare key metrics across commits | planned | pending | coding-agent | Baseline report generated and stored for regression checks | P0-RDR-001 |
-| P0-PFV-001 | Telemetry schema + store | P0 | Typed perf event pipeline and ring buffer snapshots | planned | pending | coding-agent | Unified telemetry API with typed event catalog | None |
+| P0-PFV-001 | Telemetry schema + store | P0 | Typed perf event pipeline and ring buffer snapshots | done | 53a6f14 | coding-agent | Unified telemetry API with typed event catalog | None |
 | P0-PFV-002 | PDF metrics instrumentation | P0 | Capture load/render/frame/queue timing events | planned | pending | coding-agent | p50/p95 render metrics visible in snapshots | P0-PFV-001 |
 | P0-PFV-003 | TTS metrics instrumentation | P0 | Capture model init, synth latency, playback continuity | planned | pending | coding-agent | TTS pipeline timings visible per session | P0-PFV-001 |
 | P0-PFV-004 | Settings perf dashboard | P0 | Add metrics table/charts to debug settings area | planned | pending | coding-agent | User can inspect current + recent perf metrics | P0-PFV-002 |
