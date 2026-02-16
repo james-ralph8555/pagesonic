@@ -1,6 +1,7 @@
 import { Component, createSignal, onMount, onCleanup, createEffect } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
+import { logPDF } from '@/utils/logger'
 
 interface PDFPageProps {
   pageNumber: number
@@ -46,12 +47,12 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     const myVersion = ++requestVersion
     if (!canvasRef() || !props.isVisible) {
       if (!props.isVisible) {
-        console.log('[PDFPage] skip render page', props.pageNumber, 'visible=false')
+        logPDF.debug(`skip render page ${props.pageNumber} visible=false`)
       }
       return
     }
 
-    console.info('[PDFPage] queue render page', props.pageNumber, 'scale', props.scale)
+    logPDF.debug(`queue render page ${props.pageNumber} scale ${props.scale}`)
     setError(null)
     lastRequestedScale = props.scale
 
@@ -59,10 +60,10 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       await acquire()
       // Re-check visibility and staleness after acquiring a slot
       if (myVersion !== requestVersion || !props.isVisible) {
-        console.log('[PDFPage] abort before start', props.pageNumber, '(invisible or superseded)')
+        logPDF.debug(`abort before start page ${props.pageNumber} (invisible or superseded)`)
         return
       }
-      console.info('[PDFPage] start render page', props.pageNumber)
+      logPDF.debug(`start render page ${props.pageNumber}`)
       const page = await getCurrentPage(props.pageNumber)
       if (!page) {
         setError('Page not found')
@@ -121,7 +122,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       await renderTask.promise
       setHasRendered(true)
       lastRenderedScale = props.scale
-      console.info('[PDFPage] finished render page', props.pageNumber)
+      logPDF.debug(`finished render page ${props.pageNumber}`)
 
       // Render selectable text layer on top of the canvas using TextLayerBuilder
       const container = textLayerRef()
@@ -165,7 +166,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         console.error('Error rendering page:', error)
       }
       if (isCancel) {
-        console.log('[PDFPage] canceled render page', props.pageNumber)
+        logPDF.debug(`canceled render page ${props.pageNumber}`)
       }
     } finally {
       if (renderTask) {
@@ -177,7 +178,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
   // Initial render on mount
   onMount(() => {
-    console.info('[PDFPage] mount page', props.pageNumber)
+    logPDF.debug(`mount page ${props.pageNumber}`)
     if (props.isVisible) {
       renderPage()
     }

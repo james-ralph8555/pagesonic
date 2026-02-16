@@ -345,8 +345,10 @@ if (typeof window !== 'undefined') {
     }
   }
 
-  console.log('[LibrarySystem] Comprehensive debug utilities available at window.__librarySystemDebug')
-  console.log('[LibrarySystem] Try: await window.__librarySystemDebug.diagnose() for full system check')
-  console.log('[LibrarySystem] Try: await window.__librarySystemDebug.recover() for automatic recovery')
-  console.log('[LibrarySystem] Try: await window.__librarySystemDebug.status() for quick status check')
+  if (import.meta.env.DEV) {
+    console.log('[LibrarySystem] Comprehensive debug utilities available at window.__librarySystemDebug')
+    console.log('[LibrarySystem] Try: await window.__librarySystemDebug.diagnose() for full system check')
+    console.log('[LibrarySystem] Try: await window.__librarySystemDebug.recover() for automatic recovery')
+    console.log('[LibrarySystem] Try: await window.__librarySystemDebug.status() for quick status check')
+  }
 }

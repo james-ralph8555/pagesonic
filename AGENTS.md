@@ -70,7 +70,7 @@ This project is configured with Chrome DevTools MCP (`.crush.json`) for browser 
 ### Environment Assumptions
 
 The following services are always assumed to be running:
-- Dev server: `http://localhost:3001`
+- Dev server: `https://localhost:3001`
 - Chrome DevTools Protocol: `http://localhost:9223`
 
 **Never start these services.** They are managed externally.
@@ -87,10 +87,56 @@ All tools are prefixed with `mcp_chrome-devtools_`:
 
 ### Browser Verification with MCP
 
-1. `mcp_chrome-devtools_navigate_page` to `http://localhost:3001`
+1. `mcp_chrome-devtools_navigate_page` to `https://localhost:3001`
 2. `mcp_chrome-devtools_take_screenshot` to capture state
 3. `mcp_chrome-devtools_click` / `mcp_chrome-devtools_fill` for interactions
 4. `mcp_chrome-devtools_list_console_messages` to check for errors
+
+## Console Logging System
+
+The project uses a context-aware Logger (`src/utils/logger.ts`) to prevent console flooding on large documents. By default, only the `general` context is enabled. Other contexts (`pdf`, `tts`, `audio`, `opfs`, etc.) are suppressed unless explicitly enabled.
+
+### Available Contexts
+
+- `general` - Always enabled by default
+- `pdf` - PDF loading, page rendering, IntersectionObserver events
+- `tts` - Text-to-speech synthesis, chunk processing
+- `audio` - Audio playback, queue management
+- `opfs` - Origin Private File System operations
+- `leader-election` - Tab leadership coordination
+- `broadcast-channel` - Cross-tab communication
+- `library-store` - Document library state
+
+### Enabling Debug Logs via MCP
+
+Use `evaluate_script` to toggle logging contexts:
+
+```javascript
+// Enable PDF debug logs
+() => {
+  window.__logger.setContextsEnabled(['pdf'], true);
+  return window.__logger.getEnabledContexts();
+}
+
+// Enable multiple contexts
+() => {
+  window.__logger.setContextsEnabled(['pdf', 'tts', 'audio'], true);
+  return window.__logger.getEnabledContexts();
+}
+
+// Disable a context
+() => {
+  window.__logger.setContextsEnabled(['pdf'], false);
+  return window.__logger.getEnabledContexts();
+}
+```
+
+### When to Enable Contexts
+
+- Enable `pdf` when debugging page loading, rendering order, or scroll issues
+- Enable `tts` when debugging speech synthesis or chunk queue problems
+- Enable `audio` when debugging playback issues
+- Always disable verbose contexts after debugging to keep console readable
 
 ## Charm Crush Testing Protocol
 Use this message structure after each feature implementation:
@@ -100,7 +146,7 @@ Use this message structure after each feature implementation:
    - Check console messages for errors
    - Report findings to user before manual testing
 3. `How to test in browser`:
-   - navigate to `http://localhost:3001`,
+   - navigate to `https://localhost:3001`,
    - perform 3-8 feature-specific steps,
    - compare to expected results.
 4. `Ask the user`: "How would you like to test this slice in your browser? If you want, use the checklist above."

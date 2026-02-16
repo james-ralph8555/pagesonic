@@ -6,13 +6,15 @@ export type PlayHandle = {
   stop: () => void
 }
 
+import { logAudio } from '@/utils/logger'
+
 export const ensureAudioContext = (existing?: AudioContext | null): AudioContext => {
   try {
     if (existing && existing.state !== 'closed') return existing
   } catch {}
   
   const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-  console.log(`[Audio] Created AudioContext with sampleRate: ${ctx.sampleRate}Hz`)
+  logAudio.debug(`Created AudioContext with sampleRate: ${ctx.sampleRate}Hz`)
   return ctx
 }
 
@@ -37,7 +39,7 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
   }
   
   if (invalidSamples > 0) {
-    console.warn(`[Audio] Found and replaced ${invalidSamples} invalid audio samples`)
+    logAudio.warn(`Found and replaced ${invalidSamples} invalid audio samples`)
   }
   
   // Basic normalization to prevent clipping
@@ -46,19 +48,19 @@ const sanitizeAndNormalize = (input: Float32Array): Float32Array => {
     // Values look like int16 range, scale down appropriately
     const k = 32768
     for (let i = 0; i < pcm.length; i++) pcm[i] = pcm[i] / k
-    console.log(`[Audio] Scaled int16-range audio by 1/${k}`)
+    logAudio.debug(`Scaled int16-range audio by 1/${k}`)
   } else if (maxAbs > 1) {
     // General normalization to prevent clipping
     const scale = Math.min(1.0, headroom / maxAbs)
     for (let i = 0; i < pcm.length; i++) pcm[i] = pcm[i] * scale
-    console.log(`[Audio] Normalized audio with max value ${maxAbs.toFixed(3)}, scale: ${scale.toFixed(3)}`)
+    logAudio.debug(`Normalized audio with max value ${maxAbs.toFixed(3)}, scale: ${scale.toFixed(3)}`)
   }
   
   // Remove DC offset if significant
   const mean = sum / Math.max(1, pcm.length)
   if (Math.abs(mean) > 1e-3) {
     for (let i = 0; i < pcm.length; i++) pcm[i] -= mean
-    console.log(`[Audio] Removed DC offset: ${mean.toFixed(6)}`)
+    logAudio.debug(`Removed DC offset: ${mean.toFixed(6)}`)
   }
   
   // Simple fade to prevent clicks
@@ -97,7 +99,7 @@ export const playPCM = async (
   // Resample to match AudioContext sample rate if needed
   if (Math.abs(sampleRate - ctx.sampleRate) > 100) {
     targetSampleRate = ctx.sampleRate
-    console.log(`[Audio] Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz`)
+    logAudio.debug(`Resampling from ${sampleRate}Hz to ${targetSampleRate}Hz`)
   }
 
   // Create source buffer at original rate
@@ -118,9 +120,9 @@ export const playPCM = async (
       src.start()
       const rendered: AudioBuffer = await offline.startRendering()
       finalBuffer = rendered
-      console.log(`[Audio] Used OfflineAudioContext for high-quality resampling: ${sampleRate}Hz → ${targetSampleRate}Hz`)
+      logAudio.debug(`Used OfflineAudioContext for high-quality resampling: ${sampleRate}Hz → ${targetSampleRate}Hz`)
     } catch (e) {
-      console.warn('[Audio] OfflineAudioContext failed, using direct playback:', e)
+      logAudio.warn('OfflineAudioContext failed, using direct playback:', e)
       // Fallback: just use the original buffer
     }
   }
@@ -142,11 +144,11 @@ export const playPCM = async (
     await ctx.resume()
   }
   
-  console.log(`[Audio] Starting playback - samples: ${finalBuffer.length}, sampleRate: ${finalBuffer.sampleRate}`)
+  logAudio.rateLimited('audio-playback', 20, 'debug', `Starting playback - samples: ${finalBuffer.length}, sampleRate: ${finalBuffer.sampleRate}`)
   src.start()
   
   src.onended = () => {
-    console.log('[Audio] Playback completed')
+    logAudio.rateLimited('audio-complete', 20, 'debug', 'Playback completed')
     try { opts?.onEnded?.() } catch {}
   }
   
@@ -154,7 +156,7 @@ export const playPCM = async (
     context: ctx,
     source: src,
     stop: () => {
-      console.log('[Audio] Manual stop requested')
+      logAudio.debug('Manual stop requested')
       try { src.onended = null } catch {}
       try { src.stop() } catch {}
     }

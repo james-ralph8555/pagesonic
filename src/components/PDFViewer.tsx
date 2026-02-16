@@ -5,6 +5,7 @@ import { PDFPage } from './PDFPage'
 import { GlassDropdownButton } from './GlassDropdownButton'
 import { SelectionToolbar } from './SelectionToolbar'
 import { useTheme } from '@/stores/theme'
+import { logPDF } from '@/utils/logger'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText } = usePDF()
@@ -45,7 +46,7 @@ export const PDFViewer: Component = () => {
         for (const p of prev) { if (!next.has(p)) { equal = false; break } }
         if (equal) return prev
       }
-      console.info('[PDFViewer] visiblePages size ->', next.size, 'pages:', Array.from(next).slice(0, 10), next.size > 10 ? '…' : '')
+      logPDF.debug(`visiblePages size -> ${next.size} pages: ${Array.from(next).slice(0, 10).join(',')}${next.size > 10 ? '…' : ''}`)
       return next
     })
   }
@@ -131,11 +132,11 @@ export const PDFViewer: Component = () => {
       if (!scrollListenerAttached && scrollRoot) {
         scrollRoot.addEventListener('scroll', onScrollRoot, { passive: true })
         scrollListenerAttached = true
-        console.info('[PDFViewer] Attached scroll listener to .pdf-scroll')
+        logPDF.debug('Attached scroll listener to .pdf-scroll')
         // Initialize scroll tracking after attaching listener
         lastScrollY = scrollRoot.scrollTop
       }
-      console.info('[PDFViewer] Setting up IntersectionObserver')
+      logPDF.debug('Setting up IntersectionObserver')
       io = new IntersectionObserver((entries) => {
         for (const entry of entries) {
           const pnAttr = entry.target.getAttribute('data-page')
@@ -143,11 +144,11 @@ export const PDFViewer: Component = () => {
           if (!Number.isFinite(pn)) continue
           if (entry.isIntersecting) {
             ioVisible.add(pn)
-            console.log('[PDFViewer] IO intersect add page', pn)
+            logPDF.rateLimited('io-add', 100, 'debug', 'IO intersect add page', pn)
           } else {
             ioVisible.delete(pn)
             // Keep pruned offscreen pages out of the render set
-            console.log('[PDFViewer] IO intersect remove page', pn)
+            logPDF.rateLimited('io-remove', 100, 'debug', 'IO intersect remove page', pn)
           }
         }
         recomputeVisiblePages()
@@ -161,7 +162,7 @@ export const PDFViewer: Component = () => {
       const observeAll = () => {
         if (!io) return
         const nodes = scrollRoot!.querySelectorAll('.pdf-page-container')
-        console.info('[PDFViewer] Observing', nodes.length, 'page nodes')
+        logPDF.debug(`Observing ${nodes.length} page nodes`)
         nodes.forEach(n => io!.observe(n))
       }
       // Wait a tick for DOM to settle
@@ -233,7 +234,7 @@ export const PDFViewer: Component = () => {
       if (!centerPage) {
         // Fallback to first page if nothing intersects (e.g., empty container)
         if (pdfState().pages.length > 0) {
-          console.info('[PDFViewer] seed: no intersecting pages; fallback to 1')
+          logPDF.debug('seed: no intersecting pages; fallback to 1')
           seedFirst = 1
           seedLast = 1
           setCurrentPage(1)
@@ -247,7 +248,7 @@ export const PDFViewer: Component = () => {
       // Include a window around the center page to start rendering nearby
       seedFirst = Math.max(1, centerPage - SEED_WINDOW_RADIUS)
       seedLast = Math.min(pdfState().pages.length, centerPage + SEED_WINDOW_RADIUS)
-      console.info('[PDFViewer] seed from scroll: center', centerPage, 'window', seedFirst, ' - ', seedLast)
+      logPDF.debug(`seed from scroll: center ${centerPage} window ${seedFirst} - ${seedLast}`)
       recomputeVisiblePages()
     } catch {
       // Non-fatal; IO will fill in
@@ -322,7 +323,7 @@ export const PDFViewer: Component = () => {
         if (!io || !scrollRoot) return
         const nodes = scrollRoot.querySelectorAll('.pdf-page-container')
         nodes.forEach(n => io!.observe(n))
-        console.info('[PDFViewer] Rebinding observer to', nodes.length, 'page nodes')
+        logPDF.debug(`Rebinding observer to ${nodes.length} page nodes`)
       })
       // Seed visible pages based on current scroll position
       requestAnimationFrame(() => seedVisibleFromScroll())
@@ -330,7 +331,7 @@ export const PDFViewer: Component = () => {
       if (!scrollListenerAttached) {
         scrollRoot.addEventListener('scroll', onScrollRoot, { passive: true })
         scrollListenerAttached = true
-        console.info('[PDFViewer] Attached scroll listener to .pdf-scroll (rebinding)')
+        logPDF.debug('Attached scroll listener to .pdf-scroll (rebinding)')
       }
     }
   })

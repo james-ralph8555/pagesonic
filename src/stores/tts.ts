@@ -4,6 +4,7 @@ import { ensureAudioContext, playPCM, suspend as suspendAudio, resume as resumeA
 import { cleanForTTS } from '@/tts/textCleaner'
 import { getPref, setPref } from '@/utils/idb'
 import { isIOSDevice } from '@/utils/iosDetection'
+import { logTTS } from '@/utils/logger'
 
 // Shared, app-wide TTS state
 const [state, setState] = createSignal<TTSState>({
@@ -104,7 +105,7 @@ export const useTTS = () => {
         setState(prev => ({ ...prev, isWebGPUSupported: supported }))
       }
     } catch (error) {
-      console.warn('WebGPU not supported:', error)
+      logTTS.warn('WebGPU not supported')
       setState(prev => ({ ...prev, isWebGPUSupported: false }))
     }
   }
@@ -506,7 +507,7 @@ export const useTTS = () => {
         if (!utterance.lang && selected?.lang) utterance.lang = selected.lang
         const chunkIdx = i
         const vName = selected?.name || state().voice || 'unknown'
-        console.log(`[TTS] speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) voice=${vName} rate=${utterance.rate} pitch=${utterance.pitch} sr=n/a`)
+        logTTS.rateLimited('speak-chunk', 10, 'debug', `speak chunk ${chunkIdx + 1}/${chunks.length} (len=${text.length}) voice=${vName} rate=${utterance.rate} pitch=${utterance.pitch} sr=n/a`)
         utterance.onstart = () => {
           // Expose current chunk for UI highlighting
           const m = meta[chunkIdx]
@@ -522,7 +523,7 @@ export const useTTS = () => {
           }
         }
         utterance.onerror = (ev) => {
-          console.warn('[TTS] chunk error', ev.error)
+          logTTS.warn('Browser TTS chunk error: ' + String(ev.error))
           errCount += 1
           i += 1
           next()
@@ -619,14 +620,14 @@ export const useTTS = () => {
   })()
 
   const speakWithPiperTTS = async (text: string) => {
-    console.log('[TTS] Starting Piper TTS synthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
+    logTTS.info('Starting Piper TTS synthesis for text: ' + text.substring(0, 50) + (text.length > 50 ? '...' : ''))
     const piperWorker = getPiperWorker()
     if (!piperWorker || !isPiperInitialized()) {
       throw new Error('Piper TTS not initialized')
     }
 
     const cleaned = cleanForTTS(text)
-    console.log('[TTS] Text cleaned, length:', cleaned.length)
+    logTTS.debug('Text cleaned, length: ' + cleaned.length)
 
     const { chunks, meta } = chunkTextForTTS(cleaned)
 
@@ -683,7 +684,7 @@ export const useTTS = () => {
             const sr = item.sr
             const playbackRate = Math.max(0.5, Math.min(state().rate || 1.0, 2.0))
 
-            console.log('[TTS] Playing WebAudio chunk - samples:', f32.length, 'sampleRate:', sr)
+            logTTS.rateLimited('piper-playback', 10, 'debug', 'Playing WebAudio chunk - samples: ' + f32.length + ', sampleRate: ' + sr)
 
             ;(async () => {
               try {
@@ -691,11 +692,9 @@ export const useTTS = () => {
                   audioContext: audioCtx!, 
                   playbackRate,
                   onEnded: () => {
-                    console.log('[TTS] WebAudio chunk playback completed')
+                    // Rate-limited via playback count
                   }
                 })
-
-                console.log('[TTS] WebAudio handle created successfully')
 
                 currentHandle = handle
                 setActiveStop(() => { 
@@ -715,10 +714,9 @@ export const useTTS = () => {
 
                 // Schedule next after duration
                 const seconds = (f32.length / sr) / playbackRate
-                console.log('[TTS] Scheduled next chunk in', seconds.toFixed(2), 'seconds')
+                // logTTS.rateLimited('piper-schedule', 20, 'debug', `Scheduled next chunk in ${seconds.toFixed(2)}s`)
 
                 setTimeout(() => {
-                  console.log('[TTS] WebAudio chunk finished, scheduling next')
                   playing = false
                   currentHandle = null
 
@@ -731,7 +729,7 @@ export const useTTS = () => {
                 }, Math.max(0, seconds * 1000))
 
               } catch (err) {
-                console.error('[TTS] WebAudio Piper chunk error:', err)
+                logTTS.error('WebAudio Piper chunk error', err as Error)
                 playing = false
                 currentHandle = null
                 setTimeout(() => startNext(), 100)
@@ -775,7 +773,7 @@ export const useTTS = () => {
             }
 
             audio.onerror = () => {
-              console.warn('[TTS] Piper chunk playback error', audio.error)
+              logTTS.warn('Piper chunk playback error: ' + String(audio.error))
               try { URL.revokeObjectURL(url) } catch {}
               playing = false
               currentAudio = null
@@ -798,11 +796,11 @@ export const useTTS = () => {
               // Prefer WebAudio path when Float32 is provided
               if (d.chunk?.f32 && d.chunk?.sr) {
                 const f32 = new Float32Array(d.chunk.f32)
-                console.log('[TTS] Enqueued WebAudio chunk - samples:', f32.length, 'sampleRate:', d.chunk.sr)
+                logTTS.rateLimited('piper-enqueue', 20, 'debug', 'Enqueued WebAudio chunk - samples: ' + f32.length)
                 queue.push({ f32, sr: d.chunk.sr })
               } else {
                 const url = URL.createObjectURL(d.chunk.audio)
-                console.log('[TTS] Enqueued HTMLAudio chunk')
+                logTTS.rateLimited('piper-enqueue-html', 20, 'debug', 'Enqueued HTMLAudio chunk')
                 queue.push({ url })
               }
 
@@ -810,14 +808,14 @@ export const useTTS = () => {
                 startNext()
               }
             } catch (err) {
-              console.error('[TTS] Failed to enqueue Piper chunk:', err)
+              logTTS.error('Failed to enqueue Piper chunk', err as Error)
             }
           } else if (d.status === 'complete') {
-            console.log('[TTS] Worker reported generation complete')
+            logTTS.info('Worker reported generation complete')
             done = true
             tryResolve()
           } else if (d.status === 'error') {
-            console.error('[TTS] Worker reported error:', d.data)
+            logTTS.error('Worker reported error: ' + String(d.data))
             cleanup()
             reject(new Error(String(d.data || 'Piper TTS error')))
           }
@@ -847,7 +845,7 @@ export const useTTS = () => {
           phonemeType: 'espeak'
         }
 
-        console.log('[TTS] Sending synthesis request to worker')
+        logTTS.rateLimited('piper-synthesis', 5, 'debug', 'Sending synthesis request to worker')
         piperWorker.postMessage(synthesisRequest)
       })
     }
@@ -876,10 +874,10 @@ export const useTTS = () => {
     try {
       // Simple platform detection: iOS uses SpeechSynthesis, others use Piper TTS
       if (isIOSDevice()) {
-        console.log('[TTS] iOS detected, using SpeechSynthesis')
+        logTTS.debug('iOS detected, using SpeechSynthesis')
         await speakWithBrowserTTS(text)
       } else {
-        console.log('[TTS] Non-iOS device detected, using Piper TTS')
+        logTTS.debug('Non-iOS device detected, using Piper TTS')
         await speakWithPiperTTS(text)
       }
       
@@ -891,7 +889,7 @@ export const useTTS = () => {
   }
 
   const speakWithBrowserTTS = async (text: string) => {
-    console.log('[TTS] Starting SpeechSynthesis for text:', text.substring(0, 50) + (text.length > 50 ? '...' : ''))
+    logTTS.debug('Starting SpeechSynthesis for text: ' + text.substring(0, 50) + (text.length > 50 ? '...' : ''))
     
     if (!('speechSynthesis' in window)) {
       throw new Error('SpeechSynthesis not available on this platform')
@@ -903,7 +901,7 @@ export const useTTS = () => {
     const { chunks, meta } = chunkTextForTTS(text)
     await speakChunksWithBrowserTTS(chunks, meta)
     
-    console.log('[TTS] SpeechSynthesis completed')
+    logTTS.info('SpeechSynthesis completed')
   }
   
   const stop = () => {

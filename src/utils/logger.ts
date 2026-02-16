@@ -4,7 +4,7 @@
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
-export type LogContext = 'opfs' | 'leader-election' | 'library-store' | 'broadcast-channel' | 'general'
+export type LogContext = 'opfs' | 'leader-election' | 'library-store' | 'broadcast-channel' | 'tts' | 'audio' | 'pdf' | 'general'
 
 interface LogEntry {
   timestamp: string
@@ -19,10 +19,11 @@ interface LogEntry {
 class Logger {
   private static instance: Logger
   private logLevel: LogLevel = 'info'
-  private enabledContexts: Set<LogContext> = new Set(['opfs', 'leader-election', 'library-store', 'broadcast-channel', 'general'])
+  private enabledContexts: Set<LogContext> = new Set(['general'])
   private logs: LogEntry[] = []
   private maxLogs = 1000
   private timers: Map<string, number> = new Map()
+  private rateLimitCounters: Map<string, number> = new Map()
 
   private constructor() {}
 
@@ -39,6 +40,13 @@ class Logger {
   setLogLevel(level: LogLevel): void {
     this.logLevel = level
     console.log(`[Logger] Log level set to: ${level}`)
+  }
+
+  /**
+   * Get currently enabled contexts
+   */
+  getEnabledContexts(): LogContext[] {
+    return Array.from(this.enabledContexts)
   }
 
   /**
@@ -281,6 +289,45 @@ class Logger {
     
     this.info('general', 'Logger configuration updated', config)
   }
+
+  /**
+   * Rate-limited logging - only logs every nth occurrence of a key
+   * Useful for high-frequency events like TTS chunks, audio processing
+   */
+  rateLimited(
+    key: string,
+    nth: number,
+    level: LogLevel,
+    context: LogContext,
+    message: string,
+    data?: any
+  ): void {
+    const count = (this.rateLimitCounters.get(key) || 0) + 1
+    this.rateLimitCounters.set(key, count)
+    
+    // Always log if we're at the nth occurrence or if it's an error/warn
+    if (count % nth === 0 || level === 'error' || level === 'warn') {
+      const countInfo = count > 1 ? ` [${count} total]` : ''
+      this.log(level, context, message + countInfo, data)
+    }
+  }
+
+  /**
+   * Log a summary instead of individual events
+   * Useful for "completed X operations" style logging
+   */
+  summary(key: string, context: LogContext, messageFn: (count: number) => string): void {
+    const count = (this.rateLimitCounters.get(key) || 0) + 1
+    this.rateLimitCounters.set(key, count)
+    
+    // Only log at intervals: 1, 10, 50, 100, 500, 1000, then every 500
+    const logAt = [1, 10, 50, 100, 500, 1000]
+    const shouldLog = logAt.includes(count) || (count > 1000 && count % 500 === 0)
+    
+    if (shouldLog) {
+      this.info(context, messageFn(count))
+    }
+  }
 }
 
 // Export singleton instance
@@ -321,4 +368,35 @@ export const logBroadcastChannel = {
   error: (message: string, error?: Error, data?: any) => logger.error('broadcast-channel', message, error, data),
   startTimer: (key: string, message: string) => logger.startTimer(key, 'broadcast-channel', message),
   endTimer: (key: string, message: string, data?: any) => logger.endTimer(key, 'broadcast-channel', message, data)
+}
+
+export const logTTS = {
+  debug: (message: string, data?: any) => logger.debug('tts', message, data),
+  info: (message: string, data?: any) => logger.info('tts', message, data),
+  warn: (message: string, data?: any) => logger.warn('tts', message, data),
+  error: (message: string, error?: Error, data?: any) => logger.error('tts', message, error, data),
+  rateLimited: (key: string, nth: number, level: LogLevel, message: string, data?: any) => 
+    logger.rateLimited(key, nth, level, 'tts', message, data),
+  summary: (key: string, messageFn: (count: number) => string) => 
+    logger.summary(key, 'tts', messageFn)
+}
+
+export const logAudio = {
+  debug: (message: string, data?: any) => logger.debug('audio', message, data),
+  info: (message: string, data?: any) => logger.info('audio', message, data),
+  warn: (message: string, data?: any) => logger.warn('audio', message, data),
+  error: (message: string, error?: Error, data?: any) => logger.error('audio', message, error, data),
+  rateLimited: (key: string, nth: number, level: LogLevel, message: string, data?: any) => 
+    logger.rateLimited(key, nth, level, 'audio', message, data)
+}
+
+export const logPDF = {
+  debug: (message: string, data?: any) => logger.debug('pdf', message, data),
+  info: (message: string, data?: any) => logger.info('pdf', message, data),
+  warn: (message: string, data?: any) => logger.warn('pdf', message, data),
+  error: (message: string, error?: Error, data?: any) => logger.error('pdf', message, error, data),
+  rateLimited: (key: string, nth: number, level: LogLevel, message: string, data?: any) => 
+    logger.rateLimited(key, nth, level, 'pdf', message, data),
+  summary: (key: string, messageFn: (count: number) => string) => 
+    logger.summary(key, 'pdf', messageFn)
 }

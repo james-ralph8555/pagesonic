@@ -869,8 +869,10 @@ if (typeof window !== 'undefined') {
     }
   }
   
-  console.log('[LeaderElection] Debug utilities available at window.__libraryDebug')
-  console.log('[LeaderElection] Try: await window.__libraryDebug.diagnose() for a full check')
-  console.log('[LeaderElection] Try: await window.__libraryDebug.quickFix() for automatic recovery')
-  console.log('[LeaderElection] Try: await window.__libraryDebug.forceLeadership() for emergency override')
+  if (import.meta.env.DEV) {
+    console.log('[LeaderElection] Debug utilities available at window.__libraryDebug')
+    console.log('[LeaderElection] Try: await window.__libraryDebug.diagnose() for a full check')
+    console.log('[LeaderElection] Try: await window.__libraryDebug.quickFix() for automatic recovery')
+    console.log('[LeaderElection] Try: await window.__libraryDebug.forceLeadership() for emergency override')
+  }
 }

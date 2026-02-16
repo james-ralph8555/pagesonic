@@ -17,6 +17,7 @@ import {
   SettingsPayload,
   SearchPayload
 } from '@/types/library'
+import { logBroadcastChannel } from '@/utils/logger'
 
 export type MessageHandler = (message: LibraryMessage) => Promise<unknown> | unknown
 
@@ -111,7 +112,7 @@ export class BroadcastChannelManager {
       this.handleMessage(message)
     })
     if (queue.length > 0) {
-      console.log(`[BroadcastChannel] Processed ${queue.length} queued messages`)
+      logBroadcastChannel.debug(`Processed ${queue.length} queued messages`)
     }
   }
 
@@ -139,7 +140,7 @@ export class BroadcastChannelManager {
       // Queue the message for later processing
       if (this.messageQueue.length < 50) { // Prevent unlimited queue growth
         this.messageQueue.push(message)
-        console.debug(`[BroadcastChannel] Queued message type: ${message.type} (queue size: ${this.messageQueue.length})`)
+        logBroadcastChannel.debug(`Queued message type: ${message.type} (queue size: ${this.messageQueue.length})`)
       } else {
         console.warn(`[BroadcastChannel] Message queue full, dropping message type: ${message.type}`)
       }
@@ -534,6 +535,8 @@ if (typeof window !== 'undefined') {
     }
   }
   
-  console.log('[BroadcastChannel] Debug utilities available at window.__libraryBroadcastDebug')
-  console.log('[BroadcastChannel] Try: window.__libraryBroadcastDebug.diagnose() for a full check')
+  if (import.meta.env.DEV) {
+    console.log('[BroadcastChannel] Debug utilities available at window.__libraryBroadcastDebug')
+    console.log('[BroadcastChannel] Try: window.__libraryBroadcastDebug.diagnose() for a full check')
+  }
 }
