@@ -92,6 +92,28 @@ All tools are prefixed with `mcp_chrome-devtools_`:
 3. `mcp_chrome-devtools_click` / `mcp_chrome-devtools_fill` for interactions
 4. `mcp_chrome-devtools_list_console_messages` to check for errors
 
+### Test PDF Fixtures
+
+Pre-built test PDFs are available for automated browser verification without file picker interaction:
+
+| URL Parameter | Pages | Use Case |
+|---------------|-------|----------|
+| `?test-pdf=short` | 3 | Quick smoke tests |
+| `?test-pdf=medium` | 15 | Moderate content scenarios |
+| `?test-pdf=long` | 50 | Performance/stress testing |
+
+**Usage:**
+```
+mcp_chrome-devtools_navigate_page to https://localhost:3001/?test-pdf=short
+```
+
+The PDF will auto-load on mount. Check console for `[PDF] First page ready in X ms · N pages total` to confirm.
+
+**Regenerating test PDFs:**
+```bash
+npx ts-node scripts/generate-test-pdfs.ts
+```
+
 ## Console Logging System
 
 The project uses a context-aware Logger (`src/utils/logger.ts`) to prevent console flooding on large documents. By default, only the `general` context is enabled. Other contexts (`pdf`, `tts`, `audio`, `opfs`, etc.) are suppressed unless explicitly enabled.
