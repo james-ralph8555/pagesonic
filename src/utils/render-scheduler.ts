@@ -3,9 +3,15 @@
  *
  * Centralized scheduler for PDF page rendering.
  * Single authoritative queue controls page renders with priority-based scheduling.
+ *
+ * Enhanced with adaptive concurrency (P0-RDR-005):
+ * - Adjusts max concurrent renders based on device capabilities and runtime pressure
+ * - Reduces concurrency under high pressure to prevent jank
+ * - Increases concurrency when system is idle for faster throughput
  */
 
 import { logPDF } from './logger'
+import { PressureMonitor } from './pressure-monitor'
 
 export type RenderPriority = 'visible' | 'nearby' | 'offscreen'
 
@@ -19,10 +25,12 @@ export interface QueuedRender {
 }
 
 export interface RenderSchedulerConfig {
-  /** Maximum concurrent renders (default: 2) */
+  /** Maximum concurrent renders (default: auto-detected, override for manual control) */
   maxConcurrent?: number
   /** Pages to consider "nearby" around visible pages (default: 10) */
   nearbyRadius?: number
+  /** Enable adaptive concurrency based on runtime pressure (default: true) */
+  adaptive?: boolean
 }
 
 const PRIORITY_ORDER: Record<RenderPriority, number> = {
@@ -39,14 +47,51 @@ export class RenderScheduler {
   private queue: Map<number, QueuedRender> = new Map()
   private inflight: Set<number> = new Set()
   private maxConcurrent: number
+  private baselineConcurrency: number
   private nearbyRadius: number
+  private adaptive: boolean
   private versionCounter = 0
   private visiblePages: Set<number> = new Set()
   private totalPages = 0
+  private pressureUnsubscribe: (() => void) | null = null
 
   constructor(config: RenderSchedulerConfig = {}) {
-    this.maxConcurrent = config.maxConcurrent ?? 2
+    this.adaptive = config.adaptive ?? true
     this.nearbyRadius = config.nearbyRadius ?? 10
+
+    if (config.maxConcurrent !== undefined) {
+      this.maxConcurrent = config.maxConcurrent
+      this.baselineConcurrency = config.maxConcurrent
+    } else {
+      const caps = PressureMonitor.detectCapabilities()
+      this.baselineConcurrency = caps.baselineConcurrency
+      this.maxConcurrent = this.baselineConcurrency
+    }
+
+    if (this.adaptive) {
+      PressureMonitor.start()
+      this.pressureUnsubscribe = PressureMonitor.onPressureChange((state) => {
+        this.adjustConcurrency(state.pressure)
+      })
+      const recommended = PressureMonitor.getRecommendedConcurrency()
+      if (recommended !== this.maxConcurrent) {
+        this.maxConcurrent = recommended
+        try { console.info('[RenderScheduler] initial adaptive concurrency set to', this.maxConcurrent) } catch {}
+      }
+    }
+
+    try { console.info('[RenderScheduler] initialized with maxConcurrent=', this.maxConcurrent, 'adaptive=', this.adaptive) } catch {}
+  }
+
+  private adjustConcurrency(pressure: 'low' | 'medium' | 'high'): void {
+    const oldMax = this.maxConcurrent
+    const recommended = PressureMonitor.getRecommendedConcurrency()
+
+    if (recommended !== this.maxConcurrent) {
+      this.maxConcurrent = recommended
+      try { console.info('[RenderScheduler] adjusted concurrency', oldMax, '->', this.maxConcurrent, '(pressure:', pressure + ')') } catch {}
+      this.processQueue()
+    }
   }
 
   /**
@@ -145,13 +190,19 @@ export class RenderScheduler {
     queued: number
     inflight: number
     maxConcurrent: number
+    baselineConcurrency: number
+    adaptive: boolean
     visiblePages: number[]
+    pressureState: ReturnType<typeof PressureMonitor.getPressureState> | null
   } {
     return {
       queued: this.queue.size,
       inflight: this.inflight.size,
       maxConcurrent: this.maxConcurrent,
+      baselineConcurrency: this.baselineConcurrency,
+      adaptive: this.adaptive,
       visiblePages: Array.from(this.visiblePages).sort((a, b) => a - b),
+      pressureState: this.adaptive ? PressureMonitor.getPressureState() : null,
     }
   }
 
@@ -168,6 +219,12 @@ export class RenderScheduler {
     this.visiblePages.clear()
     this.totalPages = 0
     this.versionCounter++
+
+    if (this.pressureUnsubscribe) {
+      this.pressureUnsubscribe()
+      this.pressureUnsubscribe = null
+    }
+
     logPDF.debug('scheduler: cleared')
   }
 
