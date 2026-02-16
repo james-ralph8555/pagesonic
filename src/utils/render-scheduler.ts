@@ -12,11 +12,15 @@
  * Enhanced with deterministic cancellation (P0-RDR-006):
  * - RenderTaskManager provides explicit state tracking per page
  * - Cancellation is explicit and validates at async boundaries
+ *
+ * Instrumented for telemetry (P0-PFV-002):
+ * - Emits queue_add, queue_process events for performance monitoring
  */
 
 import { logPDF } from './logger'
 import { PressureMonitor } from './pressure-monitor'
 import { RenderTaskManager, RenderToken, getRenderTaskManager, resetRenderTaskManager } from './render-cancellation'
+import { useTelemetry } from '@/stores/telemetry'
 
 export type RenderPriority = 'visible' | 'nearby' | 'offscreen'
 
@@ -59,6 +63,7 @@ export class RenderScheduler {
   private totalPages = 0
   private pressureUnsubscribe: (() => void) | null = null
   private taskManager: RenderTaskManager
+  private telemetry = useTelemetry()
 
   constructor(config: RenderSchedulerConfig = {}) {
     this.adaptive = config.adaptive ?? true
@@ -165,6 +170,11 @@ export class RenderScheduler {
       }
 
       this.queue.set(pageNumber, render)
+      this.telemetry.emit('render', 'queue_add', undefined, {
+        pageNumber,
+        priority,
+        queueSize: this.queue.size
+      })
       logPDF.debug(`scheduler: queue page ${pageNumber} priority ${priority} token #${token.id}`)
       this.processQueue()
     })
@@ -263,6 +273,8 @@ export class RenderScheduler {
    * Clear all pending requests and reset state.
    */
   clear(): void {
+    const clearedCount = this.queue.size
+
     // Reject all pending
     for (const render of this.queue.values()) {
       render.reject(new Error('Scheduler cleared'))
@@ -278,6 +290,12 @@ export class RenderScheduler {
     if (this.pressureUnsubscribe) {
       this.pressureUnsubscribe()
       this.pressureUnsubscribe = null
+    }
+
+    if (clearedCount > 0) {
+      this.telemetry.emit('render', 'queue_clear', undefined, {
+        clearedCount
+      })
     }
 
     logPDF.debug('scheduler: cleared')
@@ -328,6 +346,12 @@ export class RenderScheduler {
       }
 
       this.inflight.add(next.pageNumber)
+      this.telemetry.emit('render', 'queue_process', undefined, {
+        pageNumber: next.pageNumber,
+        priority: next.priority,
+        queueSize: this.queue.size,
+        inflightCount: this.inflight.size
+      })
       logPDF.debug(`scheduler: starting page ${next.pageNumber} token #${next.token.id}`)
       next.resolve(next.token)
     }

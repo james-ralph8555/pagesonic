@@ -1,4 +1,4 @@
-import { createSignal } from 'solid-js'
+import { createSignal, untrack } from 'solid-js'
 import type {
   TelemetryEvent,
   TelemetrySnapshot,
@@ -43,26 +43,28 @@ export const useTelemetry = () => {
     duration?: number,
     metadata?: Record<string, unknown>
   ) => {
-    const s = state()
-    if (!s.enabled) return
-    if (!s.config.enabledCategories.includes(category)) return
-    if (Math.random() > s.config.samplingRate) return
+    untrack(() => {
+      const s = state()
+      if (!s.enabled) return
+      if (!s.config.enabledCategories.includes(category)) return
+      if (Math.random() > s.config.samplingRate) return
 
-    const event: TelemetryEvent = {
-      id: generateId(),
-      timestamp: Date.now(),
-      category,
-      name,
-      duration,
-      metadata
-    } as TelemetryEvent
+      const event: TelemetryEvent = {
+        id: generateId(),
+        timestamp: Date.now(),
+        category,
+        name,
+        duration,
+        metadata
+      } as TelemetryEvent
 
-    setState(prev => {
-      const events = [...prev.events, event]
-      if (events.length > prev.config.maxEvents) {
-        events.shift()
-      }
-      return { ...prev, events }
+      setState(prev => {
+        const events = [...prev.events, event]
+        if (events.length > prev.config.maxEvents) {
+          events.shift()
+        }
+        return { ...prev, events }
+      })
     })
   }
 
@@ -135,6 +137,16 @@ export const useTelemetry = () => {
       return withDuration.reduce((sum, e) => sum + (e.duration || 0), 0) / withDuration.length
     }
 
+    const percentile = (evts: TelemetryEvent[], p: number): number => {
+      const durations = evts
+        .filter(e => e.duration !== undefined)
+        .map(e => e.duration || 0)
+        .sort((a, b) => a - b)
+      if (durations.length === 0) return 0
+      const idx = Math.ceil((p / 100) * durations.length) - 1
+      return durations[Math.max(0, idx)]
+    }
+
     const pdfLoads = pdfEvents.filter(e => e.name === 'pdf_load_complete')
     const pageRenders = pdfEvents.filter(e => e.name === 'page_render_complete')
     const pdfErrors = pdfEvents.filter(e => e.name.endsWith('_error'))
@@ -146,6 +158,8 @@ export const useTelemetry = () => {
 
     const frames = renderEvents.filter(e => e.name === 'frame_render')
     const scrolls = renderEvents.filter(e => e.name === 'scroll_start')
+    const queueAdds = renderEvents.filter(e => e.name === 'queue_add')
+    const queueProcesses = renderEvents.filter(e => e.name === 'queue_process')
     const maxQueueSize = Math.max(
       0,
       ...renderEvents
@@ -165,6 +179,8 @@ export const useTelemetry = () => {
           avgLoadTime: avgDuration(pdfLoads),
           pageRenderCount: pageRenders.length,
           avgPageRenderTime: avgDuration(pageRenders),
+          p50PageRenderTime: percentile(pageRenders, 50),
+          p95PageRenderTime: percentile(pageRenders, 95),
           errors: pdfErrors.length
         },
         tts: {
@@ -179,7 +195,9 @@ export const useTelemetry = () => {
           frameCount: frames.length,
           avgFrameTime: avgDuration(frames),
           scrollCount: scrolls.length,
-          maxQueueSize
+          maxQueueSize,
+          queueAddCount: queueAdds.length,
+          queueProcessCount: queueProcesses.length
         },
         app: {
           errorCount: appEvents.filter(e => e.name === 'app_error').length,

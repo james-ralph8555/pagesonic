@@ -126,6 +126,8 @@ export interface TelemetrySnapshot {
       avgLoadTime: number
       pageRenderCount: number
       avgPageRenderTime: number
+      p50PageRenderTime: number
+      p95PageRenderTime: number
       errors: number
     }
     tts: {
@@ -141,6 +143,8 @@ export interface TelemetrySnapshot {
       avgFrameTime: number
       scrollCount: number
       maxQueueSize: number
+      queueAddCount: number
+      queueProcessCount: number
     }
     app: {
       errorCount: number

@@ -1,6 +1,7 @@
-import { Component, createSignal, onMount, onCleanup, createEffect } from 'solid-js'
+import { Component, createSignal, onMount, onCleanup, createEffect, untrack } from 'solid-js'
 import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
+import { useTelemetry } from '@/stores/telemetry'
 import { logPDF } from '@/utils/logger'
 import { getRenderScheduler } from '@/utils/render-scheduler'
 import type { RenderToken } from '@/utils/render-cancellation'
@@ -15,6 +16,7 @@ interface PDFPageProps {
 export const PDFPage: Component<PDFPageProps> = (props) => {
   const { state: pdfState, getCurrentPage } = usePDF()
   const { state: ttsState } = useTTS()
+  const telemetry = useTelemetry()
   const [canvasRef, setCanvasRef] = createSignal<HTMLCanvasElement | null>(null)
   const [textLayerRef, setTextLayerRef] = createSignal<HTMLDivElement | null>(null)
   const [error, setError] = createSignal<string | null>(null)
@@ -42,6 +44,11 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     logPDF.debug(`queue render page ${props.pageNumber} scale ${props.scale}`)
     setError(null)
     lastRequestedScale = props.scale
+
+    const renderStartTime = telemetry.emitStart('pdf', 'page_render_start', {
+      pageNumber: props.pageNumber,
+      scale: props.scale
+    })
 
     try {
       // Acquire a render slot from the scheduler
@@ -124,9 +131,13 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         return
       }
 
-      setHasRendered(true)
+      untrack(() => setHasRendered(true))
       lastRenderedScale = props.scale
       scheduler.completeRender(currentToken)
+      telemetry.emitEnd(renderStartTime, 'pdf', 'page_render_complete', {
+        pageNumber: props.pageNumber,
+        scale: props.scale
+      })
       logPDF.debug(`finished render page ${props.pageNumber} token #${currentToken.id}`)
 
       // Render selectable text layer
@@ -159,6 +170,10 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       )
       if (!isCancel) {
         setError('Failed to render page')
+        telemetry.emit('pdf', 'page_render_error', undefined, {
+          pageNumber: props.pageNumber,
+          errorMessage: error?.message || 'Unknown error'
+        })
         console.error('Error rendering page:', error)
       }
       if (isCancel) {
