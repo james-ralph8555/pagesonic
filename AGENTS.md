@@ -63,6 +63,37 @@ Minimum gates per feature slice:
 
 If a gate fails, do not mark backlog item `done`.
 
+## Chrome DevTools MCP
+
+This project is configured with Chrome DevTools MCP (`.crush.json`) for browser automation.
+
+### Setup
+
+Start Chromium with remote debugging before using browser tools:
+
+```bash
+chromium --remote-debugging-port=9223 --user-data-dir=/tmp/chrome-debug-profile
+```
+
+### Available MCP Tools
+
+All tools are prefixed with `mcp_chrome-devtools_`:
+
+- Navigation: `navigate_page`, `new_page`, `close_page`, `list_pages`, `select_page`, `wait_for`
+- Input: `click`, `fill`, `fill_form`, `hover`, `press_key`, `drag`, `handle_dialog`, `upload_file`
+- Debugging: `take_screenshot`, `take_snapshot`, `evaluate_script`, `list_console_messages`
+- Performance: `performance_start_trace`, `performance_stop_trace`, `performance_analyze_insight`
+- Network: `list_network_requests`, `get_network_request`
+
+### Browser Verification with MCP
+
+When running browser verification:
+
+1. `mcp_chrome-devtools_navigate_page` to load the target URL
+2. `mcp_chrome-devtools_take_screenshot` to capture state
+3. `mcp_chrome-devtools_click` / `mcp_chrome-devtools_fill` for interactions
+4. `mcp_chrome-devtools_list_console_messages` to check for errors
+
 ## Charm Crush Testing Protocol
 Use this message structure after each feature implementation:
 1. `What changed`: one paragraph summary.
