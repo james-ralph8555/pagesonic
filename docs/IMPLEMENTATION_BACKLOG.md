@@ -45,7 +45,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | b11bc37 | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
 | DOC-005 | Add Charm Crush verification-first protocol | P0 | Require stop/ask/provide-browser-test flow per feature slice | done | 867fb6b | coding-agent | Agent asks user how to test and provides browser checklist before next feature | DOC-003 |
 | P0-RDR-001 | Staged PDF load pipeline | P0 | Load metadata/first page first; defer full extraction | done | e2004c8 | coding-agent | First page renders before full text extraction completion | None |
-| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | done | a53740a | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
+| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | done | 214b59d | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
 | P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | planned | pending | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
 | P0-RDR-004 | Visibility controller refactor | P0 | Unify IO + scroll seeding into one controller | planned | pending | coding-agent | No duplicate visibility authority paths remain | P0-RDR-003 |
 | P0-RDR-005 | Adaptive render concurrency | P0 | Concurrency adjusts by device/runtime pressure | planned | pending | coding-agent | No sustained jank spikes from over-rendering | P0-RDR-003 |
