@@ -8,6 +8,7 @@
     "cdk": "cdk",
     "synth": "cdk synth",
     "deploy": "cdk deploy",
+    "deploy:site": "cdk deploy PagesonicSiteStack",
     "destroy": "cdk destroy"
   },
   "devDependencies": {
