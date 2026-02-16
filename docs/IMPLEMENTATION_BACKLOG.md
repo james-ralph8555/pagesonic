@@ -50,7 +50,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P0-RDR-004 | Visibility controller refactor | P0 | Unify IO + scroll seeding into one controller | done | 5a4c971 | coding-agent | No duplicate visibility authority paths remain | P0-RDR-003 |
 | P0-RDR-005 | Adaptive render concurrency | P0 | Concurrency adjusts by device/runtime pressure | done | 478b04d | coding-agent | No sustained jank spikes from over-rendering | P0-RDR-003 |
 | P0-RDR-006 | Deterministic render cancellation state machine | P0 | Robust cancel/replace behavior for `PDFPage` tasks | done | 82e0946 | coding-agent | No stale page paint after rapid zoom/scroll | P0-RDR-003 |
-| P0-RDR-007 | Hot-path logging reduction | P0 | Replace noisy `console.*` in render/audio/tts loops | planned | pending | coding-agent | Release mode avoids console spam in hot loops | None |
+| P0-RDR-007 | Hot-path logging reduction | P0 | Replace noisy `console.*` in render/audio/tts loops | done | 2e08dcb | coding-agent | Release mode avoids console spam in hot loops | None |
 | P0-RDR-008 | Canvas memory guardrails | P0 | Limit retained raster surfaces and reclaim memory | planned | pending | coding-agent | Memory usage plateaus under long scroll sessions | P0-RDR-003 |
 | P0-RDR-009 | Mobile low-power render mode | P0 | Reduced expensive visual effects + conservative prefetch | planned | pending | coding-agent | Mobile mode maintains responsiveness on mid-tier devices | P0-RDR-003 |
 | P0-RDR-010 | Reader perf baseline harness | P0 | Script/utility to compare key metrics across commits | planned | pending | coding-agent | Baseline report generated and stored for regression checks | P0-RDR-001 |
