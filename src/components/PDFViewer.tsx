@@ -6,6 +6,7 @@ import { GlassDropdownButton } from './GlassDropdownButton'
 import { SelectionToolbar } from './SelectionToolbar'
 import { useTheme } from '@/stores/theme'
 import { logPDF } from '@/utils/logger'
+import { getRenderScheduler } from '@/utils/render-scheduler'
 
 export const PDFViewer: Component = () => {
   const { state: pdfState, loadPDF, getAllExtractedText, setCurrentPage: setStoreCurrentPage } = usePDF()
@@ -47,6 +48,11 @@ export const PDFViewer: Component = () => {
         if (equal) return prev
       }
       logPDF.debug(`visiblePages size -> ${next.size} pages: ${Array.from(next).slice(0, 10).join(',')}${next.size > 10 ? '…' : ''}`)
+      
+      // Notify render scheduler of visibility change
+      const scheduler = getRenderScheduler()
+      scheduler.updateVisibility(next, pdfState().pages.length)
+      
       return next
     })
   }
