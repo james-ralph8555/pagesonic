@@ -1,6 +1,7 @@
 import { createSignal } from 'solid-js'
 import { PDFDocument, PDFPage } from '@/types'
 import { useTelemetry } from './telemetry'
+import { logger } from '@/utils/logger'
 import {
   createExtractionQueue,
   reprioritizeQueue,
@@ -124,7 +125,7 @@ export const usePDF = () => {
         staged: true,
         firstPageReady: true
       })
-      try { console.info('[PDF] First page ready in', firstPaintDuration, 'ms ·', numPages, 'pages total') } catch {}
+      logger.info('pdf', 'First page ready', { firstPaintDuration, numPages })
       
       // Stage 3: Extract remaining pages in priority order (viewport proximity)
       const extractStartTime = telemetry.emitStart('pdf', 'text_extract_start', { totalPages: numPages })
@@ -184,14 +185,14 @@ export const usePDF = () => {
 
           extractedPages.add(pageNumber)
         } catch (pageError) {
-          console.error(`[PDF] Error extracting page ${pageNumber}:`, pageError)
+          logger.error('pdf', `Error extracting page ${pageNumber}`, pageError instanceof Error ? pageError : undefined)
           extractedPages.add(pageNumber) // Mark as done to avoid infinite retry
         }
       }
       
       telemetry.emitEnd(extractStartTime, 'pdf', 'text_extract_complete', { totalPages: numPages })
       setState(prev => ({ ...prev, isExtracting: false }))
-      try { console.info('[PDF] Full text extraction complete for', documentInfo.title || '(untitled)') } catch {}
+      logger.info('pdf', 'Full text extraction complete', { title: documentInfo.title || '(untitled)' })
       
     } catch (error) {
       telemetry.emit('pdf', 'pdf_load_error', undefined, {
@@ -212,7 +213,7 @@ export const usePDF = () => {
       const pn = pageNumber ?? state().currentPage
       return await state().pdfDoc.getPage(pn)
     } catch (error) {
-      console.error('Error getting current page:', error)
+      logger.error('pdf', 'Error getting current page', error instanceof Error ? error : undefined)
       return null
     }
   }
@@ -224,7 +225,7 @@ export const usePDF = () => {
       const textContent = await page.getTextContent()
       return textContent.items.map((item: any) => item.str).join(' ')
     } catch (error) {
-      console.error('Error extracting text from page:', error)
+      logger.error('pdf', 'Error extracting text from page', error instanceof Error ? error : undefined)
       return ''
     }
   }

@@ -74,7 +74,7 @@ class PressureMonitorImpl {
       baselineConcurrency
     }
 
-    try { console.info('[PressureMonitor] detected device capabilities', this.deviceCapabilities) } catch {}
+    logPDF.info('detected device capabilities', this.deviceCapabilities)
     return this.deviceCapabilities
   }
 
@@ -182,7 +182,7 @@ class PressureMonitorImpl {
     }
 
     if (pressure !== prevState) {
-      try { console.info('[PressureMonitor] pressure changed', prevState, '->', pressure, { score: score.toFixed(2), avgFrameTime: avgFrameTime.toFixed(1), recentLongTasks }) } catch {}
+      logPDF.info('pressure changed', { from: prevState, to: pressure, score: score.toFixed(2), avgFrameTime: avgFrameTime.toFixed(1), recentLongTasks })
       this.notifyListeners()
     }
   }

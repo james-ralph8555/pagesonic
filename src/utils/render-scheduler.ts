@@ -82,11 +82,11 @@ export class RenderScheduler {
       const recommended = PressureMonitor.getRecommendedConcurrency()
       if (recommended !== this.maxConcurrent) {
         this.maxConcurrent = recommended
-        try { console.info('[RenderScheduler] initial adaptive concurrency set to', this.maxConcurrent) } catch {}
+        logPDF.info('initial adaptive concurrency set to', this.maxConcurrent)
       }
     }
 
-    try { console.info('[RenderScheduler] initialized with maxConcurrent=', this.maxConcurrent, 'adaptive=', this.adaptive) } catch {}
+    logPDF.info('initialized', { maxConcurrent: this.maxConcurrent, adaptive: this.adaptive })
   }
 
   private adjustConcurrency(pressure: 'low' | 'medium' | 'high'): void {
@@ -95,7 +95,7 @@ export class RenderScheduler {
 
     if (recommended !== this.maxConcurrent) {
       this.maxConcurrent = recommended
-      try { console.info('[RenderScheduler] adjusted concurrency', oldMax, '->', this.maxConcurrent, '(pressure:', pressure + ')') } catch {}
+      logPDF.info('adjusted concurrency', { from: oldMax, to: this.maxConcurrent, pressure })
       this.processQueue()
     }
   }
