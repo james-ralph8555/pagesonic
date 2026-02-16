@@ -1,6 +1,11 @@
 import { createSignal } from 'solid-js'
 import { PDFDocument, PDFPage } from '@/types'
 import { useTelemetry } from './telemetry'
+import {
+  createExtractionQueue,
+  reprioritizeQueue,
+  getNextPage
+} from '@/utils/extraction-queue'
 
 interface PDFState {
   document: PDFDocument | null
@@ -112,32 +117,68 @@ export const usePDF = () => {
       })
       try { console.info('[PDF] First page ready in', firstPaintDuration, 'ms ·', numPages, 'pages total') } catch {}
       
-      // Stage 3: Extract remaining pages in background
+      // Stage 3: Extract remaining pages in priority order (viewport proximity)
       const extractStartTime = telemetry.emitStart('pdf', 'text_extract_start', { totalPages: numPages })
-      let offset = firstText.length + 2 // Account for separator
-      
-      for (let i = 2; i <= numPages; i++) {
+
+      // Create extraction queue sorted by proximity to current page
+      const extractedPages = new Set<number>([1]) // Page 1 already extracted
+      let extractionQueue = createExtractionQueue({
+        currentPage: 1,
+        totalPages: numPages,
+        extractedPages
+      })
+      let lastCurrentPage = 1
+
+      try { console.info('[PDF] Extraction queue initialized with', numPages - 1, 'pages') } catch {}
+
+      let pageNumber: number | undefined
+      while ((pageNumber = getNextPage(extractionQueue, extractedPages)) !== undefined) {
+        // Yield to browser between extractions to allow UI updates and scrolling
+        await new Promise(resolve => setTimeout(resolve, 0))
+
+        // Check if current page changed and reprioritize queue
+        const currentVisiblePage = state().currentPage
+        if (currentVisiblePage !== lastCurrentPage) {
+          extractionQueue = reprioritizeQueue(extractionQueue, currentVisiblePage, extractedPages)
+          lastCurrentPage = currentVisiblePage
+        }
+
         try {
-          const page = await pdf.getPage(i)
+          const page = await pdf.getPage(pageNumber)
           const textContent = await page.getTextContent()
           const text = textContent.items.map((item: any) => item.str).join(' ')
-          
-          const pageStart = offset
+
+          // Recalculate text offsets (need to account for all previously extracted pages)
+          const sortedExtracted = Array.from(extractedPages).sort((a, b) => a - b)
+          let calculatedOffset = 0
+          for (const extractedPage of sortedExtracted) {
+            const pageData = state().pages[extractedPage - 1]
+            if (pageData?.textEnd !== undefined) {
+              calculatedOffset = Math.max(calculatedOffset, pageData.textEnd + 2)
+            }
+          }
+          // Also account for first page if not in set yet
+          if (calculatedOffset === 0 && firstText.length > 0) {
+            calculatedOffset = firstText.length + 2
+          }
+
+          const pageStart = calculatedOffset
           const pageEnd = pageStart + text.length
-          
+
           // Update page in state
           setState(prev => ({
             ...prev,
             pages: prev.pages.map((p, idx) =>
-              idx === i - 1
+              idx === pageNumber! - 1
                 ? { ...p, textContent: text, textStart: pageStart, textEnd: pageEnd, textExtracted: true }
                 : p
             )
           }))
-          
-          offset = pageEnd + (i < numPages ? 2 : 0)
+
+          extractedPages.add(pageNumber)
         } catch (pageError) {
-          console.error(`[PDF] Error extracting page ${i}:`, pageError)
+          console.error(`[PDF] Error extracting page ${pageNumber}:`, pageError)
+          extractedPages.add(pageNumber) // Mark as done to avoid infinite retry
         }
       }
       
