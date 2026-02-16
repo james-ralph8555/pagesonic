@@ -67,13 +67,13 @@ If a gate fails, do not mark backlog item `done`.
 
 This project is configured with Chrome DevTools MCP (`.crush.json`) for browser automation.
 
-### Setup
+### Environment Assumptions
 
-Start Chromium with remote debugging before using browser tools:
+The following services are always assumed to be running:
+- Dev server: `http://localhost:3001`
+- Chrome DevTools Protocol: `http://localhost:9223`
 
-```bash
-chromium --remote-debugging-port=9223 --user-data-dir=/tmp/chrome-debug-profile
-```
+**Never start these services.** They are managed externally.
 
 ### Available MCP Tools
 
@@ -87,9 +87,7 @@ All tools are prefixed with `mcp_chrome-devtools_`:
 
 ### Browser Verification with MCP
 
-When running browser verification:
-
-1. `mcp_chrome-devtools_navigate_page` to load the target URL
+1. `mcp_chrome-devtools_navigate_page` to `http://localhost:3001`
 2. `mcp_chrome-devtools_take_screenshot` to capture state
 3. `mcp_chrome-devtools_click` / `mcp_chrome-devtools_fill` for interactions
 4. `mcp_chrome-devtools_list_console_messages` to check for errors
@@ -97,13 +95,12 @@ When running browser verification:
 ## Charm Crush Testing Protocol
 Use this message structure after each feature implementation:
 1. `What changed`: one paragraph summary.
-2. `Automated MCP Verification` (if browser is running on port 9223):
+2. `Automated MCP Verification`:
    - Use MCP tools to navigate, interact, and verify the feature works
    - Check console messages for errors
    - Report findings to user before manual testing
 3. `How to test in browser`:
-   - run `npm run preview`,
-   - open the preview URL,
+   - navigate to `http://localhost:3001`,
    - perform 3-8 feature-specific steps,
    - compare to expected results.
 4. `Ask the user`: "How would you like to test this slice in your browser? If you want, use the checklist above."
