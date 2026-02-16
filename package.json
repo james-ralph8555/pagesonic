@@ -7,7 +7,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "repository": {
     "type": "git",
@@ -35,7 +37,11 @@
     "workbox-window": "^7.3.0"
   },
   "devDependencies": {
+    "@solidjs/testing-library": "^0.8.10",
     "@types/pdfjs-dist": "^2.10.377",
-    "vite-plugin-mkcert": "^1.17.6"
+    "@vitest/coverage-v8": "^4.0.18",
+    "jsdom": "^28.1.0",
+    "vite-plugin-mkcert": "^1.17.6",
+    "vitest": "^4.0.18"
   }
 }

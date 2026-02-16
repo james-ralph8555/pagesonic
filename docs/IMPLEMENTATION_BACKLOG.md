@@ -77,7 +77,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P1-LIB-004 | Dev-only debug controls gating | P1 | Hide destructive/diagnostic controls outside dev mode | planned | pending | coding-agent | Production UI excludes internal debug-only controls | None |
 | P1-LIB-005 | Optimistic metadata edit with rollback | P1 | Immediate UI update with conflict/error rollback | planned | pending | coding-agent | Metadata edits feel instant and recover cleanly on error | None |
 | P1-LIB-006 | Storage quota preflight warnings | P1 | Warn before import when quota risk is high | planned | pending | coding-agent | User receives actionable storage warnings before failure | None |
-| P1-QA-001 | Add Vitest test harness | P1 | Introduce test runner and base config | planned | pending | coding-agent | `npm test` runs meaningful suite | None |
+| P1-QA-001 | Add Vitest test harness | P1 | Introduce test runner and base config | done | 5158528 | coding-agent | `npm test` runs meaningful suite | None |
 | P1-QA-002 | Store tests for PDF staging and TTS routing | P1 | Cover critical store decision logic | planned | pending | coding-agent | Core store behavior has deterministic test coverage | P1-QA-001 |
 | P1-QA-003 | Component tests for telemetry UI | P1 | Cover settings metrics panel and HUD toggles | planned | pending | coding-agent | Telemetry UI state changes are tested | P1-QA-001 |
 | P1-QA-004 | Adapter contract tests | P1 | Shared test suite for each model adapter | planned | pending | coding-agent | Browser/Piper/Kokoro adapters satisfy common contract | P1-QA-001 |
