@@ -7,6 +7,15 @@ import {
   getNextPage
 } from '@/utils/extraction-queue'
 
+// Test PDF fixtures for automated browser testing
+export const TEST_PDF_FIXTURES = {
+  short: '/fixtures/test-short.pdf',
+  medium: '/fixtures/test-medium.pdf',
+  long: '/fixtures/test-long.pdf'
+} as const
+
+export type TestPDFKey = keyof typeof TEST_PDF_FIXTURES
+
 interface PDFState {
   document: PDFDocument | null
   mimeType: string | null
@@ -242,11 +251,54 @@ export const usePDF = () => {
       scale: Math.max(0.1, Math.min(scale, 3.0)) 
     }))
   }
+
+  const loadPDFFromURL = async (url: string, filename?: string) => {
+    try {
+      const response = await fetch(url)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch PDF: ${response.status} ${response.statusText}`)
+      }
+      const blob = await response.blob()
+      const name = filename || url.split('/').pop() || 'document.pdf'
+      const file = new File([blob], name, { type: 'application/pdf' })
+      await loadPDF(file)
+    } catch (error) {
+      setState(prev => ({
+        ...prev,
+        isLoading: false,
+        isExtracting: false,
+        error: error instanceof Error ? error.message : 'Failed to load PDF from URL'
+      }))
+    }
+  }
+
+  const loadTestPDF = async (key: TestPDFKey) => {
+    const url = TEST_PDF_FIXTURES[key]
+    if (!url) {
+      setError(`Unknown test PDF: ${key}. Valid options: ${Object.keys(TEST_PDF_FIXTURES).join(', ')}`)
+      return
+    }
+    await loadPDFFromURL(url, `test-${key}.pdf`)
+  }
+
+  const checkAndLoadTestPDF = async (): Promise<boolean> => {
+    if (typeof window === 'undefined') return false
+    const params = new URLSearchParams(window.location.search)
+    const testPDF = params.get('test-pdf')
+    if (testPDF && testPDF in TEST_PDF_FIXTURES) {
+      await loadTestPDF(testPDF as TestPDFKey)
+      return true
+    }
+    return false
+  }
   
   return {
     state,
     beginLoading,
     loadPDF,
+    loadPDFFromURL,
+    loadTestPDF,
+    checkAndLoadTestPDF,
     setError,
     getCurrentPage,
     extractTextFromPage,

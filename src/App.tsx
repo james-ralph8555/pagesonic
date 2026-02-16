@@ -5,6 +5,7 @@ import { LibraryView } from './components/LibraryView'
 import { AppMode } from './types'
 import { useLibrary } from './stores/library'
 import { useTheme } from './stores/theme'
+import { usePDF } from './stores/pdf'
 
 export const App: Component = () => {
   const [currentMode, setCurrentMode] = createSignal<AppMode>('pdf')
@@ -14,6 +15,9 @@ export const App: Component = () => {
   
   // Initialize theme to ensure CSS variables are set
   useTheme()
+  
+  // PDF store for test PDF auto-loading
+  const { checkAndLoadTestPDF } = usePDF()
   
   onMount(() => {
     const handler = (e: Event) => {
@@ -27,6 +31,9 @@ export const App: Component = () => {
     
     // Initialize library once when app starts
     initialize()
+    
+    // Check for test-pdf URL parameter and auto-load
+    checkAndLoadTestPDF()
     
     // Add page unload cleanup for proper resource cleanup
     const beforeUnloadHandler = () => {
