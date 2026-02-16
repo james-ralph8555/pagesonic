@@ -160,6 +160,24 @@ Use `evaluate_script` to toggle logging contexts:
 }
 ```
 
+### Manual Console Toggle (Dev)
+
+Developers can toggle logging contexts directly in browser DevTools:
+
+```javascript
+// Enable PDF debug logs
+window.__logger.setContextsEnabled(['pdf'], true)
+
+// Disable PDF debug logs
+window.__logger.setContextsEnabled(['pdf'], false)
+
+// Check currently enabled contexts
+window.__logger.getEnabledContexts()
+
+// Enable multiple contexts at once
+window.__logger.setContextsEnabled(['pdf', 'tts', 'audio'], true)
+```
+
 ### When to Enable Contexts
 
 - Enable `pdf` when debugging page loading, rendering order, or scroll issues
