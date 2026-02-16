@@ -70,7 +70,7 @@ This project is configured with Chrome DevTools MCP (`.crush.json`) for browser 
 ### Environment Assumptions
 
 The following services are always assumed to be running:
-- Dev server: `http://localhost:3001`
+- Dev server: `https://localhost:3001`
 - Chrome DevTools Protocol: `http://localhost:9223`
 
 **Never start these services.** They are managed externally.
@@ -89,7 +89,7 @@ All tools are prefixed with `mcp_chrome-devtools_`:
 
 After completing code changes and CLI validation, automatically run browser verification:
 
-1. Navigate to the relevant route: `mcp_chrome-devtools_navigate_page` to `http://localhost:3001`
+1. Navigate to the relevant route: `mcp_chrome-devtools_navigate_page` to `https://localhost:3001`
 2. Interact with the feature using `mcp_chrome-devtools_click`, `mcp_chrome-devtools_fill`, etc.
 3. Capture state with `mcp_chrome-devtools_take_screenshot` and `mcp_chrome-devtools_take_snapshot`
 4. Check for errors with `mcp_chrome-devtools_list_console_messages`
@@ -111,7 +111,7 @@ Pre-built test PDFs are available for automated browser verification without fil
 
 **Usage:**
 ```
-mcp_chrome-devtools_navigate_page to http://localhost:3001/?test-pdf=short
+mcp_chrome-devtools_navigate_page to https://localhost:3001/?test-pdf=short
 ```
 
 The PDF will auto-load on mount. Check console for `[PDF] First page ready in X ms · N pages total` to confirm.
@@ -175,7 +175,7 @@ Use this message structure after each feature implementation:
    - Check console messages for errors
    - Report findings to user before manual testing
 3. `How to test in browser`:
-   - navigate to `http://localhost:3001`,
+   - navigate to `https://localhost:3001`,
    - perform 3-8 feature-specific steps,
    - compare to expected results.
 4. `Ask the user`: "How would you like to test this slice in your browser? If you want, use the checklist above."
