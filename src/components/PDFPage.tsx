@@ -3,6 +3,7 @@ import { usePDF } from '@/stores/pdf'
 import { useTTS } from '@/stores/tts'
 import { logPDF } from '@/utils/logger'
 import { getRenderScheduler } from '@/utils/render-scheduler'
+import type { RenderToken } from '@/utils/render-cancellation'
 
 interface PDFPageProps {
   pageNumber: number
@@ -23,15 +24,15 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   let lastRenderedScale = 0
   let lastRequestedScale = -1
   let lastVisible = false
-  let currentVersion = 0
+  let currentToken: RenderToken | null = null
   let releaseSlot: (() => void) | null = null
 
   // Get the centralized render scheduler
   const scheduler = getRenderScheduler()
 
   const renderPage = async () => {
-    const myVersion = ++currentVersion
-    if (!canvasRef() || !props.isVisible) {
+    const canvas = canvasRef()
+    if (!canvas || !props.isVisible) {
       if (!props.isVisible) {
         logPDF.debug(`skip render page ${props.pageNumber} visible=false`)
       }
@@ -44,18 +45,21 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
     try {
       // Acquire a render slot from the scheduler
+      // This creates a new token and cancels any existing render for this page
       const slot = await scheduler.acquireSlot(props.pageNumber, props.scale)
       releaseSlot = slot.release
+      currentToken = slot.token
 
       // Re-check staleness after acquiring slot
-      if (myVersion !== currentVersion || !props.isVisible) {
+      if (!scheduler.isTokenActive(currentToken) || !props.isVisible) {
         logPDF.debug(`abort before start page ${props.pageNumber} (invisible or superseded)`)
         slot.release()
         releaseSlot = null
+        currentToken = null
         return
       }
 
-      logPDF.debug(`start render page ${props.pageNumber}`)
+      logPDF.debug(`start render page ${props.pageNumber} token #${currentToken.id}`)
       const page = await getCurrentPage(props.pageNumber)
       if (!page) {
         setError('Page not found')
@@ -63,13 +67,12 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
         return
       }
 
-      // Check staleness again after async
-      if (myVersion !== currentVersion) {
-        logPDF.debug(`abort mid-render page ${props.pageNumber} (superseded)`)
+      // Check token validity after async
+      if (!scheduler.isTokenActive(currentToken)) {
+        logPDF.debug(`abort mid-render page ${props.pageNumber} token #${currentToken.id} (superseded)`)
         return
       }
 
-      const canvas = canvasRef()!
       const context = canvas.getContext('2d')
       if (!context) return
 
@@ -109,19 +112,26 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
       renderTask = page.render(renderContext)
       await renderTask.promise
 
-      // Check staleness after render completes
-      if (myVersion !== currentVersion) {
-        logPDF.debug(`abort post-render page ${props.pageNumber} (superseded)`)
+      // Check token validity after render completes
+      if (!scheduler.isTokenActive(currentToken)) {
+        logPDF.debug(`abort post-render page ${props.pageNumber} token #${currentToken.id} (superseded)`)
+        return
+      }
+
+      // Final gate before committing paint
+      if (!scheduler.canPaint(currentToken)) {
+        logPDF.debug(`abort paint page ${props.pageNumber} token #${currentToken.id} (cannot paint)`)
         return
       }
 
       setHasRendered(true)
       lastRenderedScale = props.scale
-      logPDF.debug(`finished render page ${props.pageNumber}`)
+      scheduler.completeRender(currentToken)
+      logPDF.debug(`finished render page ${props.pageNumber} token #${currentToken.id}`)
 
       // Render selectable text layer
       const container = textLayerRef()
-      if (container && myVersion === currentVersion) {
+      if (container && scheduler.isTokenActive(currentToken)) {
         container.innerHTML = ''
 
         const viewerMod: any = await import('pdfjs-dist/web/pdf_viewer')
@@ -165,6 +175,18 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
     }
   }
 
+  const cancelCurrentRender = () => {
+    scheduler.cancelRender(props.pageNumber)
+    if (renderTask) {
+      try { renderTask.cancel() } catch {}
+      renderTask = null
+    }
+    if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
+      try { textLayerBuilder.cancel() } catch {}
+    }
+    currentToken = null
+  }
+
   onMount(() => {
     logPDF.debug(`mount page ${props.pageNumber}`)
     if (props.isVisible) {
@@ -182,15 +204,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
 
     // If we became invisible, cancel any in-flight work
     if (becameInvisible) {
-      currentVersion++
-      scheduler.cancelRequest(props.pageNumber)
-      if (renderTask) {
-        try { renderTask.cancel() } catch {}
-        renderTask = null
-      }
-      if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
-        try { textLayerBuilder.cancel() } catch {}
-      }
+      cancelCurrentRender()
       return
     }
 
@@ -209,14 +223,7 @@ export const PDFPage: Component<PDFPageProps> = (props) => {
   })
 
   onCleanup(() => {
-    currentVersion++
-    scheduler.cancelRequest(props.pageNumber)
-    if (renderTask) {
-      renderTask.cancel()
-    }
-    if (textLayerBuilder && typeof textLayerBuilder.cancel === 'function') {
-      try { textLayerBuilder.cancel() } catch {}
-    }
+    cancelCurrentRender()
   })
 
   // --- Highlight handling ---

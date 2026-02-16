@@ -8,10 +8,15 @@
  * - Adjusts max concurrent renders based on device capabilities and runtime pressure
  * - Reduces concurrency under high pressure to prevent jank
  * - Increases concurrency when system is idle for faster throughput
+ *
+ * Enhanced with deterministic cancellation (P0-RDR-006):
+ * - RenderTaskManager provides explicit state tracking per page
+ * - Cancellation is explicit and validates at async boundaries
  */
 
 import { logPDF } from './logger'
 import { PressureMonitor } from './pressure-monitor'
+import { RenderTaskManager, RenderToken, getRenderTaskManager, resetRenderTaskManager } from './render-cancellation'
 
 export type RenderPriority = 'visible' | 'nearby' | 'offscreen'
 
@@ -19,8 +24,8 @@ export interface QueuedRender {
   pageNumber: number
   scale: number
   priority: RenderPriority
-  version: number
-  resolve: () => void
+  token: RenderToken
+  resolve: (token: RenderToken) => void
   reject: (err: Error) => void
 }
 
@@ -50,14 +55,15 @@ export class RenderScheduler {
   private baselineConcurrency: number
   private nearbyRadius: number
   private adaptive: boolean
-  private versionCounter = 0
   private visiblePages: Set<number> = new Set()
   private totalPages = 0
   private pressureUnsubscribe: (() => void) | null = null
+  private taskManager: RenderTaskManager
 
   constructor(config: RenderSchedulerConfig = {}) {
     this.adaptive = config.adaptive ?? true
     this.nearbyRadius = config.nearbyRadius ?? 10
+    this.taskManager = getRenderTaskManager()
 
     if (config.maxConcurrent !== undefined) {
       this.maxConcurrent = config.maxConcurrent
@@ -118,7 +124,6 @@ export class RenderScheduler {
 
       if (newPriority !== render.priority) {
         render.priority = newPriority
-        render.version = ++this.versionCounter
         logPDF.debug(`scheduler: page ${page} priority -> ${newPriority}`)
       }
     }
@@ -128,45 +133,91 @@ export class RenderScheduler {
 
   /**
    * Acquire a render slot for a page.
-   * Returns a version number for staleness detection.
+   * Returns a RenderToken that must be validated at each async boundary.
    * Resolves when it's this page's turn to render.
+   *
+   * The token is managed by RenderTaskManager for deterministic cancellation.
    */
-  async acquireSlot(pageNumber: number, scale: number): Promise<{ version: number; release: () => void }> {
+  async acquireSlot(pageNumber: number, scale: number): Promise<{ token: RenderToken; release: () => void }> {
+    // Begin a new render attempt (cancels any existing render for this page)
+    const token = this.taskManager.beginRender(pageNumber, scale)
+
     const priority = this.getPagePriority(pageNumber)
-    const version = ++this.versionCounter
+
+    // Transition to queued state
+    if (!this.taskManager.transitionToQueued(token)) {
+      // Token was already cancelled or is stale
+      return Promise.reject(new Error('Render cancelled during queue'))
+    }
 
     // Create a promise that resolves when we get a slot
-    return new Promise<{ version: number; release: () => void }>((resolve) => {
+    return new Promise<{ token: RenderToken; release: () => void }>((resolve, reject) => {
       const render: QueuedRender = {
         pageNumber,
         scale,
         priority,
-        version,
-        resolve: () => resolve({
-          version,
+        token,
+        resolve: (resolvedToken: RenderToken) => resolve({
+          token: resolvedToken,
           release: () => this.releaseSlot(pageNumber),
         }),
-        reject: () => {}, // Not used in normal flow
+        reject,
       }
 
       this.queue.set(pageNumber, render)
-      logPDF.debug(`scheduler: queue page ${pageNumber} priority ${priority}`)
+      logPDF.debug(`scheduler: queue page ${pageNumber} priority ${priority} token #${token.id}`)
       this.processQueue()
     })
   }
 
   /**
-   * Cancel a queued render request.
-   * Returns true if the request was cancelled, false if already rendering.
+   * Cancel a render for a page.
+   * This cancels both queued and in-flight renders.
+   * Returns the cancelled token ID, or null if no active render.
    */
-  cancelRequest(pageNumber: number): boolean {
-    const render = this.queue.get(pageNumber)
-    if (render) {
+  cancelRender(pageNumber: number): number | null {
+    // Cancel via task manager
+    const tokenId = this.taskManager.cancelRender(pageNumber)
+
+    // Also remove from queue if present
+    const queued = this.queue.get(pageNumber)
+    if (queued) {
       this.queue.delete(pageNumber)
+      queued.reject(new Error('Render cancelled'))
       logPDF.debug(`scheduler: cancelled queued page ${pageNumber}`)
-      return true
     }
-    return false
+
+    return tokenId
+  }
+
+  /**
+   * Validate that a token is still active.
+   * Use this at async boundaries before proceeding with render work.
+   */
+  isTokenActive(token: RenderToken): boolean {
+    return this.taskManager.isActive(token)
+  }
+
+  /**
+   * Check if painting is allowed for a token.
+   * This is the final gate before committing canvas content.
+   */
+  canPaint(token: RenderToken): boolean {
+    return this.taskManager.canPaint(token)
+  }
+
+  /**
+   * Mark a render as completed.
+   */
+  completeRender(token: RenderToken): boolean {
+    return this.taskManager.completeRender(token)
+  }
+
+  /**
+   * Get the task manager for direct token access.
+   */
+  getTaskManager(): RenderTaskManager {
+    return this.taskManager
   }
 
   /**
@@ -194,6 +245,7 @@ export class RenderScheduler {
     adaptive: boolean
     visiblePages: number[]
     pressureState: ReturnType<typeof PressureMonitor.getPressureState> | null
+    tokenStats: ReturnType<RenderTaskManager['getStats']>
   } {
     return {
       queued: this.queue.size,
@@ -203,6 +255,7 @@ export class RenderScheduler {
       adaptive: this.adaptive,
       visiblePages: Array.from(this.visiblePages).sort((a, b) => a - b),
       pressureState: this.adaptive ? PressureMonitor.getPressureState() : null,
+      tokenStats: this.taskManager.getStats(),
     }
   }
 
@@ -218,7 +271,9 @@ export class RenderScheduler {
     this.inflight.clear()
     this.visiblePages.clear()
     this.totalPages = 0
-    this.versionCounter++
+
+    // Clear task manager
+    this.taskManager.clear()
 
     if (this.pressureUnsubscribe) {
       this.pressureUnsubscribe()
@@ -265,9 +320,16 @@ export class RenderScheduler {
       if (!next) break
 
       this.queue.delete(next.pageNumber)
+
+      // Check if token is still valid before starting
+      if (!this.taskManager.transitionToRendering(next.token)) {
+        logPDF.debug(`scheduler: skipped page ${next.pageNumber} token #${next.token.id} (cancelled/stale)`)
+        continue
+      }
+
       this.inflight.add(next.pageNumber)
-      logPDF.debug(`scheduler: starting page ${next.pageNumber}`)
-      next.resolve()
+      logPDF.debug(`scheduler: starting page ${next.pageNumber} token #${next.token.id}`)
+      next.resolve(next.token)
     }
   }
 
@@ -316,4 +378,5 @@ export function resetRenderScheduler(): void {
     globalScheduler.clear()
   }
   globalScheduler = null
+  resetRenderTaskManager()
 }
