@@ -17,6 +17,8 @@ export interface PDFPage {
   // Global text offsets within getAllExtractedText() aggregation
   textStart?: number
   textEnd?: number
+  // Track extraction status for staged loading
+  textExtracted?: boolean
 }
 
 export interface TTSModel {
