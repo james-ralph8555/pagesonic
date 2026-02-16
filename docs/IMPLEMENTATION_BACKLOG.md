@@ -45,7 +45,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | b11bc37 | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
 | DOC-005 | Add Charm Crush verification-first protocol | P0 | Require stop/ask/provide-browser-test flow per feature slice | done | 867fb6b | coding-agent | Agent asks user how to test and provides browser checklist before next feature | DOC-003 |
 | P0-RDR-001 | Staged PDF load pipeline | P0 | Load metadata/first page first; defer full extraction | done | e2004c8 | coding-agent | First page renders before full text extraction completion | None |
-| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | done | pending | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
+| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | done | a53740a | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
 | P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | planned | pending | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
 | P0-RDR-004 | Visibility controller refactor | P0 | Unify IO + scroll seeding into one controller | planned | pending | coding-agent | No duplicate visibility authority paths remain | P0-RDR-003 |
 | P0-RDR-005 | Adaptive render concurrency | P0 | Concurrency adjusts by device/runtime pressure | planned | pending | coding-agent | No sustained jank spikes from over-rendering | P0-RDR-003 |
@@ -94,6 +94,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P2-UX-004 | Document prefetch around reading position | P2 | Smart preload of near-future pages/content | planned | pending | coding-agent | Next/previous navigation latency decreases measurably | P0-RDR-003 |
 | P2-UX-005 | In-app benchmark replay | P2 | Replay representative workloads for perf comparisons | planned | pending | coding-agent | Dev can replay standardized benchmark scenarios | P0-PFV-001 |
 | P2-UX-006 | Optional visual regression snapshots | P2 | Snapshot key UI states for theme/layout regression checks | planned | pending | coding-agent | Snapshot suite catches major UI regressions | P1-QA-001 |
+| P2-UX-007 | Agent test PDF auto-load | P2 | Provide sample PDF for automated browser testing without manual intervention | planned | pending | coding-agent | Agent can load PDF via MCP without user file picker | None |
 
 ## Lower-Priority But High-Value Improvements
 The following are explicitly lower priority than core P0 work, but still recommended:
