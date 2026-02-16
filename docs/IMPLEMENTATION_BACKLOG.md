@@ -96,7 +96,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P2-UX-005 | In-app benchmark replay | P2 | Replay representative workloads for perf comparisons | planned | pending | coding-agent | Dev can replay standardized benchmark scenarios | P0-PFV-001 |
 | P2-UX-006 | Optional visual regression snapshots | P2 | Snapshot key UI states for theme/layout regression checks | planned | pending | coding-agent | Snapshot suite catches major UI regressions | P1-QA-001 |
 | P2-UX-007 | Agent test PDF auto-load | P2 | Provide sample PDF for automated browser testing without manual intervention | planned | pending | coding-agent | Agent can load PDF via MCP without user file picker | None |
-| P2-UX-008 | Test PDF fixtures + URL auto-load | P2 | Create test PDFs (short/medium/long) and URL param for auto-load | done | 160d075 | coding-agent | Agent can load /?test-pdf=short|medium|long without file picker; test PDFs in public/fixtures/ | P2-UX-007 |
+| P2-UX-008 | Test PDF fixtures + URL auto-load | P2 | Create test PDFs (short/medium/long) and URL param for auto-load | done | 7798c7e | coding-agent | Agent can load /?test-pdf=short|medium|long without file picker; test PDFs in public/fixtures/ | P2-UX-007 |
 
 ## Lower-Priority But High-Value Improvements
 The following are explicitly lower priority than core P0 work, but still recommended:
