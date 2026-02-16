@@ -45,16 +45,16 @@ The ledger below is intentionally granular so an implementation agent can execut
 | DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | b11bc37 | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
 | DOC-005 | Add Charm Crush verification-first protocol | P0 | Require stop/ask/provide-browser-test flow per feature slice | done | 867fb6b | coding-agent | Agent asks user how to test and provides browser checklist before next feature | DOC-003 |
 | P0-RDR-001 | Staged PDF load pipeline | P0 | Load metadata/first page first; defer full extraction | done | e2004c8 | coding-agent | First page renders before full text extraction completion | None |
-| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | done | 214b59d | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
-| P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | done | 6fe0502 | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
+| P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | in_progress | 214b59d | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
+| P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | in_progress | 6fe0502 | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
 | P0-RDR-004 | Visibility controller refactor | P0 | Unify IO + scroll seeding into one controller | done | 5a4c971 | coding-agent | No duplicate visibility authority paths remain | P0-RDR-003 |
-| P0-RDR-005 | Adaptive render concurrency | P0 | Concurrency adjusts by device/runtime pressure | done | 478b04d | coding-agent | No sustained jank spikes from over-rendering | P0-RDR-003 |
+| P0-RDR-005 | Adaptive render concurrency | P0 | Concurrency adjusts by device/runtime pressure | done | 361bc21 | coding-agent | No sustained jank spikes from over-rendering | P0-RDR-003 |
 | P0-RDR-006 | Deterministic render cancellation state machine | P0 | Robust cancel/replace behavior for `PDFPage` tasks | done | 82e0946 | coding-agent | No stale page paint after rapid zoom/scroll | P0-RDR-003 |
 | P0-RDR-007 | Hot-path logging reduction | P0 | Replace noisy `console.*` in render/audio/tts loops | done | 2e08dcb | coding-agent | Release mode avoids console spam in hot loops | None |
 | P0-RDR-008 | Canvas memory guardrails | P0 | Limit retained raster surfaces and reclaim memory | planned | pending | coding-agent | Memory usage plateaus under long scroll sessions | P0-RDR-003 |
 | P0-RDR-009 | Mobile low-power render mode | P0 | Reduced expensive visual effects + conservative prefetch | planned | pending | coding-agent | Mobile mode maintains responsiveness on mid-tier devices | P0-RDR-003 |
 | P0-RDR-010 | Reader perf baseline harness | P0 | Script/utility to compare key metrics across commits | planned | pending | coding-agent | Baseline report generated and stored for regression checks | P0-RDR-001 |
-| P0-RDR-011 | Console logging volume reduction | P0 | Migrate hot-path console.* to Logger with rate-limiting; reduce per-chunk/per-message noise | done | 8e85086 | coding-agent | 695-page PDF produces <500 console messages (vs 225k+); key events still captured; MCP tools can retrieve console without stack overflow | None |
+| P0-RDR-011 | Console logging volume reduction | P0 | Migrate hot-path console.* to Logger with rate-limiting; reduce per-chunk/per-message noise | in_progress | 1a506d3 | coding-agent | 695-page PDF produces <500 console messages (vs 225k+); key events still captured; MCP tools can retrieve console without stack overflow | None |
 | P0-PFV-001 | Telemetry schema + store | P0 | Typed perf event pipeline and ring buffer snapshots | done | 53a6f14 | coding-agent | Unified telemetry API with typed event catalog | None |
 | P0-PFV-002 | PDF metrics instrumentation | P0 | Capture load/render/frame/queue timing events | done | 643c1f5 | coding-agent | p50/p95 render metrics visible in snapshots | P0-PFV-001 |
 | P0-PFV-003 | TTS metrics instrumentation | P0 | Capture model init, synth latency, playback continuity | planned | pending | coding-agent | TTS pipeline timings visible per session | P0-PFV-001 |
@@ -83,7 +83,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P1-LIB-004 | Dev-only debug controls gating | P1 | Hide destructive/diagnostic controls outside dev mode | planned | pending | coding-agent | Production UI excludes internal debug-only controls | None |
 | P1-LIB-005 | Optimistic metadata edit with rollback | P1 | Immediate UI update with conflict/error rollback | planned | pending | coding-agent | Metadata edits feel instant and recover cleanly on error | None |
 | P1-LIB-006 | Storage quota preflight warnings | P1 | Warn before import when quota risk is high | planned | pending | coding-agent | User receives actionable storage warnings before failure | None |
-| P1-QA-001 | Add Vitest test harness | P1 | Introduce test runner and base config | done | 5e7f226 | coding-agent | `npm test` runs meaningful suite | None |
+| P1-QA-001 | Add Vitest test harness | P1 | Introduce test runner and base config | in_progress | 5e7f226 | coding-agent | `npm test` runs meaningful suite | None |
 | P1-QA-002 | Store tests for PDF staging and TTS routing | P1 | Cover critical store decision logic | planned | pending | coding-agent | Core store behavior has deterministic test coverage | P1-QA-001 |
 | P1-QA-003 | Component tests for telemetry UI | P1 | Cover settings metrics panel and HUD toggles | planned | pending | coding-agent | Telemetry UI state changes are tested | P1-QA-001 |
 | P1-QA-004 | Adapter contract tests | P1 | Shared test suite for each model adapter | planned | pending | coding-agent | Browser/Piper/Kokoro adapters satisfy common contract | P1-QA-001 |
@@ -95,8 +95,15 @@ The ledger below is intentionally granular so an implementation agent can execut
 | P2-UX-004 | Document prefetch around reading position | P2 | Smart preload of near-future pages/content | planned | pending | coding-agent | Next/previous navigation latency decreases measurably | P0-RDR-003 |
 | P2-UX-005 | In-app benchmark replay | P2 | Replay representative workloads for perf comparisons | planned | pending | coding-agent | Dev can replay standardized benchmark scenarios | P0-PFV-001 |
 | P2-UX-006 | Optional visual regression snapshots | P2 | Snapshot key UI states for theme/layout regression checks | planned | pending | coding-agent | Snapshot suite catches major UI regressions | P1-QA-001 |
-| P2-UX-007 | Agent test PDF auto-load | P2 | Provide sample PDF for automated browser testing without manual intervention | planned | pending | coding-agent | Agent can load PDF via MCP without user file picker | None |
+| P2-UX-007 | Agent test PDF auto-load | P2 | Provide sample PDF for automated browser testing without manual intervention | done | 7798c7e | coding-agent | Agent can load PDF via MCP without user file picker | None |
 | P2-UX-008 | Test PDF fixtures + URL auto-load | P2 | Create test PDFs (short/medium/long) and URL param for auto-load | done | 7798c7e | coding-agent | Agent can load /?test-pdf=short|medium|long without file picker; test PDFs in public/fixtures/ | P2-UX-007 |
+
+## Revalidation Notes (2026-02-16)
+- `P0-RDR-002`: extraction reprioritization can yield incorrect `textStart`/`textEnd` offsets for downstream highlighting.
+- `P0-RDR-003`: scheduler queue overwrite can orphan pending render promises for the same page.
+- `P0-RDR-011`: repeated `useTTS()` side-effects in many page components produce noisy repeated console warnings in long PDFs.
+- `P1-QA-001`: `npm test` is currently failing (logger test regressions), so the QA gate is not green.
+- Commit metadata corrected for `P0-RDR-005` (`361bc21`) and `P0-RDR-011` (`1a506d3`).
 
 ## Lower-Priority But High-Value Improvements
 The following are explicitly lower priority than core P0 work, but still recommended:
