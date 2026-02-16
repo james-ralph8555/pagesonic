@@ -20,8 +20,12 @@ The ledger below is intentionally granular so an implementation agent can execut
 1. Pick the next `planned` item with all dependencies satisfied.
 2. Implement only that item scope.
 3. Run validation (`npm run type-check`, `npm run build`, plus tests if present).
-4. Commit using backlog ID in commit message.
-5. Update this file in the same PR:
+4. Stop and perform user verification handshake in Charm Crush:
+- ask the user how they want to test this feature in browser,
+- provide a feature-specific browser test checklist and expected results,
+- wait for user feedback before moving to the next backlog ID (unless user explicitly waives).
+5. Commit using backlog ID in commit message.
+6. Update this file in the same PR:
 - set `Status` to `done` or `blocked`,
 - set `PR/Commit` to commit hash,
 - update dependency notes if needed.
@@ -39,6 +43,7 @@ The ledger below is intentionally granular so an implementation agent can execut
 | DOC-002 | Rewrite README for modernization workflow | P0 | Replace stale README sections with current roadmap and matrix | done | 81d723e | coding-agent | README links backlog and shows model/status matrix | DOC-001 |
 | DOC-003 | Replace AGENTS operational guide | P0 | New repo-owned implementation guide with quality gates | done | f49989f | coding-agent | New AGENTS specifies workflow + commands + commit format | DOC-001 |
 | DOC-004 | Remove legacy unofficial docs | P0 | Delete stale assistant-specific instruction docs | done | b11bc37 | coding-agent | `CLAUDE.md` removed from repo | DOC-001 |
+| DOC-005 | Add Charm Crush verification-first protocol | P0 | Require stop/ask/provide-browser-test flow per feature slice | done | pending | coding-agent | Agent asks user how to test and provides browser checklist before next feature | DOC-003 |
 | P0-RDR-001 | Staged PDF load pipeline | P0 | Load metadata/first page first; defer full extraction | planned | pending | coding-agent | First page renders before full text extraction completion | None |
 | P0-RDR-002 | Background extraction priority queue | P0 | Extract text by viewport proximity then remainder | planned | pending | coding-agent | Extraction order follows active viewport priorities | P0-RDR-001 |
 | P0-RDR-003 | Render scheduler module | P0 | Centralize visible/nearby/offscreen page scheduling | planned | pending | coding-agent | Single authoritative queue controls page renders | P0-RDR-001 |
@@ -101,15 +106,26 @@ The following are explicitly lower priority than core P0 work, but still recomme
 - Import cancellation/resume (`P1-LIB-002`).
 - Optional visual regression snapshots (`P2-UX-006`).
 
+## Required Per-Feature Verification (Charm Crush)
+After each feature slice, the implementing agent must stop and provide:
+1. Feature summary (what changed).
+2. Browser test setup (`npm run preview`, URL open step).
+3. Step-by-step browser checks for that specific feature.
+4. Expected results and failure indicators.
+5. Direct question to user: how they want to test this slice.
+
+The next backlog item must not start until user feedback is received or user explicitly waives testing.
+
 ## Execution Order
 ### Phase 1: Foundation + Documentation bootstrap
-- `DOC-001` through `DOC-004`
+- `DOC-001` through `DOC-005`
 - `P0-PFV-001`
 - `P0-RDR-007`
 
 Done definition:
 - Backlog and docs are in place.
 - Logging policy and telemetry schema are established.
+- Verification-first browser testing protocol is explicitly documented and enforced.
 
 ### Phase 2: Reader performance core
 - `P0-RDR-001` through `P0-RDR-010`
