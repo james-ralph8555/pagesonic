@@ -78,7 +78,8 @@ Recommended commit format:
 ## Deployment Notes
 Production deployment assets and infra definitions are in `infra/`.
 - Build app first: `npm run build`
-- Deploy CDK stacks from `infra/` as needed.
+- Deploy: `cd infra && npm install && npm run deploy:site`.
+- The domain (`page-sonic.james-ralph.com`) and the shared `*.james-ralph.com` ACM certificate ARN live in `infra/cdk.json` context; the certificate is owned by the portfolio repo's `NextjsPortfoliositeCertificateStack`. The stack refuses to synthesize without them, so a deploy cannot silently strip the custom domain.
 
 ## Privacy
 PageSonic is designed for local processing:

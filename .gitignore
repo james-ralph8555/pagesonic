@@ -19,6 +19,7 @@ target/
 
 # Go
 bin/
+!infra/bin/
 
 # Editor
 .idea/

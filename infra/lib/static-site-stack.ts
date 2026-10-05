@@ -6,6 +6,7 @@ import {
   CfnOutput,
 } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
+import * as acm from 'aws-cdk-lib/aws-certificatemanager'
 import path from 'path'
 import { existsSync } from 'fs'
 import {
@@ -32,9 +33,21 @@ import {
 } from 'aws-cdk-lib/aws-cloudfront'
 import { S3BucketOrigin } from 'aws-cdk-lib/aws-cloudfront-origins'
 
+export interface PagesonicSiteStackProps extends StackProps {
+  domainName?: string
+  certificateArn?: string
+}
+
 export class PagesonicSiteStack extends Stack {
-  constructor(scope: Construct, id: string, props: StackProps = {}) {
+  constructor(scope: Construct, id: string, props: PagesonicSiteStackProps = {}) {
     super(scope, id, props)
+
+    const { domainName, certificateArn } = props
+    if (!domainName || !certificateArn) {
+      throw new Error(
+        'domainName and certificateArn are required (set in infra/cdk.json context or pass -c). Deploying without them strips the custom domain from CloudFront.',
+      )
+    }
 
     // Resolve deployment source path for the site assets
     // - default: repo root `dist/`
@@ -122,6 +135,12 @@ export class PagesonicSiteStack extends Stack {
       defaultRootObject: 'index.html',
       comment: 'Pagesonic SolidJS site distribution',
       errorResponses,
+      certificate: acm.Certificate.fromCertificateArn(
+        this,
+        'DistributionCertificate',
+        certificateArn,
+      ),
+      domainNames: [domainName],
     })
 
     new BucketDeployment(this, 'DeployWithInvalidation', {
